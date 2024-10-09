@@ -1,0 +1,12 @@
+    - `parallel_drive/`
+        - `00_interactive_sliders.ipynb` visualize the resulting 2Q gate in weyl chamber by adjusting parameters of single-qubit drive terms in Hamiltonian.
+        - `01_random_sampling.ipynb` random assignment to parameter vectors to create 2Q gate point-clouds.
+        -`02_pd_coverage.ipynb` visualizing a non-standard 2Q gate created by parallel-drive using monodromy coverage volumes.
+        - `03_bgate_optimizer.ipynb` optimizing parallel-drive parameters to create an effective desired interaction, i.e. CXGate + parallel-drive to create sqiSWAP.
+        - `04_hetero_isa.ipynb` a slew of monodromy coverage volume plots for heterogenous ISAs.
+        - `05_bgate_variations.ipynb` Fixing `ZI` strength and resolving remaining parallel-drive parameters for `BGate` to demonstrate non-uniqueness.
+        - `06_u2layers.ipynb` Begin investigating partial coverages created by restricting expressibility of interleaving 1Q gates.
+        - `07_ux_sequences.ipynb` Developing ansatz class to support restricted 1Q gates.
+        - `08_point_clouds.ipynb` Plotting 1Q pulse-contrained polytope coverage volume sets.
+        - `12_b_like_isa.ipynb` Investigating a heterogenous ISA created by imperfect `BGate`s.
+        - `13_ken_pd.ipynb` Setup for a parallel-drive model that is more realistic according to Ken's experiments.

@@ -1,0 +1,16 @@
+[package]
+name = "hetero_isas_accelerate"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "hetero_isas_accelerate"
+crate-type = ["cdylib"]
+path = "src/lib.rs"
+
+[dependencies.pyo3]
+version = "0.20.3"
+features = ["extension-module", "abi3"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+# See also PyO3 docs on writing Cargo.toml files at https://pyo3.rs

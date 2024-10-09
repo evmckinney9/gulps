@@ -1,0 +1,4 @@
+ - `numeric_decomp/`
+        - `09_circuit_ansatz.ipynb` Setup for `BasicCircuitAnsatz` instances.
+        - `10_num_decomp.ipynb` Demonstrating numerical gate using `CircuitAnsatzDecomposer` and `ClosestInvariantSearch` decomposition methods.
+        - `11_boundary_search.ipynb` Increasing confidence in random point clouds by numerically targeting Weyl exterior points in polytope coverages.

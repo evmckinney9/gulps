@@ -1,0 +1,58 @@
+[build-system]
+requires = ["setuptools", "wheel", "setuptools_rust"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hetero_isas"
+description = "exploring transpilation tools to enable experiments using heterogeous ISAs"
+version = "0.1.0"
+authors = [{ name = "evm9" }]
+requires-python = ">=3.9"
+dependencies = [
+    "numpy",
+    "matplotlib",
+    "weylchamber @ git+https://github.com/evmckinney9/weylchamber.git",
+    "SciencePlots",
+    "qiskit",
+    "qiskit-algorithms",
+    "qiskit-optimization[cplex]",
+    "qutip",
+    "monodromy @ git+https://github.com/evmckinney9/monodromy.git",
+    "jaxopt",
+]
+
+[project.optional-dependencies]
+dev = ["ipykernel", "pre-commit", "pylatexenc", "tqdm", "snakeviz", "ipywidgets",]
+format = [
+    "pre-commit",
+    "black[jupyter]",
+    "isort",
+    "tomli",
+    "ruff",
+    "docformatter[tomli]",
+]
+test = ["pytest"]
+
+[tool.ruff]
+target-version = "py310"
+fix = true
+extend-include = ["*.ipynb"]
+
+[tool.ruff.lint]
+select = ["D"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.isort]
+profile = "black"
+
+[[tool.setuptools-rust.ext-modules]]
+# Private Rust extension module to be nested into the Python package
+# https://github.com/PyO3/setuptools-rust?tab=readme-ov-file
+target = "hetero_isas._accelerate"
+path = "crates/Cargo.toml"
+binding = "PyO3"
+
+[tool.distutils.bdist_wheel]
+py_limited_api = "cp39"
