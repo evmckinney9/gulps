@@ -13,9 +13,9 @@ from monodromy.coordinates import (
     unitary_to_monodromy_coordinate,
 )
 from qiskit import QuantumCircuit
+from qiskit._accelerate.two_qubit_decompose import weyl_coordinates
 from qiskit.circuit import Gate, Parameter
 from qiskit.quantum_info import Operator
-from qiskit.synthesis.two_qubit.weyl import weyl_coordinates
 from tqdm.notebook import tqdm
 from weylchamber import WeylChamber, c1c2c3
 

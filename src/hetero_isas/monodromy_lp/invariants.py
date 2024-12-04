@@ -2,8 +2,8 @@
 
 import numpy as np
 from monodromy.coordinates import positive_canonical_to_monodromy_coordinate
+from qiskit._accelerate.two_qubit_decompose import weyl_coordinates
 from qiskit.synthesis.two_qubit import TwoQubitWeylDecomposition
-from qiskit.synthesis.two_qubit.weyl import weyl_coordinates
 from weylchamber import canonical_gate
 
 
