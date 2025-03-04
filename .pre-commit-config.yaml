@@ -7,12 +7,12 @@ repos:
       - id: enforce-notebook-naming
 
   - repo: https://github.com/qoomon/git-conventional-commits
-    rev: v2.6.7
+    rev: v2.7.2
     hooks:
       - id: conventional-commits
 
   - repo: https://github.com/charliermarsh/ruff-pre-commit
-    rev: "v0.8.1"
+    rev: "v0.9.9"
     hooks:
       - id: ruff
         args: [--fix, --exit-non-zero-on-fix]
@@ -36,13 +36,13 @@ repos:
         args: [--autofix]
 
   - repo: https://github.com/pycqa/isort
-    rev: 5.13.2
+    rev: 6.0.1
     hooks:
       - id: isort
         name: isort (python)
 
   - repo: https://github.com/psf/black
-    rev: 24.10.0
+    rev: 25.1.0
     hooks:
       - id: black-jupyter
         language_version: python3.11
