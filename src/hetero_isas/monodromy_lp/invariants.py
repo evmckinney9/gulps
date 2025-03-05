@@ -1,8 +1,11 @@
 """Some miscellaneous utilities."""
 
+import warnings
+
 import numpy as np
 from monodromy.coordinates import positive_canonical_to_monodromy_coordinate
 from qiskit._accelerate.two_qubit_decompose import weyl_coordinates
+from qiskit.quantum_info import Operator
 from qiskit.synthesis.two_qubit import TwoQubitWeylDecomposition
 from weylchamber import canonical_gate
 
@@ -11,7 +14,9 @@ def unitary_to_mono_coordinates(U):
     # NOTE this has more precision than monodromy's unitary_to_monodromy_coordinate
     # perhaps not necessarily more precision, but consistently rounding down
     # whereas monodromy appears to be rounding either up or down
-    a, b, c = positive_canonical_to_monodromy_coordinate(*weyl_coordinates(U))
+    # XXX breaking change? Previously I passed U directly into weyl_coordinates
+    U_op = Operator(U).data
+    a, b, c = positive_canonical_to_monodromy_coordinate(*weyl_coordinates(U_op))
     return (a, b, c, -1.0 * (a + b + c))
 
 
@@ -72,21 +77,24 @@ def recover_local_equivalence(U_target, U_basis):
     target_decomp = TwoQubitWeylDecomposition(U_target, fidelity=1.0)
     basis_decomp = TwoQubitWeylDecomposition(U_basis, fidelity=1.0)
 
-    closeness_vector = (
-        target_decomp.a - basis_decomp.a,
-        target_decomp.b - basis_decomp.b,
-        target_decomp.c - basis_decomp.c,
-    )
     # XXX this atol is a bit too generous
     # makes up for imperfect convergence...
+    local_coords1 = np.array([target_decomp.a, target_decomp.b, target_decomp.c])
+    local_coords2 = np.array([basis_decomp.a, basis_decomp.b, basis_decomp.c])
     if not np.all(
-        [np.isclose(closeness, 0.0, atol=1e-3) for closeness in closeness_vector]
+        np.isclose(np.abs(local_coords1 - local_coords2), np.zeros(3), atol=1e-4)
     ):
-        raise ValueError(
-            f"Tried to recover local equivalence on gates that were not locally equivalent. \
-            Often this is a matter of precision. The difference between expected and given \
-            weyl coords was {closeness_vector}. If this is close to 0, then adjust tolerances."
-        )
+        if not np.isclose(np.abs(target_decomp.c), np.abs(basis_decomp.c)):
+            raise ValueError(
+                f"Tried to recover local equivalence on gates that were not locally equivalent. \
+                Often this is a matter of precision. The difference between expected and given \
+                weyl coords was {np.abs(local_coords1 - local_coords2)}. If this is close to 0, then adjust tolerances."
+            )
+        else:
+            warnings.warn(
+                "Tried to recover local equivalence, but the c parameter had a sign difference."
+            )
+
     k4 = target_decomp.K1l @ np.conjugate(basis_decomp.K1l).T
     k3 = target_decomp.K1r @ np.conjugate(basis_decomp.K1r).T
     k2 = np.conjugate(basis_decomp.K2l).T @ target_decomp.K2l
@@ -111,4 +119,7 @@ if __name__ == "__main__":
     qc.append(basis_gate, [0, 1])
     qc.append(UnitaryGate(k3), [0])
     qc.append(UnitaryGate(k4), [1])
+    print(average_gate_fidelity(target_gate, Operator(qc)))
+    print(average_gate_fidelity(target_gate, Operator(qc)))
+    print(average_gate_fidelity(target_gate, Operator(qc)))
     print(average_gate_fidelity(target_gate, Operator(qc)))

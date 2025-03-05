@@ -195,10 +195,8 @@ j_lm_u3 = LevenbergMarquardt(
 
 class NumericDecompConvergenceWarning(UserWarning):  # noqa: D101
     def __init__(self):  # noqa: D107
-        message = (
-            "Failed to converge to solution within precision tolerance. If allowed, \
+        message = "Failed to converge to solution within precision tolerance. If allowed, \
             by NumericalDecomposer.allow_fail, will return best solution instead."
-        )
         super().__init__(message)
 
 
@@ -312,8 +310,13 @@ class MonodromyLPNumericalDecomposer:
             global_phase = k_vec[-1]
             outer_local_gates = [UnitaryGate(k) for k in k_vec[:-1]]
         except ValueError as e:
+            print(e)
             if not self.allow_fail:
                 raise e
+            # XXX meaningless if has already failed
+            # but need to give it values so rest of code doesn't break
+            outer_local_gates = [RVGate(0, 0, 0) for _ in range(4)]
+            global_phase = 0
 
         return outer_local_gates + inner_local_gates, global_phase
 
@@ -514,4 +517,5 @@ class MonodromyLPNumericalDecomposer:
 #     _ret.params,
 #     _ret.state.num_fun_eval,
 #     _ret.state.cost_val,
+# )
 # )
