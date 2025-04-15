@@ -14,7 +14,8 @@ from qiskit import QuantumCircuit
 from qiskit.circuit import Instruction
 from qiskit.circuit.library import RVGate, U3Gate, UnitaryGate
 from qiskit.converters import circuit_to_dag, dag_to_circuit
-from qiskit.synthesis.two_qubit.local_invariance import two_qubit_local_invariants
+
+# from qiskit.synthesis.two_qubit.local_invariance import two_qubit_local_invariants
 from scipy.optimize import least_squares
 
 from hetero_isas.monodromy_lp.invariants import (
@@ -195,8 +196,10 @@ j_lm_u3 = LevenbergMarquardt(
 
 class NumericDecompConvergenceWarning(UserWarning):  # noqa: D101
     def __init__(self):  # noqa: D107
-        message = "Failed to converge to solution within precision tolerance. If allowed, \
+        message = (
+            "Failed to converge to solution within precision tolerance. If allowed, \
             by NumericalDecomposer.allow_fail, will return best solution instead."
+        )
         super().__init__(message)
 
 
@@ -265,7 +268,7 @@ class MonodromyLPNumericalDecomposer:
 
             # NOTE retrieve result data from j_lm
             (success, params, num_fun_eval, fun_val) = (
-                _ret.state.value <= ATOL,
+                _ret.state.vaue <= ATOL,
                 _ret.params,
                 _ret.state.iter_num,
                 _ret.state.residual,

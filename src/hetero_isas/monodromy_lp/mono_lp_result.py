@@ -37,7 +37,7 @@ def plot_histograms(results: list["MonodromyLPDecomposerResult"]):
             else:
                 fail_counts[i] += 1
     # Plot stacked bar chart
-    segment_labels = [f"Segment {i+1}" for i in range(max_segments)]
+    segment_labels = [f"Segment {i + 1}" for i in range(max_segments)]
     ax1.bar(segment_labels, success_counts, label="Success", color="g")
     ax1.bar(segment_labels, fail_counts, bottom=success_counts, label="Fail", color="r")
     ax1.set_ylabel("Count")
@@ -147,7 +147,14 @@ class MonodromyLPDecomposerResult:
         return self
 
     def render_path(self):
-        """Visualize the decomposition path in the Weyl chamber."""
+        """Visualize the decomposition path in the Weyl chamber using fixed styles for four basis gates:
+        solid, dotted, dashed, dashdot. Each segment uses the style corresponding to its basis gate.
+        """
+        import matplotlib.pyplot as plt
+        import numpy as np
+        from matplotlib.lines import Line2D
+
+        # Compute trajectory points if not already computed.
         if not self.traj_points:
             self.traj_points = [
                 abs(np.array(monodromy_to_positive_canonical_coordinate(*p)))
@@ -155,28 +162,74 @@ class MonodromyLPDecomposerResult:
                 for p in self.mono_points
             ]
 
-        ax = plt.subplot(111, projection="3d", computed_zorder=False)
+        # Set up the 3D plot.
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection="3d", computed_zorder=False)
         w = WeylChamber()
         w.labels = {}
         w.render(ax)
-        w.ax.scatter3D(*zip(*self.traj_points), zorder=-1)
 
-        num_arrows = len(self.traj_points) - 1
-        X, Y, Z = np.zeros((3, num_arrows))
-        U, V, W = np.zeros((3, num_arrows))
-        labels = []
-        intermediate_point = self.traj_points[0]
+        # Plot all trajectory points for context.
+        pts = np.array(self.traj_points)
+        ax.scatter(pts[:, 0], pts[:, 1], pts[:, 2], zorder=-1)
 
-        for i, point in enumerate(self.traj_points[1:]):
-            X[i], Y[i], Z[i] = intermediate_point
-            U[i], V[i], W[i] = point - intermediate_point
-            labels.append(str(self.isa_sequence[i]))
-            intermediate_point = point
+        # Define four distinct line styles.
+        line_styles = ["solid", "dotted", "dashed", "dashdot"]
 
-        w.ax.quiver(X, Y, Z, U, V, W, color=self.color_seq)
+        # Build a mapping from each basis gate (from self.color_map keys) to a fixed line style.
+        # We're assuming that self.color_map contains exactly four unique basis gates.
+        fixed_linestyles = {}
+        for i, gate in enumerate(self.color_map.keys()):
+            fixed_linestyles[gate] = line_styles[i % len(line_styles)]
 
-        custom_lines = [
-            Line2D([0], [0], color=color, lw=3) for color in self.color_map.values()
-        ]
-        ax.legend(custom_lines, self.color_map.keys(), ncol=3)
+        # Decide on an outline color that contrasts with your background.
+        # For a dark background, white works well; for a light background, consider using black.
+        outline_color = "white"
+
+        # Draw each segment using the fixed style associated with its basis gate.
+        for i in range(len(self.traj_points) - 1):
+            p0 = self.traj_points[i]
+            p1 = self.traj_points[i + 1]
+            # Get the basis gate for this segment.
+            gate = self.isa_sequence[i]
+            # Look up the corresponding color and line style.
+            color = self.color_map.get(gate, "black")
+            linestyle = fixed_linestyles.get(gate, "solid")
+            xs = [p0[0], p1[0]]
+            ys = [p0[1], p1[1]]
+            zs = [p0[2], p1[2]]
+
+            # Draw an outline beneath the segment for enhanced clarity.
+            ax.plot(
+                xs,
+                ys,
+                zs,
+                color=outline_color,
+                linestyle=linestyle,
+                linewidth=5,
+                zorder=1,
+            )
+            # Overlay the actual colored segment.
+            ax.plot(xs, ys, zs, color=color, linestyle=linestyle, linewidth=2, zorder=2)
+            # Place a marker at the segment's endpoint with a contrasting edge.
+            ax.scatter(
+                [p1[0]],
+                [p1[1]],
+                [p1[2]],
+                color=color,
+                edgecolor=outline_color,
+                marker="o",
+                s=50,
+                zorder=3,
+            )
+
+        # Construct a custom legend using the fixed color and line style combinations.
+        custom_lines = []
+        legend_labels = []
+        for gate, color in self.color_map.items():
+            ls = fixed_linestyles.get(gate, "solid")
+            custom_lines.append(Line2D([0], [0], color=color, lw=3, linestyle=ls))
+            legend_labels.append(gate)
+        ax.legend(custom_lines, legend_labels, ncol=2)
+
         return ax
