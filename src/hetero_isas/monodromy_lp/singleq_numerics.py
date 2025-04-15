@@ -196,10 +196,8 @@ j_lm_u3 = LevenbergMarquardt(
 
 class NumericDecompConvergenceWarning(UserWarning):  # noqa: D101
     def __init__(self):  # noqa: D107
-        message = (
-            "Failed to converge to solution within precision tolerance. If allowed, \
+        message = "Failed to converge to solution within precision tolerance. If allowed, \
             by NumericalDecomposer.allow_fail, will return best solution instead."
-        )
         super().__init__(message)
 
 
