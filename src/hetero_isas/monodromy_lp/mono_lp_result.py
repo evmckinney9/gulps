@@ -147,14 +147,34 @@ class MonodromyLPDecomposerResult:
         return self
 
     def render_path(self):
-        """Visualize the decomposition path in the Weyl chamber using fixed styles for four basis gates:
-        solid, dotted, dashed, dashdot. Each segment uses the style corresponding to its basis gate.
-        """
+        """Visualize the decomposition path in the Weyl chamber using named styles and per-gate primary+gap color pairs."""
         import matplotlib.pyplot as plt
         import numpy as np
         from matplotlib.lines import Line2D
 
-        # Compute trajectory points if not already computed.
+        # Define named line styles
+        dash_patterns = {
+            "solid": None,
+            "densely dotted": [0.75, 1],
+            "densely dashed": [2.5, 2],
+            "densely dashdot": [3, 1.5, 1, 1.5],
+        }
+
+        primary_colors = ["tab:blue", "tab:red", "tab:green", "tab:purple"]
+        gap_colors = ["tab:orange", "tab:cyan", "tab:pink", "tab:olive"]
+
+        # Map each gate to a color + gapcolor + linestyle
+        gates = list(self.color_map.keys())
+        gate_styles = {
+            gate: {
+                "color": primary_colors[i % len(primary_colors)],
+                "gap": gap_colors[i % len(gap_colors)],
+                "style": list(dash_patterns.keys())[i % len(dash_patterns)],
+            }
+            for i, gate in enumerate(gates)
+        }
+
+        # Compute trajectory points if not already computed
         if not self.traj_points:
             self.traj_points = [
                 abs(np.array(monodromy_to_positive_canonical_coordinate(*p)))
@@ -162,74 +182,69 @@ class MonodromyLPDecomposerResult:
                 for p in self.mono_points
             ]
 
-        # Set up the 3D plot.
+        # Set up the 3D plot
         fig = plt.figure()
         ax = fig.add_subplot(111, projection="3d", computed_zorder=False)
         w = WeylChamber()
         w.labels = {}
         w.render(ax)
 
-        # Plot all trajectory points for context.
+        # Plot all trajectory points
         pts = np.array(self.traj_points)
         ax.scatter(pts[:, 0], pts[:, 1], pts[:, 2], zorder=-1)
 
-        # Define four distinct line styles.
-        line_styles = ["solid", "dotted", "dashed", "dashdot"]
-
-        # Build a mapping from each basis gate (from self.color_map keys) to a fixed line style.
-        # We're assuming that self.color_map contains exactly four unique basis gates.
-        fixed_linestyles = {}
-        for i, gate in enumerate(self.color_map.keys()):
-            fixed_linestyles[gate] = line_styles[i % len(line_styles)]
-
-        # Decide on an outline color that contrasts with your background.
-        # For a dark background, white works well; for a light background, consider using black.
-        outline_color = "white"
-
-        # Draw each segment using the fixed style associated with its basis gate.
+        # Plot each segment
         for i in range(len(self.traj_points) - 1):
             p0 = self.traj_points[i]
             p1 = self.traj_points[i + 1]
-            # Get the basis gate for this segment.
             gate = self.isa_sequence[i]
-            # Look up the corresponding color and line style.
-            color = self.color_map.get(gate, "black")
-            linestyle = fixed_linestyles.get(gate, "solid")
+            styles = gate_styles.get(
+                gate, {"color": "black", "gap": "gray", "style": "solid"}
+            )
+            dashes = dash_patterns.get(styles["style"])
+
             xs = [p0[0], p1[0]]
             ys = [p0[1], p1[1]]
             zs = [p0[2], p1[2]]
 
-            # Draw an outline beneath the segment for enhanced clarity.
-            ax.plot(
+            (line,) = ax.plot(
                 xs,
                 ys,
                 zs,
-                color=outline_color,
-                linestyle=linestyle,
-                linewidth=5,
-                zorder=1,
+                color=styles["color"],
+                linewidth=6,
+                zorder=0,
+                gapcolor=styles["gap"],
             )
-            # Overlay the actual colored segment.
-            ax.plot(xs, ys, zs, color=color, linestyle=linestyle, linewidth=2, zorder=2)
-            # Place a marker at the segment's endpoint with a contrasting edge.
+            if dashes:
+                line.set_dashes(dashes)
+
+            # Endpoint marker
             ax.scatter(
                 [p1[0]],
                 [p1[1]],
                 [p1[2]],
-                color=color,
-                edgecolor=outline_color,
+                color="black",
+                edgecolor="black",
                 marker="o",
-                s=50,
-                zorder=3,
+                s=30,
+                zorder=1,
+                depthshade=False,
             )
 
-        # Construct a custom legend using the fixed color and line style combinations.
+        # Mark origin
+        ax.scatter([0], [0], [0], color="black", s=30, zorder=1, depthshade=False)
+
+        # Legend (just show primary colors and style)
         custom_lines = []
         legend_labels = []
-        for gate, color in self.color_map.items():
-            ls = fixed_linestyles.get(gate, "solid")
-            custom_lines.append(Line2D([0], [0], color=color, lw=3, linestyle=ls))
+        for gate, styles in gate_styles.items():
+            line = Line2D(
+                [0], [0], color=styles["color"], lw=6, linestyle=styles["style"]
+            )
+            custom_lines.append(line)
             legend_labels.append(gate)
-        ax.legend(custom_lines, legend_labels, ncol=2)
 
+        ax.legend(custom_lines, legend_labels, ncol=2, title="Basis gate")
+        plt.savefig("trajn.svg", bbox_inches="tight")
         return ax
