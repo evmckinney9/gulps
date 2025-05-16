@@ -12,7 +12,7 @@ repos:
       - id: conventional-commits
 
   - repo: https://github.com/charliermarsh/ruff-pre-commit
-    rev: "v0.9.9"
+    rev: "v0.11.10"
     hooks:
       - id: ruff
         args: [--fix, --exit-non-zero-on-fix]
@@ -45,7 +45,7 @@ repos:
     rev: 25.1.0
     hooks:
       - id: black-jupyter
-        language_version: python3.11
+        language_version: python3.12
 
   # temporarily broken, see https://github.com/PyCQA/docformatter/issues/293
   # - repo: https://github.com/PyCQA/docformatter

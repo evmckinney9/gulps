@@ -1,4 +1,4 @@
-PYTHON_VERSION = python3.11
+PYTHON_VERSION = python3.12
 PIP = .venv/bin/pip
 PYTEST = .venv/bin/pytest
 PRE_COMMIT = .venv/bin/pre-commit
