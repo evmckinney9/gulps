@@ -3,16 +3,14 @@ requires = ["setuptools", "wheel"]      #, "setuptools_rust"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "hetero_isas"
-description = "exploring transpilation tools to enable experiments using heterogeous ISAs"
-version = "0.1.0"
+name = "gulps"
+description = "transpilation tools to enable experiments using heterogeous ISAs"
+version = "0.0.2"
 authors = [{ name = "evm9" }]
 requires-python = ">=3.9"
 dependencies = [
     "numpy",
-    "matplotlib",
-    "weylchamber @ git+https://github.com/evmckinney9/weylchamber.git",
-    "SciencePlots",
+    "weylchamber",                                                  # @ git+https://github.com/evmckinney9/weylchamber.git",
     "qiskit",
     "qiskit-algorithms",
     "qiskit-optimization[cplex]",
@@ -23,6 +21,8 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+    "matplotlib",
+    "SciencePlots",
     "ipykernel",
     "pre-commit",
     "pylatexenc",
