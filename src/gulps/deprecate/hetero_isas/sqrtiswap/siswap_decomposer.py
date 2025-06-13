@@ -12,7 +12,8 @@
 
 # pylint: disable=invalid-name, non-ascii-name
 """Synthesis of two-qubit unitaries using at most 3 applications of the
-sqrt(iSWAP) gate."""
+sqrt(iSWAP) gate.
+"""
 
 import cmath
 from typing import List, Optional, Union
@@ -277,7 +278,8 @@ def _interleaving_single_qubit_gates(x, y, z):
 def _remove_pre_post(circuit, decomp):
     """Given a circuit and its Weyl decomposition, multiply local gates before
     and after it to get a new circuit which is equivalent to RXX.RYY.RZZ (up to
-    global phase)."""
+    global phase).
+    """
     D1 = Operator(decomp.K1r)
     D2 = Operator(decomp.K1l)
     E1 = Operator(decomp.K2r)

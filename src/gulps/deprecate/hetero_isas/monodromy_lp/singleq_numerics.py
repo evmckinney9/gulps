@@ -18,10 +18,7 @@ from qiskit.converters import circuit_to_dag, dag_to_circuit
 # from qiskit.synthesis.two_qubit.local_invariance import two_qubit_local_invariants
 from scipy.optimize import least_squares
 
-from hetero_isas.monodromy_lp.invariants import (
-    mono_coordinates_to_CAN,
-    recover_local_equivalence,
-)
+from gulps.invariants import mono_coordinates_to_CAN, recover_local_equivalence
 from hetero_isas.monodromy_lp.mono_lp_result import MonodromyLPDecomposerResult
 
 config.update("jax_enable_x64", True)
@@ -266,7 +263,7 @@ class MonodromyLPNumericalDecomposer:
 
             # NOTE retrieve result data from j_lm
             (success, params, num_fun_eval, fun_val) = (
-                _ret.state.vaue <= ATOL,
+                _ret.state.value <= ATOL,
                 _ret.params,
                 _ret.state.iter_num,
                 _ret.state.residual,
