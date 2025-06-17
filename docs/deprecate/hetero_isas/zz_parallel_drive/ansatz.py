@@ -156,15 +156,15 @@ class BasicCircuitAnsatz(CircuitAnsatz):
             # NOTE RV is much better at converging
             self.qc.rv(
                 Parameter(f"x{param_idx}"),
-                Parameter(f"x{param_idx+1}"),
-                Parameter(f"x{param_idx+2}"),
+                Parameter(f"x{param_idx + 1}"),
+                Parameter(f"x{param_idx + 2}"),
                 qubit,
             )
         elif gate_type == 2:
             self.qc.u(
                 np.pi / 2,
                 Parameter(f"x{param_idx}"),
-                Parameter(f"x{param_idx+1}"),
+                Parameter(f"x{param_idx + 1}"),
                 qubit,
             )
         elif gate_type == 1:
