@@ -1,16 +1,20 @@
 """Some miscellaneous utilities."""
 
 import warnings
+from typing import Optional, Tuple
 
 import numpy as np
 from monodromy.coordinates import positive_canonical_to_monodromy_coordinate
 from qiskit._accelerate.two_qubit_decompose import weyl_coordinates
+from qiskit.circuit import Gate
 from qiskit.quantum_info import Operator
 from qiskit.synthesis.two_qubit import TwoQubitWeylDecomposition
 from weylchamber import canonical_gate
 
+LEN_GATE_INVARIANTS = 3
 
-def unitary_to_mono_coordinates(U):
+
+def unitary_to_mono_coordinates(U) -> Tuple[float, float, float, float]:
     # NOTE this has more precision than monodromy's unitary_to_monodromy_coordinate
     # perhaps not necessarily more precision, but consistently rounding down
     # whereas monodromy appears to be rounding either up or down
@@ -59,6 +63,42 @@ def mono_coordinates_to_CAN(x, y, z, _=None):
         dtype=np.double,
     )
     return canonical_gate(c1, c2, c3).full()
+
+
+class MonodromyLPGate:
+    """Minimal gate class for monodromy LP with only fully-defined gates."""
+
+    def __init__(
+        self, logspec: Tuple[float, float, float, float], name: Optional[str] = None
+    ):
+        self.logspec = logspec  # Full logspec from canonical coordinates
+        self._definition = logspec[
+            :LEN_GATE_INVARIANTS
+        ]  # Monodromy coordinates (first 3)
+        self.name = name or "2QGate"
+
+    @classmethod
+    def from_unitary(cls, gate: Gate, name: Optional[str] = None) -> "MonodromyLPGate":
+        coords = unitary_to_mono_coordinates(gate)
+        return cls(logspec=coords, name=name)
+
+    @property
+    def definition(self) -> Tuple[float, float, float]:
+        """Return monodromy coordinates."""
+        return self._definition
+
+    def rho_reflect(self) -> "MonodromyLPGate":
+        """Return the rho-reflected version of this gate."""
+        rho_coords = (
+            self.logspec[2] + 0.5,
+            self.logspec[3] + 0.5,
+            self.logspec[0] - 0.5,
+            self.logspec[1] - 0.5,
+        )
+        return MonodromyLPGate(logspec=rho_coords, name=f"*{self.name}")
+
+    def __str__(self) -> str:
+        return self.name
 
 
 def recover_local_equivalence(U_target, U_basis):
