@@ -1,4 +1,4 @@
-"""Some miscellaneous utilities."""
+"""Gate invariants utilities for two-qubit gates (monodromy, Makhlin, Weyl, etc.)."""
 
 import warnings
 from typing import Optional, Tuple
@@ -14,126 +14,111 @@ from weylchamber import canonical_gate
 LEN_GATE_INVARIANTS = 3
 
 
-def unitary_to_mono_coordinates(U) -> Tuple[float, float, float, float]:
-    # NOTE this has more precision than monodromy's unitary_to_monodromy_coordinate
-    # perhaps not necessarily more precision, but consistently rounding down
-    # whereas monodromy appears to be rounding either up or down
-    # XXX breaking change? Previously I passed U directly into weyl_coordinates
-    U_op = Operator(U).data
-    a, b, c = positive_canonical_to_monodromy_coordinate(*weyl_coordinates(U_op))
-    return (a, b, c, -1.0 * (a + b + c))
-
-
-def mono_coordinates_to_makhlin(x, y, z, _=None):
-    """Convert monodromy coordinates to makhlin invariants.
-
-    NOTE previously I was using mono->positive canonical -> invariants
-    (qiskit) using qiskit.synthesis.two_qubit.local_equivalence() but
-    this method has np.round() which we want to avoid for high precision
-    in the root-finding.
-    """
-    normalizing_factor = np.pi
-    weyl = np.array(
-        [
-            (x + y) / 2 * normalizing_factor,
-            (z + x) / 2 * normalizing_factor,
-            (y + z) / 2 * normalizing_factor,
-        ],
-        dtype=np.double,
-    )
-    g0_equiv = np.prod(np.cos(2 * weyl) ** 2) - np.prod(np.sin(2 * weyl) ** 2)
-    g1_equiv = np.prod(np.sin(4 * weyl)) / 4
-    g2_equiv = (
-        4 * np.prod(np.cos(2 * weyl) ** 2)
-        - 4 * np.prod(np.sin(2 * weyl) ** 2)
-        - np.prod(np.cos(4 * weyl))
-    )
-    return np.array([g0_equiv, g1_equiv, g2_equiv], dtype=np.double)
-    # return np.round([g0_equiv, g1_equiv, g2_equiv], 12) + 0.0
-
-
-def mono_coordinates_to_CAN(x, y, z, _=None):
-    normalizing_factor = 2.0
-    c1, c2, c3 = np.array(
-        [
-            (x + y) / 2 * normalizing_factor,
-            (z + x) / 2 * normalizing_factor,
-            (y + z) / 2 * normalizing_factor,
-        ],
-        dtype=np.double,
-    )
-    return canonical_gate(c1, c2, c3).full()
-
-
-class MonodromyLPGate:
-    """Minimal gate class for monodromy LP with only fully-defined gates."""
+class GateInvariants:
+    """Unified representation of two-qubit gate invariants."""
 
     def __init__(
-        self, logspec: Tuple[float, float, float, float], name: Optional[str] = None
+        self,
+        logspec: Tuple[float, float, float, float],
+        name: Optional[str] = None,
+        unitary: Optional[np.ndarray] = None,
     ):
-        self.logspec = logspec  # Full logspec from canonical coordinates
-        self._definition = logspec[
-            :LEN_GATE_INVARIANTS
-        ]  # Monodromy coordinates (first 3)
+        self.logspec = logspec
+        self._monodromy = logspec[:LEN_GATE_INVARIANTS]  # Monodromy
         self.name = name or "2QGate"
+        self.unitary = unitary  # Optional reference to original unitary
+
+        self._weyl = None
+        self._makhlin = None
+        self._canonical_matrix = None
 
     @classmethod
-    def from_unitary(cls, gate: Gate, name: Optional[str] = None) -> "MonodromyLPGate":
-        coords = unitary_to_mono_coordinates(gate)
-        return cls(logspec=coords, name=name)
+    def from_unitary(cls, gate: Gate, name: Optional[str] = None) -> "GateInvariants":
+        U = Operator(gate).data
+        coords = cls._unitary_to_mono_coordinates(U)
+        return cls(logspec=coords, name=name, unitary=U)
+
+    @staticmethod
+    def _unitary_to_mono_coordinates(U) -> Tuple[float, float, float, float]:
+        a, b, c = positive_canonical_to_monodromy_coordinate(*weyl_coordinates(U))
+        return (a, b, c, -1.0 * (a + b + c))
 
     @property
-    def definition(self) -> Tuple[float, float, float]:
-        """Return monodromy coordinates."""
-        return self._definition
+    def monodromy(self) -> Tuple[float, float, float]:
+        """Monodromy invariants."""
+        return self._monodromy
 
-    def rho_reflect(self) -> "MonodromyLPGate":
-        """Return the rho-reflected version of this gate."""
+    @property
+    def weyl(self) -> np.ndarray:
+        """Weyl invariants (lazy computed from monodromy).
+
+        Matches the normalized convention from weylchamber.c1c2c3
+        """
+        if self._weyl is None:
+            self._weyl = np.array(
+                [
+                    (self.monodromy[0] + self.monodromy[1]),
+                    (self.monodromy[2] + self.monodromy[0]),
+                    (self.monodromy[1] + self.monodromy[2]),
+                ],
+                dtype=np.double,
+            )
+        return self._weyl
+
+    @property
+    def makhlin(self) -> np.ndarray:
+        """Makhlin invariants (lazy computed from Weyl).
+
+        Matches the normalized convention from weylchamber.g1g2g3
+        """
+        if self._makhlin is None:
+            weyl = np.pi * self.weyl / 2  # Normalize back for Makhlin formula
+            g0 = np.prod(np.cos(2 * weyl) ** 2) - np.prod(np.sin(2 * weyl) ** 2)
+            g1 = np.prod(np.sin(4 * weyl)) / 4
+            g2 = (
+                4 * np.prod(np.cos(2 * weyl) ** 2)
+                - 4 * np.prod(np.sin(2 * weyl) ** 2)
+                - np.prod(np.cos(4 * weyl))
+            )
+            self._makhlin = np.array([g0, g1, g2], dtype=np.double)
+        return self._makhlin
+
+    @property
+    def canonical_matrix(self) -> np.ndarray:
+        """Canonical gate matrix (lazy computed from Weyl)."""
+        if self._canonical_matrix is None:
+            self._canonical_matrix = canonical_gate(*self.weyl).full()
+        return self._canonical_matrix
+
+    def rho_reflect(self) -> "GateInvariants":
+        """Rho-reflected version of this gate."""
         rho_coords = (
             self.logspec[2] + 0.5,
             self.logspec[3] + 0.5,
             self.logspec[0] - 0.5,
             self.logspec[1] - 0.5,
         )
-        return MonodromyLPGate(logspec=rho_coords, name=f"*{self.name}")
+        return GateInvariants(logspec=rho_coords, name=f"*{self.name}")
 
     def __str__(self) -> str:
         return self.name
 
 
 def recover_local_equivalence(U_target, U_basis):
-    """Find local 'exterior' gates to complete 2Q decomposition.
-
-    U1 and U2 are locally equivalent, but need to find local gates such that
-    local.U_basis.local is exactly equivalent to U_target.
-           ┌────┐ ┌────────────┐┌─────────┐       ┌────────────┐
-    q_0: ──┤ K1 ├─┤            ├┤ K3      ├      ─┤            ├─
-         ┌─┴────┴┐│  U_basis   │└┬───────┬┘   :=  |  U_target  |
-    q_1: ┤  K2   ├┤            ├─┤ K4    ├─      ─┤            ├─
-         └───────┘└────────────┘ └───────┘        └────────────┘
-
-    NOTE this method is essentially TwoQubitBasisDecomposer.decomp1()
-    """
+    """Find local gates such that local.U_basis.local = U_target."""
     target_decomp = TwoQubitWeylDecomposition(U_target, fidelity=1.0)
     basis_decomp = TwoQubitWeylDecomposition(U_basis, fidelity=1.0)
 
-    # XXX this atol is a bit too generous
-    # makes up for imperfect convergence...
     local_coords1 = np.array([target_decomp.a, target_decomp.b, target_decomp.c])
     local_coords2 = np.array([basis_decomp.a, basis_decomp.b, basis_decomp.c])
-    if not np.all(
-        np.isclose(np.abs(local_coords1 - local_coords2), np.zeros(3), atol=1e-4)
-    ):
+    if not np.allclose(np.abs(local_coords1 - local_coords2), 0, atol=1e-4):
         if not np.isclose(np.abs(target_decomp.c), np.abs(basis_decomp.c)):
             raise ValueError(
-                f"Tried to recover local equivalence on gates that were not locally equivalent. \
-                Often this is a matter of precision. The difference between expected and given \
-                weyl coords was {np.abs(local_coords1 - local_coords2)}. If this is close to 0, then adjust tolerances."
+                f"Gates are not locally equivalent. Difference: {np.abs(local_coords1 - local_coords2)}"
             )
-        else:
-            warnings.warn(
-                "Tried to recover local equivalence, but the c parameter had a sign difference."
-            )
+        warnings.warn(
+            "Possible sign difference in c parameter during local equivalence recovery."
+        )
 
     k4 = target_decomp.K1l @ np.conjugate(basis_decomp.K1l).T
     k3 = target_decomp.K1r @ np.conjugate(basis_decomp.K1r).T
