@@ -23,6 +23,8 @@ class GateInvariants:
         name: Optional[str] = None,
         unitary: Optional[np.ndarray] = None,
     ):
+        if len(logspec) == LEN_GATE_INVARIANTS:
+            logspec = logspec + (-1.0 * sum(logspec),)
         self.logspec = logspec
         self._monodromy = logspec[:LEN_GATE_INVARIANTS]  # Monodromy
         self.name = name or "2QGate"
@@ -63,7 +65,7 @@ class GateInvariants:
                 ],
                 dtype=np.double,
             )
-        return self._weyl
+        return np.abs(self._weyl)
 
     @property
     def makhlin(self) -> np.ndarray:
@@ -102,6 +104,16 @@ class GateInvariants:
 
     def __str__(self) -> str:
         return self.name
+
+
+if __name__ == "__main__":
+    from qiskit.circuit.library import iSwapGate
+    from weylchamber import c1c2c3, g1g2g3
+
+    u = iSwapGate().power(1 / 2).to_matrix()
+    g = GateInvariants.from_unitary(u)
+    assert np.allclose(g1g2g3(u), g.makhlin)
+    assert np.allclose(c1c2c3(u), g.weyl)
 
 
 def recover_local_equivalence(U_target, U_basis):
