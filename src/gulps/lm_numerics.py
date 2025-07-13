@@ -3,19 +3,18 @@ import time
 
 import jax.numpy as jnp
 import numpy as np
-from jax import config, jacfwd, jit
+from jax import config, jit
 from jax.random import PRNGKey, uniform
-from jaxopt import GaussNewton, LevenbergMarquardt, ScipyLeastSquares
+from jaxopt import LevenbergMarquardt
 from jaxopt.linear_solve import solve_cg
 from qiskit import QuantumCircuit
-from qiskit.circuit import Parameter
 from qiskit.circuit.library import RVGate, UnitaryGate
 from qiskit.converters import circuit_to_dag, dag_to_circuit
+from qiskit.dagcircuit import DAGCircuit
 from qiskit.quantum_info import Operator
 
 from gulps.invariants import (
-    mono_coordinates_to_CAN,
-    mono_coordinates_to_makhlin,
+    GateInvariants,
     positive_canonical_to_monodromy_coordinate,
     recover_local_equivalence,
 )
@@ -95,7 +94,7 @@ j_lm = LevenbergMarquardt(
 )
 
 
-class _SegmentNumericSynthesis:
+class SegmentNumericSynthesizer:
     """Class for synthesizing segments of a two-qubit gate sequence using numeric methods.
 
     Requires having already determining sequence of intermedaite canonical invariants {C_i} and a basis gate sentence {G_i}.
@@ -135,12 +134,10 @@ class _SegmentNumericSynthesis:
         elapsed_time = time.time() - start_time
 
         logger.debug(
-            f"LM synthesis: {restart_attempts} restarts, "
-            f"final value: {j_attempt.state.value:.4e}, "
-            f"{total_nfev} total function evaluations, "
-            f"{success_nfev} successful evaluations, "
-            f"elapsed time: {elapsed_time:.4f} seconds"
+            f"LM synthesis (attempts={restart_attempts}, residual={residual:.2e}, "
+            f"success={success}) in {elapsed_time:.3f}s"
         )
+
         if not success:
             raise RuntimeError(
                 "Segment synthesis did not converge within the allotted attempts."
@@ -149,7 +146,9 @@ class _SegmentNumericSynthesis:
 
     # NOTE, in principle this could be computed in parallel
     @staticmethod
-    def _synthesize_segments(gate_list, invariant_list):
+    def _synthesize_segments(
+        gate_list: list[GateInvariants], invariant_list: list[GateInvariants]
+    ) -> list[np.ndarray]:
         # gate list given as G1, G2, ..., Gn as Operator
         # invariant list given as C1, C2, ..., Cn as 3-tuple floats (monodromy)
         # assert C1 is G1 (and C0 is Identity)
@@ -157,17 +156,18 @@ class _SegmentNumericSynthesis:
 
         # loop gi.v.ci-1
         for i in range(1, len(invariant_list)):
-            g_op = Operator(gate_list[i]).to_matrix()
-            if i == 1:
-                # first case is g2.v.g1
-                c_op = Operator(gate_list[0]).to_matrix()
-            else:
-                # subsequent cases are gi.v.ci-1
-                c_op = mono_coordinates_to_CAN(*invariant_list[i - 1])
-            target = mono_coordinates_to_makhlin(*invariant_list[i])
+            g_op = gate_list[i].unitary
+            c_op = (
+                gate_list[i].unitary
+                if i == 1
+                else invariant_list[i - 1].canonical_matrix
+            )
+
+            # target = mono_coordinates_to_makhlin(*invariant_list[i])
+            target = invariant_list[i].makhlin
 
             # solve for segment
-            segment_sol = _SegmentNumericSynthesis._segment_interior_solve(
+            segment_sol = SegmentNumericSynthesizer._segment_interior_solve(
                 g_op, c_op, target
             )
             segment_sols.append(segment_sol)
@@ -175,12 +175,12 @@ class _SegmentNumericSynthesis:
 
     @staticmethod
     def _stitch_segments(
-        gate_list: list,  # [G1, G2, …, Gn]  (Qiskit Gates / Instructions)
-        invariant_list: list[tuple],  # [(c1,c2,c3), …]   (monodromy coordinates)
+        gate_list: list[GateInvariants],
+        invariant_list: list[GateInvariants],
         segment_sols: list[np.ndarray],  # [(v1…v6), …]      (inner-RV parameters)
         target_unitary: np.ndarray = None,  # final target unitary
         return_dag: bool = False,
-    ):
+    ) -> QuantumCircuit | DAGCircuit:
         """Piece together while recovering unitary equivalence.
 
         After `_synthesize_segments` gives the six angles for every interior RV pair,
@@ -199,7 +199,7 @@ class _SegmentNumericSynthesis:
         # NOTE endianess  qreg[0:2] -> qreg[::-1]
 
         # first basis gate
-        dag.apply_operation_back(gate_list[0], qreg[0:2])
+        dag.apply_operation_back(gate_list[0].unitary, qreg[0:2])
 
         # iterate over every remaining segment
         for idx, params in enumerate(segment_sols, start=1):
@@ -211,11 +211,11 @@ class _SegmentNumericSynthesis:
             dag.apply_operation_back(rv1, [qreg[0]])
 
             # (b) corresponding two-qubit basis gate Gi
-            dag.apply_operation_back(gate_list[idx], qreg[0:2])
+            dag.apply_operation_back(gate_list[idx].unitary, qreg[0:2])
 
             # (c) recover local equivalence → CAN(C_i)
             # XXX TODO, unnecessary dag conversions?
-            can_op = mono_coordinates_to_CAN(*invariant_list[idx])
+            can_op = invariant_list[idx].canonical_matrix
             current_op = Operator(dag_to_circuit(dag)).to_matrix()
 
             # on last iteration, recover to decomposition target instead of CAN
@@ -240,8 +240,12 @@ class _SegmentNumericSynthesis:
         return dag_to_circuit(dag)
 
     def __call__(
-        self, gate_list, invariant_list, target_unitary=None, return_dag=False
-    ):
+        self,
+        gate_list: list[GateInvariants],
+        invariant_list: list[GateInvariants],
+        target_unitary=None,
+        return_dag=False,
+    ) -> QuantumCircuit | DAGCircuit:
         """Synthesize segments of a two-qubit gate sequence.
 
         Args:
@@ -257,11 +261,11 @@ class _SegmentNumericSynthesis:
             raise ValueError("At least two gates are required for segment synthesis.")
 
         # first get the local rotations
-        segment_sols = _SegmentNumericSynthesis._synthesize_segments(
+        segment_sols = SegmentNumericSynthesizer._synthesize_segments(
             gate_list, invariant_list
         )
         # then stitch together, recovering nested local equivalences
-        stitched_circuit = _SegmentNumericSynthesis._stitch_segments(
+        stitched_circuit = SegmentNumericSynthesizer._stitch_segments(
             gate_list,
             invariant_list,
             segment_sols,

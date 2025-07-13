@@ -28,22 +28,37 @@ class GateInvariants:
         self.logspec = logspec
         self._monodromy = logspec[:LEN_GATE_INVARIANTS]  # Monodromy
         self.name = name or "2QGate"
-        self.unitary = unitary  # Optional reference to original unitary
+        self._unitary = unitary  # Optional reference to original unitary
 
         self._weyl = None
         self._makhlin = None
         self._canonical_matrix = None
 
     @classmethod
-    def from_unitary(cls, gate: Gate, name: Optional[str] = None) -> "GateInvariants":
+    def from_unitary(
+        cls, gate: Gate | np.ndarray, name: Optional[str] = None
+    ) -> "GateInvariants":
         U = Operator(gate).data
         coords = cls._unitary_to_mono_coordinates(U)
-        return cls(logspec=coords, name=name, unitary=U)
+        return cls(logspec=coords, name=name, unitary=gate)
+
+    @classmethod
+    def from_weyl(cls, coords: Tuple[float, float, float]):
+        """Create from weyl coordinates."""
+        positive_canonical = np.pi / 2 * np.array(coords)
+        return cls(positive_canonical_to_monodromy_coordinate(*positive_canonical))
 
     @staticmethod
     def _unitary_to_mono_coordinates(U) -> Tuple[float, float, float, float]:
         a, b, c = positive_canonical_to_monodromy_coordinate(*weyl_coordinates(U))
         return (a, b, c, -1.0 * (a + b + c))
+
+    @property
+    def unitary(self) -> np.ndarray:
+        """Return the unitary matrix of this gate."""
+        if self._unitary is None:
+            return self.canonical_matrix
+        return self._unitary
 
     @property
     def monodromy(self) -> Tuple[float, float, float]:
