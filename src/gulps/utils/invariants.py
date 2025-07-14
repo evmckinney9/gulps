@@ -107,6 +107,10 @@ class GateInvariants:
             self._canonical_matrix = canonical_gate(*self.weyl).full()
         return self._canonical_matrix
 
+    @property
+    def strength(self) -> float:
+        return min(sum(self.monodromy), sum(self.rho_reflect().monodromy))
+
     def rho_reflect(self) -> "GateInvariants":
         """Rho-reflected version of this gate."""
         rho_coords = (

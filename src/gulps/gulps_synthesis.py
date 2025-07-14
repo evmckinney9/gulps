@@ -6,7 +6,8 @@ from qiskit import QuantumCircuit
 from qiskit.circuit import Gate
 from qiskit.dagcircuit import DAGCircuit
 
-from gulps.invariants import GateInvariants
+from gulps.utils.invariants import GateInvariants
+from gulps.utils.isa import ISAInvariants
 
 from .linear_program import MinimalOrderedISAConstraints
 from .local_numerics import SegmentNumericSynthesizer
@@ -17,20 +18,27 @@ class GulpsDecomposer:
     Gate sentences are drawn from a fixed gate set and enumerated up to a specified depth.
     """
 
-    def __init__(self, gate_set: List[GateInvariants], max_depth: int = 3):
+    def __init__(self, gate_set: List[GateInvariants], costs: List[float]):
         if not gate_set:
             raise ValueError("gate_set must contain at least one GateInvariants.")
-        if max_depth < 2:
-            raise ValueError("max_depth must be at least 2 (for a meaningful LP).")
 
-        self.gate_set = gate_set
-        self.max_depth = max_depth
+        self.isa = ISAInvariants(
+            gate_set=gate_set,
+            costs=costs,
+        )
+        self._numerics = SegmentNumericSynthesizer()
+        self._constraint_cache = {}
 
-    def enumerate_sentences(self) -> List[List[GateInvariants]]:
-        """Generate all ordered gate sequences up to max_depth."""
-        for length in range(2, self.max_depth + 1):
-            for sequence in product(self.gate_set, repeat=length):
-                yield list(sequence)
+    def _eval_edge_case(self, target: GateInvariants):
+        """Handle edge cases where the target is a simple gate."""
+        if target.monodromy == (0, 0, 0):
+            raise NotImplementedError()
+            return QuantumCircuit(2)
+        if np.any(
+            [np.isclose(target.monodromy, gate.monodromy) for gate in self.gate_set]
+        ):
+            raise NotImplementedError()
+            return QuantumCircuit(2)
 
     def _try_lp(
         self,
@@ -55,23 +63,16 @@ class GulpsDecomposer:
         return_dag: bool = False,
         log_output: bool = False,
     ) -> QuantumCircuit | DAGCircuit:
-        """Decompose the given target into a QuantumCircuit using LP + numeric stitching."""
-        if isinstance(target, Gate):
-            target_unitary = target.to_matrix()
-        elif isinstance(target, GateInvariants):
-            target_unitary = target.unitary
-        elif isinstance(target, np.ndarray):
-            target_unitary = target
-        else:
-            raise TypeError("Target must be a Gate, np.ndarray, or GateInvariants")
-
         target_inv = (
             target
             if isinstance(target, GateInvariants)
-            else GateInvariants.from_unitary(target_unitary)
+            else GateInvariants.from_unitary(target)
         )
 
-        for sentence in self.enumerate_sentences():
+        isa_enumerator = self.isa.enumerate()
+        for sentence in isa_enumerator:
+            if sum(gate.strength for gate in sentence) < target_inv.strength:
+                continue
             sentence_out, intermediates = self._try_lp(
                 sentence, target_inv, log_output=log_output
             )
@@ -79,7 +80,7 @@ class GulpsDecomposer:
                 return SegmentNumericSynthesizer()(
                     sentence_out,
                     intermediates,
-                    target_unitary,
+                    target_inv,
                     return_dag=return_dag,
                 )
 

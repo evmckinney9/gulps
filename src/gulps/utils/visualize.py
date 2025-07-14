@@ -5,7 +5,7 @@ import numpy as np
 from matplotlib.lines import Line2D
 from weylchamber import WeylChamber
 
-from gulps.invariants import GateInvariants
+from gulps.utils.invariants import GateInvariants
 
 # colors = cm.tab10(np.linspace(0, 1.0, len(self.gate_set)))
 # color_map = {gate: color for gate, color in zip(self.gate_set, colors)}
