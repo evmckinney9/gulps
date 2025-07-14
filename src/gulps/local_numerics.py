@@ -154,7 +154,7 @@ class SegmentNumericSynthesizer:
         for i in range(1, len(invariant_list)):
             g_op = gate_list[i].unitary
             c_op = (
-                gate_list[i].unitary
+                gate_list[0].unitary
                 if i == 1
                 else invariant_list[i - 1].canonical_matrix
             )
@@ -174,7 +174,7 @@ class SegmentNumericSynthesizer:
         gate_list: list[GateInvariants],
         invariant_list: list[GateInvariants],
         segment_sols: list[np.ndarray],  # [(v1…v6), …]      (inner-RV parameters)
-        target_unitary: np.ndarray = None,  # final target unitary
+        target: GateInvariants = None,  # final target unitary
         return_dag: bool = False,
     ) -> QuantumCircuit | DAGCircuit:
         """Piece together while recovering unitary equivalence.
@@ -215,9 +215,9 @@ class SegmentNumericSynthesizer:
             current_op = Operator(dag_to_circuit(dag)).to_matrix()
 
             # on last iteration, recover to decomposition target instead of CAN
-            if idx == len(segment_sols) and target_unitary is not None:
+            if idx == len(segment_sols) and target is not None:
                 k1, k2, k3, k4, gphase = recover_local_equivalence(
-                    target_unitary, current_op
+                    target.unitary, current_op
                 )
             else:
                 k1, k2, k3, k4, gphase = recover_local_equivalence(can_op, current_op)
@@ -239,7 +239,7 @@ class SegmentNumericSynthesizer:
         self,
         gate_list: list[GateInvariants],
         invariant_list: list[GateInvariants],
-        target_unitary=None,
+        target: GateInvariants = None,
         return_dag=False,
     ) -> QuantumCircuit | DAGCircuit:
         """Synthesize segments of a two-qubit gate sequence.
@@ -265,7 +265,7 @@ class SegmentNumericSynthesizer:
             gate_list,
             invariant_list,
             segment_sols,
-            target_unitary,
+            target,
             return_dag=return_dag,
         )
         return stitched_circuit

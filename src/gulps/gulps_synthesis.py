@@ -50,11 +50,12 @@ class GulpsDecomposer:
         constraints = MinimalOrderedISAConstraints(sentence)
         constraints.set_target(target)
         sentence_out, intermediates = constraints.solve(log_output=log_output)
+        if sentence_out is not None:
+            return sentence_out, intermediates
 
-        if sentence_out is None:
-            constraints.set_target(target.rho_reflect())
-            sentence_out, intermediates = constraints.solve(log_output=log_output)
-
+        # if LP fails, try rho-reflection
+        constraints.set_target(target.rho_reflect())
+        sentence_out, intermediates = constraints.solve(log_output=log_output)
         return sentence_out, intermediates
 
     def __call__(
@@ -79,7 +80,7 @@ class GulpsDecomposer:
             if sentence_out is not None:
                 return SegmentNumericSynthesizer()(
                     sentence_out,
-                    intermediates,
+                    intermediates[1:],  # skip identity
                     target_inv,
                     return_dag=return_dag,
                 )

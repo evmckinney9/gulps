@@ -66,6 +66,17 @@ class MinimalOrderedISAConstraints:
         self.last_iter_ct = ct
 
     def solve(self, log_output=False):
+        # edge case, if there were no free variables in x_vec
+        if len(self.A_ub[0]) == 0:
+            if np.all(0 <= self.b_ub):
+                blocks = (
+                    np.zeros(LEN_GATE_INVARIANTS),
+                    self.isa_sequence[0].monodromy,
+                    self._target_def,
+                )
+                return self._extract_from_blocks(blocks)
+            else:
+                return None, None
         result = linprog(
             c=self.c,
             A_ub=self.A_ub,
@@ -74,21 +85,19 @@ class MinimalOrderedISAConstraints:
             options={"disp": log_output},
         )
         if result.success:
-            return self._extract_solution(result)
-        return None, None
-
-    def _extract_solution(self, result):
-        c_vec = result.x
-        full_c_vec = np.concatenate(
-            (
+            blocks = (
                 np.zeros(LEN_GATE_INVARIANTS),
                 self.isa_sequence[0].monodromy,
-                c_vec,
+                result.x,
                 self._target_def,
             )
-        )
-        mono_points = list(zip(*[iter(full_c_vec)] * LEN_GATE_INVARIANTS))
-        intermediate_invariants = []
-        for point in mono_points:
-            intermediate_invariants.append(GateInvariants(point))
+            return self._extract_from_blocks(blocks)
+        return None, None
+
+    def _extract_from_blocks(self, blocks):
+        full_c_vec = np.concatenate(blocks)
+        intermediate_invariants = [
+            GateInvariants(tuple(full_c_vec[i : i + LEN_GATE_INVARIANTS]))
+            for i in range(0, len(full_c_vec), LEN_GATE_INVARIANTS)
+        ]
         return self.isa_sequence, intermediate_invariants
