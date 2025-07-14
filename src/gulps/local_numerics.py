@@ -13,11 +13,7 @@ from qiskit.converters import circuit_to_dag, dag_to_circuit
 from qiskit.dagcircuit import DAGCircuit
 from qiskit.quantum_info import Operator
 
-from gulps.invariants import (
-    GateInvariants,
-    positive_canonical_to_monodromy_coordinate,
-    recover_local_equivalence,
-)
+from gulps.utils.invariants import GateInvariants, recover_local_equivalence
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)

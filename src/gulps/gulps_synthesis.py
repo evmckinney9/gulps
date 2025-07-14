@@ -1,158 +1,88 @@
-from __future__ import annotations
+from itertools import product
+from typing import List, Union
 
 import numpy as np
-from qiskit.circuit.gate import Gate
-from qiskit.converters import circuit_to_dag
+from qiskit import QuantumCircuit
+from qiskit.circuit import Gate
 from qiskit.dagcircuit import DAGCircuit
-from qiskit.transpiler.basepasses import TransformationPass
 
-from .plugin import UnitarySynthesisPlugin
+from gulps.invariants import GateInvariants
 
-
-class GlobalUnitaryLinearProgram(TransformationPass):
-    def __init__(self, **kwargs) -> None:
-        super().__init__()
-        self.kwargs = kwargs
-        self._sk = GULPS(kwargs)
-
-    def run(self, dag: DAGCircuit) -> DAGCircuit:
-        for node in dag.op_nodes():
-            # ignore operations on which the algorithm cannot run
-            if (
-                (node.op.num_qubits != 2
-                or node.is_parameterized()
-                or (not hasattr(node.op, "to_matrix"))
-            ):
-                continue
-
-            # we do not check the input matrix as we know it comes from a Qiskit gate, as this
-            # we know it will generate a valid SU(2) matrix
-            check_input = not isinstance(node.op, Gate)
-
-            # call solovay kitaev
-            approximation = self._sk.run(
-                node.op, self.recursion_degree, return_dag=True, check_input=check_input
-            )
-
-            # convert to a dag and replace the gate by the approximation
-            dag.substitute_node_with_dag(node, approximation)
-
-        return dag
+from .linear_program import MinimalOrderedISAConstraints
+from .local_numerics import SegmentNumericSynthesizer
 
 
-class SolovayKitaevSynthesis(UnitarySynthesisPlugin):
-    """A Solovay-Kitaev Qiskit unitary synthesis plugin.
-
-    This plugin is invoked by :func:`~.compiler.transpile` when the ``unitary_synthesis_method``
-    parameter is set to ``"sk"``.
-
-    This plugin supports customization and additional parameters can be passed to the plugin
-    by passing a dictionary as the ``unitary_synthesis_plugin_config`` parameter of
-    the :func:`~qiskit.compiler.transpile` function.
-
-    Supported parameters in the dictionary:
-
-    basic_approximations (str | dict):
-        The basic approximations for the finding the best discrete decomposition at the root of the
-        recursion. If a string, it specifies the ``.npy`` file to load the approximations from.
-        If a dictionary, it contains ``{label: SO(3)-matrix}`` pairs. If None, a default based on
-        the specified ``basis_gates`` and ``depth`` is generated.
-
-    basis_gates (list):
-        A list of strings specifying the discrete basis gates to decompose to. If None,
-        it defaults to ``["h", "t", "tdg"]``. If ``basic_approximations`` is not None,
-        ``basis_set`` is required to correspond to the basis set that was used to
-        generate it.
-
-    depth (int):
-        The gate-depth of the basic approximations. All possible, unique combinations of the
-        basis gates up to length ``depth`` are considered. If None, defaults to 12.
-        If ``basic_approximations`` is not None, ``depth`` is required to correspond to the
-        depth that was used to generate it.
-
-    recursion_degree (int):
-        The number of times the decomposition is recursively improved. If None, defaults to 5.
+class GulpsDecomposer:
+    """Decompose a two-qubit unitary using a monodromy LP and numeric segment synthesis.
+    Gate sentences are drawn from a fixed gate set and enumerated up to a specified depth.
     """
 
-    # Generating basic approximations of single-qubit gates is computationally expensive.
-    # We cache the instance of the Solovay-Kitaev class (which contains the approximations),
-    # as well as the basis gates and the depth (used to generate it).
-    # When the plugin is called again, we check if the specified basis gates and depth are
-    # the same as before. If so, the stored basic approximations are reused, and if not, the
-    # approximations are re-generated. In practice (when the plugin is run as a part of the
-    # UnitarySynthesis transpiler pass), the basis gates and the depth do not change, and
-    # basic approximations are not re-generated.
-    _sk = None
-    _basis_gates = None
-    _depth = None
+    def __init__(self, gate_set: List[GateInvariants], max_depth: int = 3):
+        if not gate_set:
+            raise ValueError("gate_set must contain at least one GateInvariants.")
+        if max_depth < 2:
+            raise ValueError("max_depth must be at least 2 (for a meaningful LP).")
 
-    @property
-    def max_qubits(self):
-        """Maximum number of supported qubits is ``1``."""
-        return 1
+        self.gate_set = gate_set
+        self.max_depth = max_depth
 
-    @property
-    def min_qubits(self):
-        """Minimum number of supported qubits is ``1``."""
-        return 1
+    def enumerate_sentences(self) -> List[List[GateInvariants]]:
+        """Generate all ordered gate sequences up to max_depth."""
+        for length in range(2, self.max_depth + 1):
+            for sequence in product(self.gate_set, repeat=length):
+                yield list(sequence)
 
-    @property
-    def supports_natural_direction(self):
-        """The plugin does not support natural direction, it does not assume
-        bidirectional two qubit gates.
-        """
-        return True
+    def _try_lp(
+        self,
+        sentence: List[GateInvariants],
+        target: GateInvariants,
+        log_output: bool = False,
+    ) -> tuple[Union[List[GateInvariants], None], Union[List[GateInvariants], None]]:
+        """Try solving LP for the sentence with rho-reflection fallback."""
+        constraints = MinimalOrderedISAConstraints(sentence)
+        constraints.set_target(target)
+        sentence_out, intermediates = constraints.solve(log_output=log_output)
 
-    @property
-    def supports_pulse_optimize(self):
-        """The plugin does not support optimization of pulses."""
-        return False
+        if sentence_out is None:
+            constraints.set_target(target.rho_reflect())
+            sentence_out, intermediates = constraints.solve(log_output=log_output)
 
-    @property
-    def supports_gate_lengths(self):
-        """The plugin does not support gate lengths."""
-        return False
+        return sentence_out, intermediates
 
-    @property
-    def supports_gate_errors(self):
-        """The plugin does not support gate errors."""
-        return False
+    def __call__(
+        self,
+        target: Union[np.ndarray, Gate, GateInvariants],
+        return_dag: bool = False,
+        log_output: bool = False,
+    ) -> QuantumCircuit | DAGCircuit:
+        """Decompose the given target into a QuantumCircuit using LP + numeric stitching."""
+        if isinstance(target, Gate):
+            target_unitary = target.to_matrix()
+        elif isinstance(target, GateInvariants):
+            target_unitary = target.unitary
+        elif isinstance(target, np.ndarray):
+            target_unitary = target
+        else:
+            raise TypeError("Target must be a Gate, np.ndarray, or GateInvariants")
 
-    @property
-    def supported_bases(self):
-        """The plugin does not support bases for synthesis."""
-        return None
+        target_inv = (
+            target
+            if isinstance(target, GateInvariants)
+            else GateInvariants.from_unitary(target_unitary)
+        )
 
-    @property
-    def supports_basis_gates(self):
-        """The plugin does not support basis gates. By default it synthesis to the
-        ``["h", "t", "tdg"]`` gate basis.
-        """
-        return True
-
-    @property
-    def supports_coupling_map(self):
-        """The plugin does not support coupling maps."""
-        return False
-
-    def run(self, unitary, **options):
-        """Run the SolovayKitaevSynthesis synthesis plugin on the given unitary."""
-        config = options.get("config") or {}
-        basis_gates = options.get("basis_gates", None)
-        depth = config.get("depth", 12)
-        basic_approximations = config.get("basic_approximations", None)
-        recursion_degree = config.get("recursion_degree", 5)
-
-        # Check if we didn't yet construct the Solovay-Kitaev instance (which contains the basic
-        # approximations) or if the basic approximations need need to be recomputed.
-        if (SolovayKitaevSynthesis._sk is None) or (
-            (basis_gates != SolovayKitaevSynthesis._basis_gates)
-            or (depth != SolovayKitaevSynthesis._depth)
-        ):
-            SolovayKitaevSynthesis._basis_gates = basis_gates
-            SolovayKitaevSynthesis._depth = depth
-            SolovayKitaevSynthesis._sk = SolovayKitaevDecomposition(
-                basic_approximations, basis_gates=basis_gates, depth=depth
+        for sentence in self.enumerate_sentences():
+            sentence_out, intermediates = self._try_lp(
+                sentence, target_inv, log_output=log_output
             )
-        approximate_circuit = SolovayKitaevSynthesis._sk.run(unitary, recursion_degree)
-        return circuit_to_dag(approximate_circuit)
+            if sentence_out is not None:
+                return SegmentNumericSynthesizer()(
+                    sentence_out,
+                    intermediates,
+                    target_unitary,
+                    return_dag=return_dag,
+                )
+
+        raise RuntimeError(
+            "No valid decomposition found via LP (including rho-reflection)."
+        )
