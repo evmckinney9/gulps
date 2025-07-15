@@ -76,37 +76,33 @@ class GulpsDecomposer:
             else GateInvariants.from_unitary(target)
         )
 
-        # === Fast path: precomputed coverage ===
+        sentence_out = None
+        intermediates = None
+
         if self.isa._precompute_polytopes:
             sentence = self.isa.polytope_lookup(target_inv)
-            if sentence is not None:
+            if sentence is None:
+                raise RuntimeError("No precomputed ISA sentence found for target.")
+            sentence_out, intermediates = self._try_lp(
+                sentence, target_inv, log_output=log_output
+            )
+            if sentence_out is None:
+                raise RuntimeError("LP failed for precomputed ISA sentence.")
+        else:
+            for sentence in self.isa.enumerate():
+                if sum(gate.strength for gate in sentence) < target_inv.strength:
+                    continue
                 sentence_out, intermediates = self._try_lp(
                     sentence, target_inv, log_output=log_output
                 )
                 if sentence_out is not None:
-                    return self._numerics(
-                        sentence_out,
-                        intermediates[1:],  # skip identity
-                        target_inv,
-                        return_dag=return_dag,
-                    )
+                    break
+            else:
+                raise RuntimeError("No valid ISA sentence found via LP enumeration.")
 
-        # === Slow path: try enumerating ISA sentences ===
-        isa_enumerator = self.isa.enumerate()
-        for sentence in isa_enumerator:
-            if sum(gate.strength for gate in sentence) < target_inv.strength:
-                continue
-            sentence_out, intermediates = self._try_lp(
-                sentence, target_inv, log_output=log_output
-            )
-            if sentence_out is not None:
-                return self._numerics(
-                    sentence_out,
-                    intermediates[1:],  # skip identity
-                    target_inv,
-                    return_dag=return_dag,
-                )
-
-        raise RuntimeError(
-            "No valid decomposition found via LP (including rho-reflection)."
+        return self._numerics(
+            sentence_out,
+            intermediates[1:],  # skip identity
+            target_inv,
+            return_dag=return_dag,
         )

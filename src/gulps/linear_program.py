@@ -12,6 +12,8 @@ from scipy.optimize import linprog
 from gulps.utils.invariants import LEN_GATE_INVARIANTS, GateInvariants
 from gulps.utils.qlr import len_qlr, qlr_inequalities
 
+id_inv = GateInvariants(logspec=(0.0, 0.0, 0.0, 0.0))
+
 
 class MinimalOrderedISAConstraints:
     """Minimal LP constraints for ordered, defined ISA sequences."""
@@ -60,8 +62,8 @@ class MinimalOrderedISAConstraints:
     def set_target(self, target_gate: GateInvariants):
         # NOTE avoid reconstructing all of b_ub by tracking the last set target gate
         # when setting a new target, remove the contribution of the previous target
-        self._target_def = target_gate.monodromy
-        ct = np.dot(self._ciplus1_block, self._target_def)
+        self._target_def = target_gate
+        ct = np.dot(self._ciplus1_block, self._target_def.monodromy)
         self.b_ub[-len_qlr:] += self.last_iter_ct - ct
         self.last_iter_ct = ct
 
@@ -69,12 +71,12 @@ class MinimalOrderedISAConstraints:
         # edge case, if there were no free variables in x_vec
         if len(self.A_ub[0]) == 0:
             if np.all(0 <= self.b_ub):
-                blocks = (
-                    np.zeros(LEN_GATE_INVARIANTS),
-                    self.isa_sequence[0].monodromy,
+                intermediate_invariants = (
+                    id_inv,
+                    self.isa_sequence[0],
                     self._target_def,
                 )
-                return self._extract_from_blocks(blocks)
+                return self.isa_sequence, intermediate_invariants
             else:
                 return None, None
         result = linprog(
@@ -85,19 +87,21 @@ class MinimalOrderedISAConstraints:
             options={"disp": log_output},
         )
         if result.success:
-            blocks = (
-                np.zeros(LEN_GATE_INVARIANTS),
-                self.isa_sequence[0].monodromy,
-                result.x,
-                self._target_def,
-            )
-            return self._extract_from_blocks(blocks)
+            return self._extract_from_blocks(result.x)
         return None, None
 
-    def _extract_from_blocks(self, blocks):
-        full_c_vec = np.concatenate(blocks)
-        intermediate_invariants = [
-            GateInvariants(tuple(full_c_vec[i : i + LEN_GATE_INVARIANTS]))
-            for i in range(0, len(full_c_vec), LEN_GATE_INVARIANTS)
+    def _extract_from_blocks(self, lp_vec):
+        lp_invariants = [
+            GateInvariants(tuple(lp_vec[i : i + LEN_GATE_INVARIANTS]))
+            for i in range(0, len(lp_vec), LEN_GATE_INVARIANTS)
         ]
+
+        # Build full intermediate sequence
+        intermediate_invariants = (
+            id_inv,
+            self.isa_sequence[0],
+            *lp_invariants,
+            self._target_def,
+        )
+
         return self.isa_sequence, intermediate_invariants

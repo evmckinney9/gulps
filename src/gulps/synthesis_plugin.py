@@ -71,6 +71,7 @@ class GulpsSynthesisPlugin(UnitarySynthesisPlugin):
         return None
 
     def run(self, unitary: np.ndarray, **options) -> DAGCircuit:
+        print("GulpsSynthesisPlugin.run called with options:", options)
         # basis_gates = options.get("basis_gates", None)
         target = options.get("target")
         if target is None:
@@ -86,7 +87,7 @@ class GulpsSynthesisPlugin(UnitarySynthesisPlugin):
 
         if (
             GulpsSynthesisPlugin._decomposer is None
-            or GulpsSynthesisPlugin._decomposer.gate_set != gate_set
+            or GulpsSynthesisPlugin._decomposer.isa.gate_set != gate_set
         ):
             GulpsSynthesisPlugin._decomposer = GulpsDecomposer(
                 gate_set=gate_set,

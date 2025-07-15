@@ -153,6 +153,7 @@ class SegmentNumericSynthesizer:
         # loop gi.v.ci-1
         for i in range(1, len(invariant_list)):
             g_op = gate_list[i].unitary
+            # c_op = invariant_list[i - 1].canonical_matrix
             c_op = (
                 gate_list[0].unitary
                 if i == 1
@@ -219,7 +220,6 @@ class SegmentNumericSynthesizer:
                 k1, k2, k3, k4, gphase = recover_local_equivalence(
                     target.unitary, current_op
                 )
-                print("herE")
 
             else:
                 k1, k2, k3, k4, gphase = recover_local_equivalence(can_op, current_op)

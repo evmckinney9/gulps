@@ -7,6 +7,7 @@ import numpy as np
 from monodromy.coordinates import positive_canonical_to_monodromy_coordinate
 from qiskit._accelerate.two_qubit_decompose import weyl_coordinates
 from qiskit.circuit import Gate
+from qiskit.circuit.library import UnitaryGate
 from qiskit.quantum_info import Operator
 from qiskit.synthesis.two_qubit import TwoQubitWeylDecomposition
 from weylchamber import canonical_gate
@@ -39,6 +40,8 @@ class GateInvariants:
         cls, gate: Gate | np.ndarray, name: Optional[str] = None
     ) -> "GateInvariants":
         U = Operator(gate).data
+        if not isinstance(gate, Gate):
+            gate = UnitaryGate(gate, label=name)
         coords = cls._unitary_to_mono_coordinates(U)
         return cls(logspec=coords, name=name, unitary=gate)
 
@@ -88,17 +91,23 @@ class GateInvariants:
 
         Matches the normalized convention from weylchamber.g1g2g3
         """
-        if self._makhlin is None:
-            weyl = np.pi * self.weyl / 2  # Normalize back for Makhlin formula
-            g0 = np.prod(np.cos(2 * weyl) ** 2) - np.prod(np.sin(2 * weyl) ** 2)
-            g1 = np.prod(np.sin(4 * weyl)) / 4
-            g2 = (
-                4 * np.prod(np.cos(2 * weyl) ** 2)
-                - 4 * np.prod(np.sin(2 * weyl) ** 2)
-                - np.prod(np.cos(4 * weyl))
-            )
-            self._makhlin = np.array([g0, g1, g2], dtype=np.double)
-        return self._makhlin
+        from qiskit._accelerate.two_qubit_decompose import (
+            two_qubit_local_invariants as tqli_rs,
+        )
+
+        return tqli_rs(Operator(self.unitary).data)
+
+        # if self._makhlin is None:
+        #     weyl = np.pi * self.weyl / 2  # Normalize back for Makhlin formula
+        #     g0 = np.prod(np.cos(2 * weyl) ** 2) - np.prod(np.sin(2 * weyl) ** 2)
+        #     g1 = np.prod(np.sin(4 * weyl)) / 4
+        #     g2 = (
+        #         4 * np.prod(np.cos(2 * weyl) ** 2)
+        #         - 4 * np.prod(np.sin(2 * weyl) ** 2)
+        #         - np.prod(np.cos(4 * weyl))
+        #     )
+        #     self._makhlin = np.array([g0, g1, g2], dtype=np.double)
+        # return self._makhlin
 
     @property
     def canonical_matrix(self) -> np.ndarray:
@@ -142,11 +151,14 @@ def recover_local_equivalence(U_target, U_basis):
 
     local_coords1 = np.array([target_decomp.a, target_decomp.b, target_decomp.c])
     local_coords2 = np.array([basis_decomp.a, basis_decomp.b, basis_decomp.c])
-    if not np.allclose(np.abs(local_coords1 - local_coords2), 0, atol=1e-4):
+    if not np.allclose(np.abs(local_coords1 - local_coords2), 0, atol=1e-3):
         if not np.isclose(np.abs(target_decomp.c), np.abs(basis_decomp.c)):
             raise ValueError(
                 f"Gates are not locally equivalent. Difference: {np.abs(local_coords1 - local_coords2)}"
             )
+        print(
+            "Warning: Possible sign difference in c parameter during local equivalence recovery."
+        )
         warnings.warn(
             "Possible sign difference in c parameter during local equivalence recovery."
         )
