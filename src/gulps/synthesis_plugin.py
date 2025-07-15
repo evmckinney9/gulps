@@ -7,6 +7,8 @@ from qiskit.dagcircuit import DAGCircuit
 from qiskit.transpiler.basepasses import TransformationPass
 from qiskit.transpiler.passes.synthesis.plugin import UnitarySynthesisPlugin
 
+from gulps.gulps_synthesis import GulpsDecomposer
+
 from .synthesis_plugin import UnitarySynthesisPlugin
 
 
@@ -68,21 +70,28 @@ class GulpsSynthesisPlugin(UnitarySynthesisPlugin):
     def supported_bases(self):
         return None
 
-    def run(self, unitary, **options):
-        raise NotImplementedError()
-        # # configure settings
-        # target = options.get("target")
-        # if target is None:
-        #     raise ValueError("Target must be provided in options.")
+    def run(self, unitary: np.ndarray, **options) -> DAGCircuit:
+        # basis_gates = options.get("basis_gates", None)
+        target = options.get("target")
+        if target is None:
+            raise ValueError("Target must be provided in options.")
 
-        # # XXX I'll just assume we are only working with 2 qubit targets for now
-        # isa_tuple = []
-        # for idx, instruction in enumerate(target.operations_for_qargs((0, 1))):
-        #     error = target.instruction_properties(idx).error
-        #     isa_tuple.append((instruction, error))
+        # parse target into gate_set list and cost list
+        gate_set = []
+        costs = []
+        for idx, instruction in enumerate(target.operations_for_qargs((0, 1))):
+            error = target.instruction_properties(idx).error
+            gate_set.append(instruction)
+            costs.append(error)
 
-        # # call the synthesis function
-        # dag_circuit = generate_dag_circuit_from_matrix(
-        #     unitary, basis_gates, gate_errors
-        # )
-        # return dag_circuit
+        if (
+            GulpsSynthesisPlugin._decomposer is None
+            or GulpsSynthesisPlugin._decomposer.gate_set != gate_set
+        ):
+            GulpsSynthesisPlugin._decomposer = GulpsDecomposer(
+                gate_set=gate_set,
+                costs=costs,
+                precompute_polytopes=None,
+            )
+
+        return GulpsSynthesisPlugin._decomposer(target=unitary, return_dag=True)

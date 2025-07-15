@@ -2,6 +2,9 @@
 requires = ["setuptools", "wheel"]      #, "setuptools_rust"]
 build-backend = "setuptools.build_meta"
 
+[project.entry-points."qiskit.unitary_synthesis"]
+"gulps" = "gulps:GulpsSynthesisPlugin"
+
 [project]
 name = "gulps"
 description = "transpilation tools to enable experiments using heterogeous ISAs"
