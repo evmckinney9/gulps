@@ -18,13 +18,19 @@ class GulpsDecomposer:
     Gate sentences are drawn from a fixed gate set and enumerated up to a specified depth.
     """
 
-    def __init__(self, gate_set: List[GateInvariants], costs: List[float]):
+    def __init__(
+        self,
+        gate_set: List[GateInvariants],
+        costs: List[float],
+        precompute_polytopes: bool = False,
+    ):
         if not gate_set:
             raise ValueError("gate_set must contain at least one GateInvariants.")
 
         self.isa = ISAInvariants(
             gate_set=gate_set,
             costs=costs,
+            precompute_polytopes=precompute_polytopes,
         )
         self._numerics = SegmentNumericSynthesizer()
         self._constraint_cache = {}
@@ -70,6 +76,22 @@ class GulpsDecomposer:
             else GateInvariants.from_unitary(target)
         )
 
+        # === Fast path: precomputed coverage ===
+        if self.isa._precompute_polytopes:
+            sentence = self.isa.polytope_lookup(target_inv)
+            if sentence is not None:
+                sentence_out, intermediates = self._try_lp(
+                    sentence, target_inv, log_output=log_output
+                )
+                if sentence_out is not None:
+                    return self._numerics(
+                        sentence_out,
+                        intermediates[1:],  # skip identity
+                        target_inv,
+                        return_dag=return_dag,
+                    )
+
+        # === Slow path: try enumerating ISA sentences ===
         isa_enumerator = self.isa.enumerate()
         for sentence in isa_enumerator:
             if sum(gate.strength for gate in sentence) < target_inv.strength:
@@ -78,7 +100,7 @@ class GulpsDecomposer:
                 sentence, target_inv, log_output=log_output
             )
             if sentence_out is not None:
-                return SegmentNumericSynthesizer()(
+                return self._numerics(
                     sentence_out,
                     intermediates[1:],  # skip identity
                     target_inv,

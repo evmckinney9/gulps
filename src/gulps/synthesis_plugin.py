@@ -13,17 +13,7 @@ from .synthesis_plugin import UnitarySynthesisPlugin
 class GulpsSynthesisPlugin(UnitarySynthesisPlugin):
     """TODO Plugin documentation."""
 
-    # Generating basic approximations of single-qubit gates is computationally expensive.
-    # We cache the instance of the Solovay-Kitaev class (which contains the approximations),
-    # as well as the basis gates and the depth (used to generate it).
-    # When the plugin is called again, we check if the specified basis gates and depth are
-    # the same as before. If so, the stored basic approximations are reused, and if not, the
-    # approximations are re-generated. In practice (when the plugin is run as a part of the
-    # UnitarySynthesis transpiler pass), the basis gates and the depth do not change, and
-    # basic approximations are not re-generated.
-    _sk = None
-    _basis_gates = None
-    _depth = None
+    _decomposer = None
 
     @property
     def min_qubits(self):
