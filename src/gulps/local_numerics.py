@@ -219,6 +219,8 @@ class SegmentNumericSynthesizer:
                 k1, k2, k3, k4, gphase = recover_local_equivalence(
                     target.unitary, current_op
                 )
+                print("herE")
+
             else:
                 k1, k2, k3, k4, gphase = recover_local_equivalence(can_op, current_op)
 
