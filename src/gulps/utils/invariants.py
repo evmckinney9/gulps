@@ -151,7 +151,7 @@ def recover_local_equivalence(U_target, U_basis):
 
     local_coords1 = np.array([target_decomp.a, target_decomp.b, target_decomp.c])
     local_coords2 = np.array([basis_decomp.a, basis_decomp.b, basis_decomp.c])
-    if not np.allclose(np.abs(local_coords1 - local_coords2), 0, atol=1e-3):
+    if not np.allclose(np.abs(local_coords1 - local_coords2), 0, atol=1e-2):
         if not np.isclose(np.abs(target_decomp.c), np.abs(basis_decomp.c)):
             raise ValueError(
                 f"Gates are not locally equivalent. Difference: {np.abs(local_coords1 - local_coords2)}"

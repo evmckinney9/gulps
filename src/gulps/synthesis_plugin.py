@@ -71,7 +71,6 @@ class GulpsSynthesisPlugin(UnitarySynthesisPlugin):
         return None
 
     def run(self, unitary: np.ndarray, **options) -> DAGCircuit:
-        print("GulpsSynthesisPlugin.run called with options:", options)
         # basis_gates = options.get("basis_gates", None)
         target = options.get("target")
         if target is None:
