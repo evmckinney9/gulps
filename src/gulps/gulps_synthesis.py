@@ -82,6 +82,8 @@ class GulpsDecomposer:
         if self.isa._precompute_polytopes:
             sentence = self.isa.polytope_lookup(target_inv)
             if sentence is None:
+                sentence = self.isa.polytope_lookup(target_inv.rho_reflect())
+            if sentence is None:
                 raise RuntimeError("No precomputed ISA sentence found for target.")
             sentence_out, intermediates = self._try_lp(
                 sentence, target_inv, log_output=log_output

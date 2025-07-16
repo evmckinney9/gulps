@@ -67,6 +67,10 @@ class ISAInvariants:
         if not hasattr(self, "coverage_set"):
             raise ValueError("Polytope coverage set not precomputed.")
 
+        for convex_polytope in self.coverage_set:
+            if convex_polytope.has_element(target.monodromy):
+                return convex_polytope.instructions
+
         # XXXX does this do something different than the original?
         # xv = np.array(target.monodromy).reshape((3, 1))  # monodromy vector
         # ineq_results = np.full(len(self._ineq_matrix), True)
@@ -88,16 +92,16 @@ class ISAInvariants:
         #     eq_indices = self._subpolytope_to_eq[(cp_idx, sub_idx)]
         #     if np.all(ineq_results[ineq_indices]) and np.all(eq_results[eq_indices]):
         #         valid_subpolytopes.append((cp_idx, sub_idx))
-        valid_subpolytopes = []
-        for cp_idx, circuit_polytope in enumerate(self.coverage_set):
-            for sub_idx, subpolytope in enumerate(circuit_polytope.convex_subpolytopes):
-                if subpolytope.contains(target.monodromy):
-                    valid_subpolytopes.append((cp_idx, sub_idx))
-        if not valid_subpolytopes:
-            return None
+        # valid_subpolytopes = []
+        # for cp_idx, circuit_polytope in enumerate(self.coverage_set):
+        #     for sub_idx, subpolytope in enumerate(circuit_polytope.convex_subpolytopes):
+        #         if subpolytope.contains(target.monodromy):
+        #             valid_subpolytopes.append((cp_idx, sub_idx))
+        # if not valid_subpolytopes:
+        #     return None
 
-        best_cp_idx = min(cp_idx for cp_idx, _ in valid_subpolytopes)
-        return self.coverage_set[best_cp_idx].instructions
+        # best_cp_idx = min(cp_idx for cp_idx, _ in valid_subpolytopes)
+        # return self.coverage_set[best_cp_idx].instructions
 
     def _build_coverage_set(self):
         self.coverage_set = gates_to_coverage(
