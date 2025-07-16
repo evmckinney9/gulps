@@ -11,11 +11,15 @@ repos:
     hooks:
       - id: conventional-commits
 
-  - repo: https://github.com/charliermarsh/ruff-pre-commit
-    rev: "v0.11.10"
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    # Ruff version.
+    rev: v0.12.3
     hooks:
-      - id: ruff
-        args: [--fix, --exit-non-zero-on-fix]
+      # Run the linter.
+      - id: ruff-check
+        args: [--fix]
+      # Run the formatter.
+      - id: ruff-format
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0

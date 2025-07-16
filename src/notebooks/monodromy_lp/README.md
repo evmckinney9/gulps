@@ -1,5 +1,0 @@
-    -`monodromy_lp/`
-        - `14_mono_lp.ipynb` Decomonstrate basic decomposition trajectories given by solution to LP.
-        - `15_qiskit_comparison.ipynb` Establish correctness of solution by comparing decomposition against qiskit's `XXDecomposer`.
-        - `16_decomp_gifs.ipynb` Create an animation of decomposition trajectories over random target gates.
-        - `17_time_profile.ipynb` Timing comparison between LP solver and qiskit's `XXDecomposer`; outputs a snakeviz visualization.
