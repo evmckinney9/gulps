@@ -38,12 +38,12 @@ class GulpsDecomposer:
     def _eval_edge_case(self, target: GateInvariants):
         """Handle edge cases where the target is a simple gate."""
         if target.monodromy == (0, 0, 0):
-            raise NotImplementedError()
+            raise NotImplementedError("trivial edge case")
             return QuantumCircuit(2)
         if np.any(
-            [np.isclose(target.monodromy, gate.monodromy) for gate in self.gate_set]
+            [np.isclose(target.monodromy, gate.monodromy) for gate in self.isa.gate_set]
         ):
-            raise NotImplementedError()
+            raise NotImplementedError("trivial edge case")
             return QuantumCircuit(2)
 
     def _try_lp(
@@ -76,17 +76,22 @@ class GulpsDecomposer:
             else GateInvariants.from_unitary(target)
         )
 
+        # TODO
+        self._eval_edge_case(target_inv)
+
         sentence_out = None
         intermediates = None
+        working_target = target_inv
 
         if self.isa._precompute_polytopes:
-            sentence = self.isa.polytope_lookup(target_inv)
+            sentence = self.isa.polytope_lookup(working_target)
             if sentence is None:
-                sentence = self.isa.polytope_lookup(target_inv.rho_reflect())
+                working_target = working_target.rho_reflect()
+                sentence = self.isa.polytope_lookup(working_target)
             if sentence is None:
                 raise RuntimeError("No precomputed ISA sentence found for target.")
             sentence_out, intermediates = self._try_lp(
-                sentence, target_inv, log_output=log_output
+                sentence, working_target, log_output=log_output
             )
             if sentence_out is None:
                 raise RuntimeError("LP failed for precomputed ISA sentence.")
@@ -104,7 +109,7 @@ class GulpsDecomposer:
 
         return self._numerics(
             sentence_out,
-            intermediates[1:],  # skip identity
+            intermediates[1:-1] + (working_target,),
             target_inv,
             return_dag=return_dag,
         )

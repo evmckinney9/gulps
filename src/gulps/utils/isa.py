@@ -36,7 +36,7 @@ class ISAInvariants:
         self._precompute_polytopes = precompute_polytopes
         if precompute_polytopes:
             self._build_coverage_set()
-            self._preprocess_coverage_set()
+            # self._preprocess_coverage_set()
 
     def enumerate(
         self, max_depth: int = 10
@@ -61,6 +61,15 @@ class ISAInvariants:
 
             if len(sequence) >= 2:
                 yield sequence
+
+    def _build_coverage_set(self):
+        self.coverage_set = gates_to_coverage(
+            *[g.unitary for g in self.gate_set],
+            costs=[self.cost_dict[g] for g in self.gate_set],
+            names=[f"{g.name}_{i}" for i, g in enumerate(self.gate_set)],
+            single_qubit_cost=COST_1Q,
+            instructions=self.gate_set,
+        )
 
     def polytope_lookup(self, target: GateInvariants) -> List[GateInvariants] | None:
         """Return a gate sentence that spans the target via convex polytope lookup."""
@@ -103,41 +112,32 @@ class ISAInvariants:
         # best_cp_idx = min(cp_idx for cp_idx, _ in valid_subpolytopes)
         # return self.coverage_set[best_cp_idx].instructions
 
-    def _build_coverage_set(self):
-        self.coverage_set = gates_to_coverage(
-            *[g.unitary for g in self.gate_set],
-            costs=[self.cost_dict[g] for g in self.gate_set],
-            names=[f"{g.name}_{i}" for i, g in enumerate(self.gate_set)],
-            single_qubit_cost=COST_1Q,
-            instructions=self.gate_set,
-        )
+    # def _preprocess_coverage_set(self):
+    #     unique_inequalities = []
+    #     unique_equalities = []
+    #     subpolytope_to_ineq = {}
+    #     subpolytope_to_eq = {}
 
-    def _preprocess_coverage_set(self):
-        unique_inequalities = []
-        unique_equalities = []
-        subpolytope_to_ineq = {}
-        subpolytope_to_eq = {}
+    #     for cp_idx, circuit_polytope in enumerate(self.coverage_set):
+    #         for sub_idx, subpolytope in enumerate(circuit_polytope.convex_subpolytopes):
+    #             subpolytope_to_ineq[(cp_idx, sub_idx)] = []
+    #             subpolytope_to_eq[(cp_idx, sub_idx)] = []
 
-        for cp_idx, circuit_polytope in enumerate(self.coverage_set):
-            for sub_idx, subpolytope in enumerate(circuit_polytope.convex_subpolytopes):
-                subpolytope_to_ineq[(cp_idx, sub_idx)] = []
-                subpolytope_to_eq[(cp_idx, sub_idx)] = []
+    #             for ineq in subpolytope.inequalities:
+    #                 ineq_tuple = tuple(ineq)
+    #                 if ineq_tuple not in unique_inequalities:
+    #                     unique_inequalities.append(ineq_tuple)
+    #                 idx = unique_inequalities.index(ineq_tuple)
+    #                 subpolytope_to_ineq[(cp_idx, sub_idx)].append(idx)
 
-                for ineq in subpolytope.inequalities:
-                    ineq_tuple = tuple(ineq)
-                    if ineq_tuple not in unique_inequalities:
-                        unique_inequalities.append(ineq_tuple)
-                    idx = unique_inequalities.index(ineq_tuple)
-                    subpolytope_to_ineq[(cp_idx, sub_idx)].append(idx)
+    #             for eq in subpolytope.equalities:
+    #                 eq_tuple = tuple(eq)
+    #                 if eq_tuple not in unique_equalities:
+    #                     unique_equalities.append(eq_tuple)
+    #                 idx = unique_equalities.index(eq_tuple)
+    #                 subpolytope_to_eq[(cp_idx, sub_idx)].append(idx)
 
-                for eq in subpolytope.equalities:
-                    eq_tuple = tuple(eq)
-                    if eq_tuple not in unique_equalities:
-                        unique_equalities.append(eq_tuple)
-                    idx = unique_equalities.index(eq_tuple)
-                    subpolytope_to_eq[(cp_idx, sub_idx)].append(idx)
-
-        self._ineq_matrix = np.array(unique_inequalities)
-        self._eq_matrix = np.array(unique_equalities)
-        self._subpolytope_to_ineq = subpolytope_to_ineq
-        self._subpolytope_to_eq = subpolytope_to_eq
+    #     self._ineq_matrix = np.array(unique_inequalities)
+    #     self._eq_matrix = np.array(unique_equalities)
+    #     self._subpolytope_to_ineq = subpolytope_to_ineq
+    #     self._subpolytope_to_eq = subpolytope_to_eq

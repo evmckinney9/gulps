@@ -4,7 +4,10 @@ import warnings
 from typing import Optional, Tuple
 
 import numpy as np
-from monodromy.coordinates import positive_canonical_to_monodromy_coordinate
+from monodromy.coordinates import (
+    positive_canonical_to_monodromy_coordinate,
+    unitary_to_monodromy_coordinate,
+)
 from qiskit._accelerate.two_qubit_decompose import weyl_coordinates
 from qiskit.circuit import Gate
 from qiskit.circuit.library import UnitaryGate
@@ -53,8 +56,9 @@ class GateInvariants:
 
     @staticmethod
     def _unitary_to_mono_coordinates(U) -> Tuple[float, float, float, float]:
-        a, b, c = positive_canonical_to_monodromy_coordinate(*weyl_coordinates(U))
-        return (a, b, c, -1.0 * (a + b + c))
+        return tuple(unitary_to_monodromy_coordinate(U))
+        # a, b, c = positive_canonical_to_monodromy_coordinate(*weyl_coordinates(U))
+        # return (a, b, c, -1.0 * (a + b + c))
 
     @property
     def unitary(self) -> np.ndarray:
