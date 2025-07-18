@@ -60,11 +60,12 @@ class GulpsDecomposer:
             return sentence_out, intermediates
 
         # if LP fails, try rho-reflection
+        constraints = MinimalOrderedISAConstraints(sentence)
         constraints.set_target(target.rho_reflect())
         sentence_out, intermediates = constraints.solve(log_output=log_output)
         return sentence_out, intermediates
 
-    def __call__(
+    def _run(
         self,
         target: Union[np.ndarray, Gate, GateInvariants],
         return_dag: bool = False,
@@ -107,9 +108,21 @@ class GulpsDecomposer:
             else:
                 raise RuntimeError("No valid ISA sentence found via LP enumeration.")
 
-        return self._numerics(
+        return self._numerics.run(
             sentence_out,
             intermediates[1:-1] + (working_target,),
             target_inv,
             return_dag=return_dag,
+        )
+
+    def __call__(
+        self,
+        target: Union[np.ndarray, Gate, GateInvariants],
+        return_dag: bool = False,
+        log_output: bool = False,
+    ) -> QuantumCircuit | DAGCircuit:
+        return self._run(
+            target=target,
+            return_dag=return_dag,
+            log_output=log_output,
         )

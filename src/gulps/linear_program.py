@@ -84,7 +84,7 @@ class MinimalOrderedISAConstraints:
             A_ub=self.A_ub,
             b_ub=self.b_ub,
             method="highs",
-            options={"disp": log_output},
+            options={"disp": log_output, "presolve": True},
         )
         if result.success:
             return self._extract_from_blocks(result.x)

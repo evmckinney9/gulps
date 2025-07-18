@@ -237,8 +237,8 @@ class SegmentNumericSynthesizer:
             return dag
         return dag_to_circuit(dag)
 
-    def __call__(
-        self,
+    @staticmethod
+    def run(
         gate_list: list[GateInvariants],
         invariant_list: list[GateInvariants],
         target: GateInvariants = None,

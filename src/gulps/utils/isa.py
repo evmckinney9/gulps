@@ -9,7 +9,7 @@ from qiskit.circuit import Gate
 
 from gulps.utils.invariants import GateInvariants
 
-COST_1Q = 1e-2  # adjust offset cost for 1Q gate layers
+COST_1Q = 0  # 1e-2  # adjust offset cost for 1Q gate layers
 
 
 class ISAInvariants:
@@ -49,7 +49,7 @@ class ISAInvariants:
             cost, _, sequence = heapq.heappop(priority_queue)
 
             if len(sequence) == max_depth:
-                yield sequence
+                break
 
             for gate in self.gate_set:
                 # enforce monotonic sequence cost order
