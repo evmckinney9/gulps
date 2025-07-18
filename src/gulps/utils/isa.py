@@ -71,15 +71,19 @@ class ISAInvariants:
             instructions=self.gate_set,
         )
 
-    def polytope_lookup(self, target: GateInvariants) -> List[GateInvariants] | None:
+    def polytope_lookup(
+        self, target: GateInvariants
+    ) -> tuple[GateInvariants, List[GateInvariants]]:
         """Return a gate sentence that spans the target via convex polytope lookup."""
         if not hasattr(self, "coverage_set"):
             raise ValueError("Polytope coverage set not precomputed.")
-
+        rho_target = target.rho_reflect()
         for convex_polytope in self.coverage_set:
             if convex_polytope.has_element(target.monodromy):
-                return convex_polytope.instructions
-
+                return target, convex_polytope.instructions
+            elif convex_polytope.has_element(rho_target.monodromy):
+                return rho_target, convex_polytope.instructions
+        return None, None
         # XXXX does this do something different than the original?
         # xv = np.array(target.monodromy).reshape((3, 1))  # monodromy vector
         # ineq_results = np.full(len(self._ineq_matrix), True)

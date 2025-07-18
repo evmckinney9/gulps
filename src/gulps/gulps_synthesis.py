@@ -82,13 +82,10 @@ class GulpsDecomposer:
 
         sentence_out = None
         intermediates = None
-        working_target = target_inv
 
         if self.isa._precompute_polytopes:
-            sentence = self.isa.polytope_lookup(working_target)
-            if sentence is None:
-                working_target = working_target.rho_reflect()
-                sentence = self.isa.polytope_lookup(working_target)
+            working_target, sentence = self.isa.polytope_lookup(target_inv)
+
             if sentence is None:
                 raise RuntimeError("No precomputed ISA sentence found for target.")
             sentence_out, intermediates = self._try_lp(
@@ -108,9 +105,13 @@ class GulpsDecomposer:
             else:
                 raise RuntimeError("No valid ISA sentence found via LP enumeration.")
 
+        # FIXME
+        useful_intermediates = intermediates[1:-1]  # Skip identity, and target
+        useful_intermediates += (target_inv,)  # Append target as last intermediate
+
         return self._numerics.run(
             sentence_out,
-            intermediates[1:-1] + (working_target,),
+            useful_intermediates,
             target_inv,
             return_dag=return_dag,
         )

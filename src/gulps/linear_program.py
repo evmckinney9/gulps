@@ -10,7 +10,7 @@ import numpy as np
 from scipy.optimize import linprog
 
 from gulps.utils.invariants import LEN_GATE_INVARIANTS, GateInvariants
-from gulps.utils.qlr import len_qlr, qlr_inequalities, rho_qlr_inequalities
+from gulps.utils.qlr import len_qlr, qlr_inequalities
 
 id_inv = GateInvariants(logspec=(0.0, 0.0, 0.0, 0.0))
 
