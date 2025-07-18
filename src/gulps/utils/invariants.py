@@ -56,9 +56,10 @@ class GateInvariants:
 
     @staticmethod
     def _unitary_to_mono_coordinates(U) -> Tuple[float, float, float, float]:
-        return tuple(unitary_to_monodromy_coordinate(U))
-        # a, b, c = positive_canonical_to_monodromy_coordinate(*weyl_coordinates(U))
-        # return (a, b, c, -1.0 * (a + b + c))
+        # using the convention breaks things # XXX ???
+        # return tuple(unitary_to_monodromy_coordinate(U))
+        a, b, c = positive_canonical_to_monodromy_coordinate(*weyl_coordinates(U))
+        return (a, b, c, -1.0 * (a + b + c))
 
     @property
     def unitary(self) -> np.ndarray:
@@ -126,6 +127,7 @@ class GateInvariants:
 
     def rho_reflect(self) -> "GateInvariants":
         """Rho-reflected version of this gate."""
+        # TODO XXX double check this.
         rho_coords = (
             self.logspec[2] + 0.5,
             self.logspec[3] + 0.5,

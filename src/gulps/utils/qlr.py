@@ -10,6 +10,7 @@ import numpy as np
 len_qlr = 72
 
 # from monodromy.static.qlr_table import generate_qlr_inequalities
+
 # _qlr_inequalities = np.array(generate_qlr_inequalities())
 # _ci_block = -1.0 * _qlr_inequalities[:, 1:4]  # alphas -> c_i
 # _gi_block = -1.0 * _qlr_inequalities[:, 4:7]  # betas -> g_i
@@ -27,6 +28,11 @@ len_qlr = 72
 # _rho_gi_block = -1.0 * _qlr_inequalities[:, 4:7]  # betas -> g_i
 # _rho_ciplus1_block = -1.0 * _qlr_inequalities[:, 7:10]  # gammas -> c_{i+1}
 # _rho_bi = _qlr_inequalities[:, 0].reshape(72, 1)  # d -> b
+
+
+# qlr_inequalities = (_ci_block, _gi_block, _ciplus1_block, _bi)
+# rho_qlr_inequalities = (_rho_ci_block, _rho_gi_block, _rho_ciplus1_block, _rho_bi)
+
 
 _ci_block = np.array(
     [
@@ -338,7 +344,4 @@ _bi = np.array(
     ],
     dtype=np.double,
 ).reshape((72,))
-
-
 qlr_inequalities = (_ci_block, _gi_block, _ciplus1_block, _bi)
-# rho_qlr_inequalities = (_rho_ci_block, _rho_gi_block, _rho_ciplus1_block, _rho_bi)

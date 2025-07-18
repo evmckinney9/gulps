@@ -10,7 +10,7 @@ import numpy as np
 from scipy.optimize import linprog
 
 from gulps.utils.invariants import LEN_GATE_INVARIANTS, GateInvariants
-from gulps.utils.qlr import len_qlr, qlr_inequalities
+from gulps.utils.qlr import len_qlr, qlr_inequalities, rho_qlr_inequalities
 
 id_inv = GateInvariants(logspec=(0.0, 0.0, 0.0, 0.0))
 
@@ -84,7 +84,12 @@ class MinimalOrderedISAConstraints:
             A_ub=self.A_ub,
             b_ub=self.b_ub,
             method="highs",
-            options={"disp": log_output, "presolve": True},
+            options={
+                "disp": log_output,
+                "presolve": True,
+                # "primal_feasibility_tolerance": 1e-7,
+                # "dual_feasibility_tolerance": 1e-7,
+            },
         )
         if result.success:
             return self._extract_from_blocks(result.x)
