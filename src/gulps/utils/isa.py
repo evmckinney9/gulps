@@ -73,17 +73,30 @@ class ISAInvariants:
 
     def polytope_lookup(
         self, target: GateInvariants
-    ) -> tuple[GateInvariants, List[GateInvariants]]:
+    ) -> tuple[List[GateInvariants], bool]:
         """Return a gate sentence that spans the target via convex polytope lookup."""
         if not hasattr(self, "coverage_set"):
             raise ValueError("Polytope coverage set not precomputed.")
-        rho_target = target.rho_reflect()
+
+        # # less optimal but for debugging lets check both
+        # for convex_polytope in self.coverage_set:
+        #     rho_bool = [False, False]
+        #     if convex_polytope.has_element(target.monodromy):
+        #         rho_bool[0] = True
+        #     if convex_polytope.has_element(target.rho_reflect):
+        #         rho_bool[1] = True
+        #     if any(rho_bool):
+        #         print(rho_bool)
+        #         return convex_polytope.instructions, rho_bool[1]
+
         for convex_polytope in self.coverage_set:
             if convex_polytope.has_element(target.monodromy):
-                return target, convex_polytope.instructions
-            elif convex_polytope.has_element(rho_target.monodromy):
-                return rho_target, convex_polytope.instructions
+                return convex_polytope.instructions, False
+            elif convex_polytope.has_element(target.rho_reflect):
+                print("lookup falls back to rho-reflect")
+                return convex_polytope.instructions, True
         return None, None
+
         # XXXX does this do something different than the original?
         # xv = np.array(target.monodromy).reshape((3, 1))  # monodromy vector
         # ineq_results = np.full(len(self._ineq_matrix), True)

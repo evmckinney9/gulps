@@ -23,7 +23,7 @@ class GateInvariants:
 
     def __init__(
         self,
-        logspec: Tuple[float, float, float, float],
+        logspec: Tuple[np.float64, np.float64, np.float64, np.float64],
         name: Optional[str] = None,
         unitary: Optional[np.ndarray] = None,
     ):
@@ -49,14 +49,16 @@ class GateInvariants:
         return cls(logspec=coords, name=name, unitary=gate)
 
     @classmethod
-    def from_weyl(cls, coords: Tuple[float, float, float]):
+    def from_weyl(cls, coords: Tuple[np.float64, np.float64, np.float64]):
         """Create from weyl coordinates."""
         positive_canonical = np.pi / 2 * np.array(coords)
         return cls(positive_canonical_to_monodromy_coordinate(*positive_canonical))
 
     @staticmethod
-    def _unitary_to_mono_coordinates(U) -> Tuple[float, float, float, float]:
-        # using the convention breaks things # XXX ???
+    def _unitary_to_mono_coordinates(
+        U,
+    ) -> Tuple[np.float64, np.float64, np.float64, np.float64]:
+        # convention breaks things # XXX ???
         # return tuple(unitary_to_monodromy_coordinate(U))
         a, b, c = positive_canonical_to_monodromy_coordinate(*weyl_coordinates(U))
         return (a, b, c, -1.0 * (a + b + c))
@@ -69,7 +71,7 @@ class GateInvariants:
         return self._unitary
 
     @property
-    def monodromy(self) -> Tuple[float, float, float]:
+    def monodromy(self) -> Tuple[np.float64, np.float64, np.float64]:
         """Monodromy invariants."""
         return self._monodromy
 
@@ -86,7 +88,7 @@ class GateInvariants:
                     (self.monodromy[2] + self.monodromy[0]),
                     (self.monodromy[1] + self.monodromy[2]),
                 ],
-                dtype=np.double,
+                dtype=np.float64,
             )
         return np.abs(self._weyl)
 
@@ -122,19 +124,22 @@ class GateInvariants:
         return self._canonical_matrix
 
     @property
-    def strength(self) -> float:
-        return min(sum(self.monodromy), sum(self.rho_reflect().monodromy))
+    def strength(self) -> np.float64:
+        return min(sum(self.monodromy), sum(self.rho_reflect))
 
-    def rho_reflect(self) -> "GateInvariants":
+    @property
+    def rho_reflect(self) -> Tuple[np.float64, np.float64, np.float64]:
         """Rho-reflected version of this gate."""
         # TODO XXX double check this.
+        a, b, c, d = map(np.float64, self.logspec)
         rho_coords = (
-            self.logspec[2] + 0.5,
-            self.logspec[3] + 0.5,
-            self.logspec[0] - 0.5,
-            self.logspec[1] - 0.5,
+            np.float64(c + 0.5),
+            np.float64(d + 0.5),
+            np.float64(a - 0.5),
+            np.float64(b - 0.5),
         )
-        return GateInvariants(logspec=rho_coords, name=f"*{self.name}")
+        return rho_coords[:LEN_GATE_INVARIANTS]
+        # return GateInvariants(logspec=rho_coords, name=f"*{self.name}")
 
     def __str__(self) -> str:
         return self.name

@@ -50,18 +50,20 @@ class GulpsDecomposer:
         self,
         sentence: List[GateInvariants],
         target: GateInvariants,
+        rho_reflect: bool = False,
         log_output: bool = False,
     ) -> tuple[Union[List[GateInvariants], None], Union[List[GateInvariants], None]]:
         """Try solving LP for the sentence with rho-reflection fallback."""
         constraints = MinimalOrderedISAConstraints(sentence)
-        constraints.set_target(target)
+        constraints.set_target(target, rho_reflect=rho_reflect)
         sentence_out, intermediates = constraints.solve(log_output=log_output)
         if sentence_out is not None:
             return sentence_out, intermediates
 
-        # if LP fails, try rho-reflection
-        constraints = MinimalOrderedISAConstraints(sentence)
-        constraints.set_target(target.rho_reflect())
+        # if LP fails, try opposite rho-reflection
+        # constraints = MinimalOrderedISAConstraints(sentence)
+        print("lp falls back to opposite rho_reflect")
+        constraints.set_target(target, rho_reflect=not rho_reflect)
         sentence_out, intermediates = constraints.solve(log_output=log_output)
         return sentence_out, intermediates
 
@@ -84,19 +86,21 @@ class GulpsDecomposer:
         intermediates = None
 
         if self.isa._precompute_polytopes:
-            working_target, sentence = self.isa.polytope_lookup(target_inv)
+            sentence, rho_bool = self.isa.polytope_lookup(target_inv)
 
             if sentence is None:
                 raise RuntimeError("No precomputed ISA sentence found for target.")
             sentence_out, intermediates = self._try_lp(
-                sentence, working_target, log_output=log_output
+                sentence, target_inv, rho_reflect=rho_bool, log_output=log_output
             )
             if sentence_out is None:
                 raise RuntimeError("LP failed for precomputed ISA sentence.")
         else:
             for sentence in self.isa.enumerate():
+                # heuristic filter to skip a full LP for obvious non-starters
                 if sum(gate.strength for gate in sentence) < target_inv.strength:
                     continue
+
                 sentence_out, intermediates = self._try_lp(
                     sentence, target_inv, log_output=log_output
                 )

@@ -59,11 +59,15 @@ class MinimalOrderedISAConstraints:
 
         return A_ub, b_ub
 
-    def set_target(self, target_gate: GateInvariants):
+    def set_target(self, target_gate: GateInvariants, rho_reflect=False):
         # NOTE avoid reconstructing all of b_ub by tracking the last set target gate
         # when setting a new target, remove the contribution of the previous target
         self._target_def = target_gate
-        ct = np.dot(self._ciplus1_block, self._target_def.monodromy)
+        if rho_reflect:
+            target_monodromy = target_gate.rho_reflect
+        else:
+            target_monodromy = target_gate.monodromy
+        ct = np.dot(self._ciplus1_block, target_monodromy)
         self.b_ub[-len_qlr:] += self.last_iter_ct - ct
         self.last_iter_ct = ct
 
@@ -84,6 +88,7 @@ class MinimalOrderedISAConstraints:
             A_ub=self.A_ub,
             b_ub=self.b_ub,
             method="highs",
+            bounds=(None, None),  # no bounds on variables
             options={
                 "disp": log_output,
                 "presolve": True,
