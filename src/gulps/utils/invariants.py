@@ -1,6 +1,6 @@
 """Gate invariants utilities for two-qubit gates (monodromy, Makhlin, Weyl, etc.)."""
 
-import warnings
+import logging
 from typing import Optional, Tuple
 
 import numpy as np
@@ -15,6 +15,8 @@ from qiskit.quantum_info import Operator
 from qiskit.synthesis.two_qubit import TwoQubitWeylDecomposition
 from weylchamber import canonical_gate
 
+logger = logging.getLogger(__name__)
+
 LEN_GATE_INVARIANTS = 3
 
 
@@ -26,6 +28,7 @@ class GateInvariants:
         logspec: Tuple[np.float64, np.float64, np.float64, np.float64],
         name: Optional[str] = None,
         unitary: Optional[np.ndarray] = None,
+        rho_reflect: Optional["GateInvariants"] = None,
     ):
         if len(logspec) == LEN_GATE_INVARIANTS:
             logspec = logspec + (-1.0 * sum(logspec),)
@@ -33,6 +36,7 @@ class GateInvariants:
         self._monodromy = logspec[:LEN_GATE_INVARIANTS]  # Monodromy
         self.name = name or "2QGate"
         self._unitary = unitary  # Optional reference to original unitary
+        self._rho_reflect = rho_reflect
 
         self._weyl = None
         self._makhlin = None
@@ -40,12 +44,15 @@ class GateInvariants:
 
     @classmethod
     def from_unitary(
-        cls, gate: Gate | np.ndarray, name: Optional[str] = None
+        cls, gate: Gate | np.ndarray, enforce_alcove=False, name: Optional[str] = None
     ) -> "GateInvariants":
         U = Operator(gate).data
         if not isinstance(gate, Gate):
             gate = UnitaryGate(gate, label=name)
-        coords = cls._unitary_to_mono_coordinates(U)
+        if enforce_alcove:
+            coords = tuple(unitary_to_monodromy_coordinate(U))
+        else:
+            coords = cls._unitary_to_mono_coordinates(U)
         return cls(logspec=coords, name=name, unitary=gate)
 
     @classmethod
@@ -125,12 +132,14 @@ class GateInvariants:
 
     @property
     def strength(self) -> np.float64:
-        return min(sum(self.monodromy), sum(self.rho_reflect))
+        return min(sum(self.monodromy), sum(self.rho_reflect.monodromy))
 
     @property
-    def rho_reflect(self) -> Tuple[np.float64, np.float64, np.float64]:
-        """Rho-reflected version of this gate."""
-        # TODO XXX double check this.
+    def rho_reflect(self) -> "GateInvariants":
+        """Rho-reflected version of this gate. Cached bidirectionally."""
+        if self._rho_reflect is not None:
+            return self._rho_reflect
+
         a, b, c, d = map(np.float64, self.logspec)
         rho_coords = (
             np.float64(c + 0.5),
@@ -138,8 +147,14 @@ class GateInvariants:
             np.float64(a - 0.5),
             np.float64(b - 0.5),
         )
-        return rho_coords[:LEN_GATE_INVARIANTS]
-        # return GateInvariants(logspec=rho_coords, name=f"*{self.name}")
+
+        # Create the reflected object with backward reference to this one
+        self._rho_reflect = GateInvariants(
+            logspec=rho_coords,
+            name=f"*{self.name}",
+            rho_reflect=self,
+        )
+        return self._rho_reflect
 
     def __str__(self) -> str:
         return self.name
@@ -167,10 +182,7 @@ def recover_local_equivalence(U_target, U_basis):
             raise ValueError(
                 f"Gates are not locally equivalent. Difference: {np.abs(local_coords1 - local_coords2)}"
             )
-        print(
-            "Warning: Possible sign difference in c parameter during local equivalence recovery."
-        )
-        warnings.warn(
+        logger.warning(
             "Possible sign difference in c parameter during local equivalence recovery."
         )
 

@@ -59,18 +59,14 @@ class MinimalOrderedISAConstraints:
 
         return A_ub, b_ub
 
-    def set_target(self, target_gate: GateInvariants, rho_reflect=False):
+    def set_target(self, target_gate: GateInvariants, rho_bool=False):
         # NOTE avoid reconstructing all of b_ub by tracking the last set target gate
         # when setting a new target, remove the contribution of the previous target
-        self._target_def = target_gate
-        # FIXME, actual_target is for debugging, remove later
-        if rho_reflect:
-            target_monodromy = target_gate.rho_reflect
-            self._actual_target = target_gate
+        if rho_bool:
+            self._target_def = target_gate.rho_reflect
         else:
-            target_monodromy = target_gate.monodromy
-            self._actual_target = GateInvariants(logspec=target_monodromy)  # XXX FIXME
-        ct = np.dot(self._ciplus1_block, target_monodromy)
+            self._target_def = target_gate
+        ct = np.dot(self._ciplus1_block, self._target_def.monodromy)
         self.b_ub[-len_qlr:] += self.last_iter_ct - ct
         self.last_iter_ct = ct
 
@@ -81,7 +77,7 @@ class MinimalOrderedISAConstraints:
                 intermediate_invariants = (
                     id_inv,
                     self.isa_sequence[0],
-                    self._actual_target,  # self._target_def, # FIXME
+                    self._target_def,
                 )
                 return self.isa_sequence, intermediate_invariants
             else:
@@ -114,7 +110,7 @@ class MinimalOrderedISAConstraints:
             id_inv,
             self.isa_sequence[0],
             *lp_invariants,
-            self._actual_target,  # self._target_def, #FIXME
+            self._target_def,
         )
 
         return self.isa_sequence, intermediate_invariants

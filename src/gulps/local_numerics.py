@@ -16,7 +16,6 @@ from qiskit.quantum_info import Operator
 from gulps.utils.invariants import GateInvariants, recover_local_equivalence
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 
 config.update("jax_enable_x64", True)
 # jax setup and definitions
@@ -168,7 +167,6 @@ class SegmentNumericSynthesizer:
                 g_op, c_op, target
             )
             segment_sols.append(segment_sol)
-            print(f"successfully reached invariant {invariant_list[i].monodromy}")
         return segment_sols
 
     @staticmethod

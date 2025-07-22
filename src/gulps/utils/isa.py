@@ -1,5 +1,6 @@
 import heapq
 import itertools
+import logging
 from typing import Generator, List
 
 import numpy as np
@@ -8,6 +9,8 @@ from monodromy.polytopes import ConvexPolytope
 from qiskit.circuit import Gate
 
 from gulps.utils.invariants import GateInvariants
+
+logger = logging.getLogger(__name__)
 
 COST_1Q = 0  # 1e-2  # adjust offset cost for 1Q gate layers
 
@@ -22,10 +25,10 @@ class ISAInvariants:
         precompute_polytopes: bool = False,
     ):
         if not gate_set:
-            raise ValueError("gate_set must contain at least one GateInvariants.")
+            raise ValueError("gate_set can't be empty.")
         if len(gate_set) != len(costs):
             raise ValueError("gate_set and costs must have the same length.")
-        if isinstance(gate_set[0], GateInvariants):
+        if isinstance(gate_set[0], GateInvariants):  # XXX assuming uniform dtypes
             self.gate_set = gate_set
         else:
             self.gate_set = [GateInvariants.from_unitary(g) for g in gate_set]
@@ -36,7 +39,6 @@ class ISAInvariants:
         self._precompute_polytopes = precompute_polytopes
         if precompute_polytopes:
             self._build_coverage_set()
-            # self._preprocess_coverage_set()
 
     def enumerate(
         self, max_depth: int = 10
@@ -83,7 +85,7 @@ class ISAInvariants:
         #     rho_bool = [False, False]
         #     if convex_polytope.has_element(target.monodromy):
         #         rho_bool[0] = True
-        #     if convex_polytope.has_element(target.rho_reflect):
+        #     if convex_polytope.has_element(target.rho_reflect.monodromy):
         #         rho_bool[1] = True
         #     if any(rho_bool):
         #         print(rho_bool)
@@ -93,8 +95,10 @@ class ISAInvariants:
         for convex_polytope in self.coverage_set:
             if convex_polytope.has_element(target.monodromy):
                 return convex_polytope.instructions, False
-            elif convex_polytope.has_element(target.rho_reflect):
-                print("lookup falls back to rho-reflect")
+            elif convex_polytope.has_element(target.rho_reflect.monodromy):
+                logger.warning(
+                    "lookup falls back to rho-reflect, check did you not enforce alcove_c2 on the target gate?"
+                )
                 return convex_polytope.instructions, True
         return None, None
 

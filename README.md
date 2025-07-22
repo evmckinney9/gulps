@@ -13,3 +13,4 @@ TODO:
 - clean up polytope lookup, single call with rho() so don't have to enumerate twice
 - timing analysis
 - self._eval_edge_case(target_inv)
+- include tests for monodromy (.5, y,z) because this is where issues occur with reflections
