@@ -7,7 +7,7 @@ init:
 	rm -rf .venv
 	$(PYTHON_VERSION) -m venv .venv
 	@$(PIP) install --upgrade pip
-	@$(PIP) install setuptools_rust
+# 	@$(PIP) install setuptools_rust
 	$(PIP) install -e .[dev] --quiet
 	@$(PRE_COMMIT) install
 	@$(PRE_COMMIT) autoupdate

@@ -63,10 +63,13 @@ class MinimalOrderedISAConstraints:
         # NOTE avoid reconstructing all of b_ub by tracking the last set target gate
         # when setting a new target, remove the contribution of the previous target
         self._target_def = target_gate
+        # FIXME, actual_target is for debugging, remove later
         if rho_reflect:
             target_monodromy = target_gate.rho_reflect
+            self._actual_target = target_gate
         else:
             target_monodromy = target_gate.monodromy
+            self._actual_target = GateInvariants(logspec=target_monodromy)  # XXX FIXME
         ct = np.dot(self._ciplus1_block, target_monodromy)
         self.b_ub[-len_qlr:] += self.last_iter_ct - ct
         self.last_iter_ct = ct
@@ -78,7 +81,7 @@ class MinimalOrderedISAConstraints:
                 intermediate_invariants = (
                     id_inv,
                     self.isa_sequence[0],
-                    self._target_def,
+                    self._actual_target,  # self._target_def, # FIXME
                 )
                 return self.isa_sequence, intermediate_invariants
             else:
@@ -111,7 +114,7 @@ class MinimalOrderedISAConstraints:
             id_inv,
             self.isa_sequence[0],
             *lp_invariants,
-            self._target_def,
+            self._actual_target,  # self._target_def, #FIXME
         )
 
         return self.isa_sequence, intermediate_invariants

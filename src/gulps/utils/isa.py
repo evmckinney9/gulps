@@ -88,6 +88,7 @@ class ISAInvariants:
         #     if any(rho_bool):
         #         print(rho_bool)
         #         return convex_polytope.instructions, rho_bool[1]
+        # return None, None
 
         for convex_polytope in self.coverage_set:
             if convex_polytope.has_element(target.monodromy):

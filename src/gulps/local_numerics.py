@@ -168,6 +168,7 @@ class SegmentNumericSynthesizer:
                 g_op, c_op, target
             )
             segment_sols.append(segment_sol)
+            print(f"successfully reached invariant {invariant_list[i].monodromy}")
         return segment_sols
 
     @staticmethod

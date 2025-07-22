@@ -67,24 +67,9 @@ class GulpsDecomposer:
         sentence_out, intermediates = constraints.solve(log_output=log_output)
         return sentence_out, intermediates
 
-    def _run(
-        self,
-        target: Union[np.ndarray, Gate, GateInvariants],
-        return_dag: bool = False,
-        log_output: bool = False,
-    ) -> QuantumCircuit | DAGCircuit:
-        target_inv = (
-            target
-            if isinstance(target, GateInvariants)
-            else GateInvariants.from_unitary(target)
-        )
-
-        # TODO
-        self._eval_edge_case(target_inv)
-
-        sentence_out = None
-        intermediates = None
-
+    def _best_decomposition(
+        self, target_inv: GateInvariants, log_output: bool = False
+    ) -> tuple[List[GateInvariants], List[GateInvariants]]:
         if self.isa._precompute_polytopes:
             sentence, rho_bool = self.isa.polytope_lookup(target_inv)
 
@@ -110,9 +95,31 @@ class GulpsDecomposer:
                 raise RuntimeError("No valid ISA sentence found via LP enumeration.")
 
         # FIXME
-        useful_intermediates = intermediates[1:-1]  # Skip identity, and target
-        useful_intermediates += (target_inv,)  # Append target as last intermediate
+        useful_intermediates = intermediates[1:]  # Skip identity, and target
+        # useful_intermediates += (target_inv,)  # Append target as last intermediate
+        return sentence_out, useful_intermediates
 
+    def _run(
+        self,
+        target: Union[np.ndarray, Gate, GateInvariants],
+        return_dag: bool = False,
+        log_output: bool = False,
+    ) -> QuantumCircuit | DAGCircuit:
+        # Convert target to GateInvariants if necessary
+        target_inv = (
+            target
+            if isinstance(target, GateInvariants)
+            else GateInvariants.from_unitary(target)
+        )
+
+        # TODO
+        self._eval_edge_case(target_inv)
+
+        # Find the best decomposition using LP
+        sentence_out, useful_intermediates = self._best_decomposition(
+            target_inv, log_output=log_output
+        )
+        # Convert the sentence to a circuit or DAG
         return self._numerics.run(
             sentence_out,
             useful_intermediates,
