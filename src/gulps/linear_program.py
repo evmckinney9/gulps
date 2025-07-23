@@ -73,7 +73,8 @@ class MinimalOrderedISAConstraints:
     def solve(self, log_output=False):
         # edge case, if there were no free variables in x_vec
         if len(self.A_ub[0]) == 0:
-            if np.all(0 <= self.b_ub):
+            # NOTE, try eps here but if causes problems maybe need to go to next enumerated sentence
+            if np.all(-5e-7 <= self.b_ub):  # 0<=self.b_ub
                 intermediate_invariants = (
                     id_inv,
                     self.isa_sequence[0],
