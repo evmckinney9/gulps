@@ -101,7 +101,9 @@ class GulpsDecomposer:
                 if sentence_out is not None:
                     break
             else:
-                raise RuntimeError("No valid ISA sentence found via LP enumeration.")
+                raise RuntimeError(
+                    "No valid ISA sentence found via LP enumeration, try increasing max_depth."
+                )
 
         return sentence_out, intermediates
 

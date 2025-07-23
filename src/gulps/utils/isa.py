@@ -12,7 +12,7 @@ from gulps.utils.invariants import GateInvariants
 
 logger = logging.getLogger(__name__)
 
-COST_1Q = 1e-4  # adjust offset cost for 1Q gate layers
+COST_1Q = 0  # 1e-4  # adjust offset cost for 1Q gate layers
 
 
 class ISAInvariants:
