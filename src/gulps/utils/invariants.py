@@ -183,13 +183,13 @@ def recover_local_equivalence(U_target, U_basis):
     local_coords1 = np.array([target_decomp.a, target_decomp.b, target_decomp.c])
     local_coords2 = np.array([basis_decomp.a, basis_decomp.b, basis_decomp.c])
     if not np.allclose(np.abs(local_coords1 - local_coords2), 0, atol=1e-2):
-        if not np.isclose(np.abs(target_decomp.c), np.abs(basis_decomp.c)):
+        if np.isclose(target_decomp.c, -1.0 * basis_decomp.c):
             logger.warning(
-                f"Gates are not locally equivalent. Difference: {np.abs(local_coords1 - local_coords2)}"
+                "Sign difference in c parameter during local equivalence recovery."
             )
         else:
             logger.warning(
-                "Possible sign difference in c parameter during local equivalence recovery."
+                f"Gates are not locally equivalent. Difference: {np.abs(local_coords1 - local_coords2)}"
             )
 
     k4 = target_decomp.K1l @ np.conjugate(basis_decomp.K1l).T

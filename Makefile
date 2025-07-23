@@ -36,17 +36,17 @@ clean:
 	@rm -rf src/*.egg-info
 
 test:
-	@$(PIP) install -e .[test] --quiet
+# 	@$(PIP) install -e .[test] --quiet
 	$(PYTEST) src/tests
 
 format:
-	@$(PIP) install -e .[format] --quiet
+# 	@$(PIP) install -e .[format] --quiet
 	$(PRE_COMMIT) run --all-files
 
 precommit:
-	@$(PIP) install -e .[test] --quiet
+# 	@$(PIP) install -e .[test] --quiet
 	$(PYTEST) src/tests
-	@$(PIP) install -e .[format] --quiet
+# 	@$(PIP) install -e .[format] --quiet
 	$(PRE_COMMIT) run --all-files
 
 .PHONY: init upgrade clean test precommit format

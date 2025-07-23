@@ -122,13 +122,12 @@ class GulpsDecomposer:
         ).all()
 
         # TODO
-        # self._eval_edge_case(true_target)
+        self._eval_edge_case(true_target)
 
         # Find the best decomposition using LP
         sentence_out, intermediates = self._best_decomposition(
             target_inv, log_output=log_output
         )
-        intermediates = intermediates[1:]  # Skip identity
 
         if not target_in_ac2 and intermediates[-1] is not true_target:
             logger.debug("Trying reflection of intermediates")

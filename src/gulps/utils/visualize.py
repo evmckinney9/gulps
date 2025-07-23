@@ -43,8 +43,9 @@ def render_path(
     #         abs(np.array(monodromy_to_positive_canonical_coordinate(*p))) / (np.pi / 2)
     #         for p in self.mono_points
     #     ]
-
+    # trajectory_invariants.insert(0, GateInvariants(logspec=(0.0, 0.0, 0.0, 0.0)))
     traj_points = [g.weyl for g in trajectory_invariants]
+    traj_points.insert(0, (0.0, 0.0, 0.0))  # Start at origin
 
     # Set up the 3D plot
     fig = plt.figure()

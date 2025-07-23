@@ -22,7 +22,7 @@ config.update("jax_enable_x64", True)
 
 # jax setup and definitions
 # XXX FIXME these are highly-tunable parameters
-CONV_TOL = 1e-8  # 5e-7
+CONV_TOL = 1e-8
 A_TOL = 1e-14
 EASY_RESTARTS = 4
 HARD_RESTARTS = 16
