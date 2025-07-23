@@ -26,7 +26,7 @@ class GulpsDecomposer:
         self,
         gate_set: List[GateInvariants],
         costs: List[float],
-        precompute_polytopes: bool = False,
+        precompute_polytopes: bool = True,
     ):
         if not gate_set:
             raise ValueError("gate_set must contain at least one GateInvariants.")

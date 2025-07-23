@@ -24,6 +24,9 @@ config.update("jax_enable_x64", True)
 # XXX FIXME these are highly-tunable parameters
 CONV_TOL = 1e-8  # 5e-7
 A_TOL = 1e-14
+EASY_RESTARTS = 4
+HARD_RESTARTS = 16
+
 
 MAGIC = jnp.array(
     [[1, 0, 0, 1j], [0, 1j, 1, 0], [0, 1j, -1, 0], [1, 0, 0, -1j]],
@@ -108,7 +111,7 @@ class SegmentNumericSynthesizer:
     """
 
     @staticmethod
-    def _segment_interior_solve(g_op, c_op, target, seed=42, max_restarts=4):
+    def _segment_interior_solve(g_op, c_op, target, seed=42):
         start_time = time.time()
         j_target_inv = jnp.array(target, dtype=jnp.double)
         j_prefix = jnp.array(c_op, dtype=jnp.complex128)
@@ -121,11 +124,11 @@ class SegmentNumericSynthesizer:
         success_label = None
         success_attempt = None
 
-        def run_attempts(j_lm, label: str, start_idx: int):
+        def run_attempts(j_lm, label: str, restarts: int, start_idx: int):
             nonlocal total_nfev, success_nfev, best_residual, best_params
             nonlocal success, success_label, success_attempt
 
-            for i in range(max_restarts):
+            for i in range(restarts):
                 attempt_idx = start_idx + i
                 j_init = uniform(
                     PRNGKey(seed + attempt_idx),
@@ -150,7 +153,7 @@ class SegmentNumericSynthesizer:
                     best_params = j_attempt.params
 
                 logger.debug(
-                    f"[{label.upper()} {i + 1}/{max_restarts}] "
+                    f"[{label.upper()} {i + 1}/{restarts}] "
                     f"residual={residual_array} (‖residual‖={residual_norm:.2e}, nfev={nfev})"
                 )
 
@@ -166,11 +169,13 @@ class SegmentNumericSynthesizer:
                     return
 
         # Phase 1: Easy
-        run_attempts(EASY_LM, "easy", start_idx=0)
+        run_attempts(EASY_LM, "easy", restarts=EASY_RESTARTS, start_idx=0)
 
         # Phase 2: Hard (only if easy failed)
         if not success:
-            run_attempts(HARD_LM, "hard", start_idx=max_restarts)
+            run_attempts(
+                HARD_LM, "hard", restarts=HARD_RESTARTS, start_idx=EASY_RESTARTS
+            )
 
         elapsed_time = time.time() - start_time
 
@@ -181,7 +186,7 @@ class SegmentNumericSynthesizer:
             )
         else:
             logger.debug(
-                f"❌ LM synthesis FAILED after {2 * max_restarts} attempts "
+                f"❌ LM synthesis FAILED after {EASY_RESTARTS + HARD_RESTARTS} attempts "
                 f"(total_nfev={total_nfev}, best residual={best_residual:.2e}) in {elapsed_time:.3f}s"
             )
 

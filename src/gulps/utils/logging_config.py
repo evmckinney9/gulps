@@ -2,7 +2,7 @@
 import logging
 
 logger = logging.getLogger("gulps")
-logger.setLevel(logging.DEBUG)
+# logger.setLevel(logging.DEBUG)
 # logger.setLevel(logging.INFO)
 
 if not logger.handlers:
