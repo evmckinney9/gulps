@@ -18,10 +18,12 @@ from gulps.utils.invariants import GateInvariants, recover_local_equivalence
 logger = logging.getLogger(__name__)
 
 config.update("jax_enable_x64", True)
+
+
 # jax setup and definitions
-# XXX
+# XXX FIXME these are highly-tunable parameters
+CONV_TOL = 1e-8  # 5e-7
 A_TOL = 1e-14
-CONV_TOL = 1e-10
 
 MAGIC = jnp.array(
     [[1, 0, 0, 1j], [0, 1j, 1, 0], [0, 1j, -1, 0], [1, 0, 0, -1j]],
@@ -77,15 +79,24 @@ def _objective_function(
     return target_inv - construct_inv  # faster
 
 
-# Build a Levenberg–Marquardt optimizer using the generic objective function.
-j_lm = LevenbergMarquardt(
+EASY_LM = LevenbergMarquardt(
     residual_fun=_objective_function,
-    maxiter=2048,
     solver=solve_cg,
     implicit_diff=False,
     materialize_jac=True,
     jit=True,
-    tol=A_TOL,
+    maxiter=256,
+    tol=A_TOL,  # stops early if parameter updates get small
+)
+
+HARD_LM = LevenbergMarquardt(
+    residual_fun=_objective_function,
+    solver=solve_cg,
+    implicit_diff=False,
+    materialize_jac=True,
+    jit=True,
+    maxiter=2048,
+    tol=0.0,  # never gives up until maxiter
 )
 
 
@@ -97,52 +108,84 @@ class SegmentNumericSynthesizer:
     """
 
     @staticmethod
-    def _segment_interior_solve(g_op, c_op, target, seed=42, max_restarts=16):
+    def _segment_interior_solve(g_op, c_op, target, seed=42, max_restarts=4):
         start_time = time.time()
         j_target_inv = jnp.array(target, dtype=jnp.double)
         j_prefix = jnp.array(c_op, dtype=jnp.complex128)
         j_gate = jnp.array(g_op, dtype=jnp.complex128)
-        restart_attempts, total_nfev, success_nfev, success = 0, 0, 0, False
-        while not success and restart_attempts < max_restarts:
-            j_init = uniform(
-                PRNGKey(seed + restart_attempts),
-                shape=(6,),
-                minval=-2 * jnp.pi,
-                maxval=2 * jnp.pi,
-            )
 
-            j_attempt = j_lm.run(
-                j_init,
-                prefix_op=j_prefix,
-                basis_gate=j_gate,
-                target_inv=j_target_inv,
-            )
-            # residual = j_attempt.state.residual.block_until_ready()
-            residual = j_attempt.state.value.block_until_ready()
-            total_nfev += j_attempt.state.iter_num
-            restart_attempts += 1
-            # if j_attempt.state.value <= CONV_TOL:
-            if residual <= CONV_TOL:
-                success_nfev += j_attempt.state.iter_num
-                success = True
+        total_nfev, success_nfev = 0, 0
+        best_residual = float("inf")
+        best_params = None
+        success = False
+        success_label = None
+        success_attempt = None
+
+        def run_attempts(j_lm, label: str, start_idx: int):
+            nonlocal total_nfev, success_nfev, best_residual, best_params
+            nonlocal success, success_label, success_attempt
+
+            for i in range(max_restarts):
+                attempt_idx = start_idx + i
+                j_init = uniform(
+                    PRNGKey(seed + attempt_idx),
+                    shape=(6,),
+                    minval=-2 * jnp.pi,
+                    maxval=2 * jnp.pi,
+                )
+
+                j_attempt = j_lm.run(
+                    j_init,
+                    prefix_op=j_prefix,
+                    basis_gate=j_gate,
+                    target_inv=j_target_inv,
+                )
+                residual_array = j_attempt.state.residual.block_until_ready()
+                residual_norm = j_attempt.state.value
+                nfev = j_attempt.state.iter_num
+                total_nfev += nfev
+
+                if residual_norm < best_residual:
+                    best_residual = residual_norm
+                    best_params = j_attempt.params
+
+                logger.debug(
+                    f"[{label.upper()} {i + 1}/{max_restarts}] "
+                    f"residual={residual_array} (‖residual‖={residual_norm:.2e}, nfev={nfev})"
+                )
+
+                if jnp.all(jnp.abs(residual_array) <= CONV_TOL):
+                    logger.debug(
+                        f"=> Success on [{label.upper()} {i + 1}] "
+                        f"(componentwise |residual| ≤ {CONV_TOL:.1e})"
+                    )
+                    success_nfev += nfev
+                    success = True
+                    success_label = label
+                    success_attempt = i + 1
+                    return
+
+        # Phase 1: Easy
+        run_attempts(EASY_LM, "easy", start_idx=0)
+
+        # Phase 2: Hard (only if easy failed)
+        if not success:
+            run_attempts(HARD_LM, "hard", start_idx=max_restarts)
 
         elapsed_time = time.time() - start_time
 
-        logger.debug(
-            f"LM synthesis (attempts={restart_attempts}, residual={residual:.2e}, "
-            f"success={success}) in {elapsed_time:.3f}s"
-        )
-
-        if not success:
-            # raise RuntimeError(
-            logger.warning(
-                f"LM synthesis did not converge after {restart_attempts} attempts "
-                f"(total nfev={total_nfev}, success nfev={success_nfev})."
-                "Likely, the CONV_TOL is too tight for the target."
-                f"Residual: {residual}"
+        if success:
+            logger.debug(
+                f"✅ LM synthesis SUCCESS on {success_label.upper()} attempt {success_attempt} "
+                f"(residual={best_residual:.2e}, total_nfev={total_nfev}) in {elapsed_time:.3f}s"
+            )
+        else:
+            logger.debug(
+                f"❌ LM synthesis FAILED after {2 * max_restarts} attempts "
+                f"(total_nfev={total_nfev}, best residual={best_residual:.2e}) in {elapsed_time:.3f}s"
             )
 
-        return np.array(j_attempt.params)
+        return np.array(best_params)
 
     # NOTE, in principle this could be computed in parallel
     @staticmethod

@@ -103,8 +103,7 @@ class GulpsDecomposer:
             else:
                 raise RuntimeError("No valid ISA sentence found via LP enumeration.")
 
-        useful_intermediates = intermediates[1:]  # Skip identity
-        return sentence_out, useful_intermediates
+        return sentence_out, intermediates
 
     def _run(
         self,
@@ -129,6 +128,7 @@ class GulpsDecomposer:
         sentence_out, intermediates = self._best_decomposition(
             target_inv, log_output=log_output
         )
+        intermediates = intermediates[1:]  # Skip identity
 
         if not target_in_ac2 and intermediates[-1] is not true_target:
             logger.debug("Trying reflection of intermediates")
