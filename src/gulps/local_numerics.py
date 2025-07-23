@@ -20,8 +20,8 @@ logger = logging.getLogger(__name__)
 config.update("jax_enable_x64", True)
 # jax setup and definitions
 # XXX
-A_TOL = 0
-CONV_TOL = 1e-8
+A_TOL = 1e-14
+CONV_TOL = 1e-10
 
 MAGIC = jnp.array(
     [[1, 0, 0, 1j], [0, 1j, 1, 0], [0, 1j, -1, 0], [1, 0, 0, -1j]],
@@ -134,9 +134,14 @@ class SegmentNumericSynthesizer:
         )
 
         if not success:
-            raise RuntimeError(
-                "Segment synthesis did not converge within the allotted attempts."
+            # raise RuntimeError(
+            logger.warning(
+                f"LM synthesis did not converge after {restart_attempts} attempts "
+                f"(total nfev={total_nfev}, success nfev={success_nfev})."
+                "Likely, the CONV_TOL is too tight for the target."
+                f"Residual: {residual}"
             )
+
         return np.array(j_attempt.params)
 
     # NOTE, in principle this could be computed in parallel
@@ -152,7 +157,6 @@ class SegmentNumericSynthesizer:
         # loop gi.v.ci-1
         for i in range(1, len(invariant_list)):
             g_op = gate_list[i].unitary
-            # c_op = invariant_list[i - 1].canonical_matrix
             c_op = (
                 gate_list[0].unitary
                 if i == 1

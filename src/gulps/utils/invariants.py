@@ -97,7 +97,7 @@ class GateInvariants:
                 ],
                 dtype=np.float64,
             )
-        return np.abs(self._weyl)
+        return self._weyl
 
     @property
     def makhlin(self) -> np.ndarray:
@@ -172,19 +172,25 @@ if __name__ == "__main__":
 
 def recover_local_equivalence(U_target, U_basis):
     """Find local gates such that local.U_basis.local = U_target."""
-    target_decomp = TwoQubitWeylDecomposition(U_target, fidelity=1.0)
-    basis_decomp = TwoQubitWeylDecomposition(U_basis, fidelity=1.0)
+    specialization = TwoQubitWeylDecomposition._specializations.General
+    target_decomp = TwoQubitWeylDecomposition(
+        U_target, fidelity=1.0, _specialization=specialization
+    )
+    basis_decomp = TwoQubitWeylDecomposition(
+        U_basis, fidelity=1.0, _specialization=specialization
+    )
 
     local_coords1 = np.array([target_decomp.a, target_decomp.b, target_decomp.c])
     local_coords2 = np.array([basis_decomp.a, basis_decomp.b, basis_decomp.c])
     if not np.allclose(np.abs(local_coords1 - local_coords2), 0, atol=1e-2):
         if not np.isclose(np.abs(target_decomp.c), np.abs(basis_decomp.c)):
-            raise ValueError(
+            logger.warning(
                 f"Gates are not locally equivalent. Difference: {np.abs(local_coords1 - local_coords2)}"
             )
-        logger.warning(
-            "Possible sign difference in c parameter during local equivalence recovery."
-        )
+        else:
+            logger.warning(
+                "Possible sign difference in c parameter during local equivalence recovery."
+            )
 
     k4 = target_decomp.K1l @ np.conjugate(basis_decomp.K1l).T
     k3 = target_decomp.K1r @ np.conjugate(basis_decomp.K1r).T

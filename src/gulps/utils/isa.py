@@ -12,7 +12,7 @@ from gulps.utils.invariants import GateInvariants
 
 logger = logging.getLogger(__name__)
 
-COST_1Q = 0  # 1e-2  # adjust offset cost for 1Q gate layers
+COST_1Q = 1e-4  # adjust offset cost for 1Q gate layers
 
 
 class ISAInvariants:
@@ -96,7 +96,7 @@ class ISAInvariants:
             if convex_polytope.has_element(target.monodromy):
                 return convex_polytope.instructions, False
             elif convex_polytope.has_element(target.rho_reflect.monodromy):
-                logger.warning(
+                logger.debug(
                     "lookup falls back to rho-reflect, check did you not enforce alcove_c2 on the target gate?"
                 )
                 return convex_polytope.instructions, True

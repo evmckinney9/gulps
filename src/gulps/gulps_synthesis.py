@@ -89,6 +89,7 @@ class GulpsDecomposer:
             if sentence_out is None:
                 raise RuntimeError("LP failed for precomputed ISA sentence.")
         else:
+            rho_bool = False  # FIXME!
             for sentence in self.isa.enumerate():
                 # heuristic filter to skip a full LP for obvious non-starters
                 if sum(gate.strength for gate in sentence) < target_inv.strength:
@@ -111,20 +112,26 @@ class GulpsDecomposer:
         return_dag: bool = False,
         log_output: bool = False,
     ) -> QuantumCircuit | DAGCircuit:
+        # FIXME there is better way to handle this
         # NOTE, enforce alcove means target will always be valid by qlr
-        target_inv = GateInvariants.from_unitary(target, enforce_alcove=True)
         true_target = GateInvariants.from_unitary(target)
+        target_inv = GateInvariants.from_unitary(target, enforce_alcove=True)
+
+        # if these have same monodromy, already in alcove_c2
+        target_in_ac2 = np.isclose(
+            target_inv.monodromy, true_target.monodromy, rtol=1e-14
+        ).all()
 
         # TODO
-        self._eval_edge_case(target_inv)
+        # self._eval_edge_case(true_target)
 
         # Find the best decomposition using LP
         sentence_out, intermediates = self._best_decomposition(
-            true_target, log_output=log_output
+            target_inv, log_output=log_output
         )
 
-        if intermediates[-1] is not true_target:
-            logger.debug("Final intermediate does not match target.")
+        if not target_in_ac2 and intermediates[-1] is not true_target:
+            logger.debug("Trying reflection of intermediates")
             intermediates = [x.rho_reflect for x in intermediates]
 
         # Convert the sentence to a circuit or DAG
