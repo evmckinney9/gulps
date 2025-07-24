@@ -53,7 +53,10 @@ isa = [
     (iSwapGate().power(1 / 3), 1 / 3, "sqrt3iswap"),
 ]
 ```
-has the following coverage set.
+has the following coverage set:
+```python
+_plot_coverage_set(decomposer.isa.coverage_set)
+```
 ![isa_coverage](images/isa_coverage.png)
 
 Once a sentence is chosen, a linear program is used to determine a trajectory of intermediate invariants. These represent the cumulative two-qubit nonlocal action after each gate in the sentence—starting from the identity and ending at the target.
