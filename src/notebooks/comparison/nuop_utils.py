@@ -2,9 +2,10 @@
 import multiprocessing as mp
 import time
 
+# from cirq.circuits.qasm_output import QasmTwoQubitGate, QasmUGate
 import numpy as np
 from qiskit.circuit.library import UnitaryGate
-from qiskit.circuit.library.standard_gates import U1Gate, U2Gate, U3Gate
+from qiskit.circuit.library.standard_gates import RZZGate, U1Gate, U2Gate, U3Gate
 from qiskit.converters import circuit_to_dag, dag_to_circuit
 from qiskit.dagcircuit import DAGCircuit
 from qiskit.quantum_info import Operator
@@ -13,12 +14,8 @@ from scipy.optimize import minimize
 
 # from os import getpid
 
-
+_MAX_NUM_LAYERS = 6
 optimise1qgates = Optimize1qGates()
-
-# from cirq.circuits.qasm_output import QasmTwoQubitGate, QasmUGate
-import numpy as np
-from qiskit.circuit.library.standard_gates import RZZGate
 
 
 def cphase_gate(theta):
@@ -151,6 +148,7 @@ class TwoQubitGateSynthesizer:
     def __init__(self, target_unitary, gate_template_obj):
         self.target_unitary = target_unitary
         self.gate_template_obj = gate_template_obj
+        self._max_num_layers = _MAX_NUM_LAYERS
 
     def unitary_distance_function(self, A, B):
         # return (1 - np.abs(np.sum(np.multiply(B,np.conj(np.transpose(A))))) / 4)
@@ -205,7 +203,7 @@ class TwoQubitGateSynthesizer:
     def optimal_decomposition(
         self, tol=1e-3, fidelity_2q_gate=1.0, fidelity_1q_gate=[1.0, 1.0]
     ):
-        max_num_layers = 4
+        max_num_layers = self._max_num_layers
         cutoff_with_tol = True
         results = []
         best_idx = 0

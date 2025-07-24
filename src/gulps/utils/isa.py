@@ -12,7 +12,10 @@ from gulps.utils.invariants import GateInvariants
 
 logger = logging.getLogger(__name__)
 
-COST_1Q = 0  # 1e-4  # adjust offset cost for 1Q gate layers
+# NOTE this is useful for tiebreakers between fractional parts
+# example 2 iswaps versus 4 sqrtiswaps both cost 4
+# with adjustment it is 2+2eps versus 2+4eps
+COST_1Q = 0  # adjust offset cost for 1Q gate layers
 
 
 class ISAInvariants:
@@ -20,18 +23,20 @@ class ISAInvariants:
 
     def __init__(
         self,
-        gate_set: List[GateInvariants] | List[np.ndarray],
+        gate_set: List[Gate] | List[np.ndarray],
         costs: List[float],
+        names: List[str] | None = None,
         precompute_polytopes: bool = False,
     ):
         if not gate_set:
             raise ValueError("gate_set can't be empty.")
         if len(gate_set) != len(costs):
             raise ValueError("gate_set and costs must have the same length.")
-        if isinstance(gate_set[0], GateInvariants):  # XXX assuming uniform dtypes
-            self.gate_set = gate_set
-        else:
-            self.gate_set = [GateInvariants.from_unitary(g) for g in gate_set]
+        if names is None:
+            names = [None] * len(gate_set)
+        self.gate_set = [
+            GateInvariants.from_unitary(g, name=n) for g, n in zip(gate_set, names)
+        ]
         if len(self.gate_set) != len(set(self.gate_set)):
             raise ValueError("gate_set must contain unique GateInvariants.")
 

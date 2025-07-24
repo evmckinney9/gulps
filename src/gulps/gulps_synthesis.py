@@ -24,8 +24,9 @@ class GulpsDecomposer:
 
     def __init__(
         self,
-        gate_set: List[GateInvariants],
+        gate_set: List[Gate],
         costs: List[float],
+        names: List[str] | None = None,
         precompute_polytopes: bool = True,
     ):
         if not gate_set:
@@ -34,6 +35,7 @@ class GulpsDecomposer:
         self.isa = ISAInvariants(
             gate_set=gate_set,
             costs=costs,
+            names=names,
             precompute_polytopes=precompute_polytopes,
         )
         self._numerics = SegmentNumericSynthesizer()
