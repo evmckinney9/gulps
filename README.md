@@ -54,7 +54,7 @@ isa = [
 ]
 ```
 has the following coverage set.
-![isa_coverage](isa_coverage.png)
+![isa_coverage](images/isa_coverage.png)
 
 Once a sentence is chosen, a linear program is used to determine a trajectory of intermediate invariants. These represent the cumulative two-qubit nonlocal action after each gate in the sentence—starting from the identity and ending at the target.
 ```python
@@ -64,14 +64,14 @@ example_sentence, example_intermediates = decomposer._best_decomposition(
 )
 render_path(example_intermediates);
 ```
-![example_cartan_trajectory](image-8.png)
+![example_cartan_trajectory](images/example_cartan_trajectory.png)
 
 In this example, the optimal sentence is composed of three $\sqrt[3]{\texttt{iSWAP}}$ gates. That is, the resulting circuit falls into a parameterized ansatz like this:
-![full_ansatz](image-7.png)
+![full_ansatz](images/full_ansatz.png)
 
 The intermediate points break the problem into simpler subproblems, each corresponding to a depth-2 circuit segment. In this case, the circuit has three segments, although the blue segment is fixed (e.g., identity). That leaves two segments requiring synthesis:
 
-| ![ansatz_1](image-5.png) | ![ansatz_2](image-6.png) |
+| ![ansatz_1](images/ansatz_1.png) | ![ansatz_2](images/ansatz_2.png) |
 |:------------------------:|:------------------------:|
 | Orange              | Green                |
 
@@ -98,4 +98,4 @@ ret.draw()
 Input unitary weyl invariants: (np.float64(0.44173763), np.float64(0.34153949), np.float64(0.15117788))
 Output unitary weyl invariants: (np.float64(0.44173763), np.float64(0.34153949), np.float64(0.15117788))
 ```
-![final](image-9.png)
+![final](images/final.png)
