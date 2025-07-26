@@ -19,7 +19,7 @@ def decomposer_fixture(request):
 
 
 @pytest.fixture(params=get_all_test_isas())
-def decomposer_fixture_enumerate(request):
+def decomposer_fixture_no_precompute(request):
     gates, costs = request.param
     return GulpsDecomposer(gates, costs, precompute_polytopes=False)
 
@@ -42,10 +42,9 @@ def test_decomposer_on_local_unitary():
 
 def test_decomposer_on_exact_isa_gate():
     gate = iSwapGate().power(1 / 2)
-    gate_inv = GateInvariants.from_unitary(gate)
 
     decomposer = GulpsDecomposer(
-        gate_set=[gate_inv],
+        gate_set=[gate],
         costs=[1.0],
         precompute_polytopes=True,
     )
@@ -66,12 +65,12 @@ def test_decomposer_fidelity_on_random_unitaries(decomposer_fixture):
         assert fidelity > 1 - 1e-6, f"Fidelity too low at seed {seed}: {fidelity}"
 
 
-def test_decomposer_no_precompute_fidelity_on_random_unitaries(
-    decomposer_fixture_enumerate,
+def test_decomposer_fidelity_no_precompute_on_random_unitaries(
+    decomposer_fixture_no_precompute,
 ):
     for seed in range(N_tests):
         target_unitary = random_unitary(4, seed=seed)
-        output_circuit = decomposer_fixture_enumerate._run(target_unitary)
+        output_circuit = decomposer_fixture_no_precompute._run(target_unitary)
 
         fidelity = average_gate_fidelity(
             Operator(target_unitary), Operator(output_circuit)

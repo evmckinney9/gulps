@@ -5,9 +5,12 @@ from typing import List, Union
 import numpy as np
 from qiskit import QuantumCircuit
 from qiskit.circuit import Gate
+from qiskit.circuit.library import UnitaryGate
+from qiskit.converters import circuit_to_dag
 from qiskit.dagcircuit import DAGCircuit
+from qiskit.quantum_info import Operator
 
-from gulps.utils.invariants import GateInvariants
+from gulps.utils.invariants import GateInvariants, recover_local_equivalence
 from gulps.utils.isa import ISAInvariants
 from gulps.utils.logging_config import logger
 
@@ -41,16 +44,53 @@ class GulpsDecomposer:
         self._numerics = SegmentNumericSynthesizer()
         self._constraint_cache = {}
 
-    def _eval_edge_case(self, target: GateInvariants):
-        """Handle edge cases where the target is a simple gate."""
-        if target.monodromy == (0, 0, 0):
-            raise NotImplementedError("trivial edge case")
-            return QuantumCircuit(2)
-        if np.any(
-            [np.isclose(target.monodromy, gate.monodromy) for gate in self.isa.gate_set]
-        ):
-            raise NotImplementedError("trivial edge case")
-            return QuantumCircuit(2)
+    def _eval_edge_case(
+        self, target: GateInvariants, return_dag: bool
+    ) -> QuantumCircuit | None:
+        """Return an exact synthesis if the target is locally equivalent to a basis gate.
+
+        This handles edge cases where the target is exactly a gate in the ISA (up to local unitaries),
+        including rho-reflected versions. Works even if polytope precomputation is disabled.
+        """
+        rtol = 1e-14
+        atol = 1e-15
+
+        # Check both the target and its rho-reflection against the ISA
+        target_variants = [target.monodromy, target.rho_reflect.monodromy]
+        for variant in target_variants:
+            if np.isclose(
+                variant, self.isa.identity_inv.monodromy, rtol=rtol, atol=atol
+            ).all():
+                # TODO FIXME Hand this to a 1Q decomposer instead?
+                logger.debug("Target is identity, returning empty circuit")
+                k1, k2, k3, k4, gphase = recover_local_equivalence(
+                    target.unitary, self.isa.identity_inv.unitary
+                )
+                qc = QuantumCircuit(2, global_phase=gphase)
+                qc.append(UnitaryGate(k1), [0])
+                qc.append(UnitaryGate(k2), [1])
+                qc.append(UnitaryGate(k3), [0])
+                qc.append(UnitaryGate(k4), [1])
+                return circuit_to_dag(qc) if return_dag else qc
+
+        for basis_gate in self.isa.gate_set:
+            for variant in target_variants:
+                if np.isclose(
+                    variant, basis_gate.monodromy, rtol=rtol, atol=atol
+                ).all():
+                    logger.debug("Target is local to a gate in the ISA")
+                    k1, k2, k3, k4, gphase = recover_local_equivalence(
+                        target.unitary, basis_gate.unitary
+                    )
+                    qc = QuantumCircuit(2, global_phase=gphase)
+                    qc.append(UnitaryGate(k1), [0])
+                    qc.append(UnitaryGate(k2), [1])
+                    qc.append(basis_gate.unitary, [0, 1])
+                    qc.append(UnitaryGate(k3), [0])
+                    qc.append(UnitaryGate(k4), [1])
+                    return circuit_to_dag(qc) if return_dag else qc
+
+        return None
 
     def _try_lp(
         self,
@@ -88,8 +128,8 @@ class GulpsDecomposer:
             sentence_out, intermediates, lp_rho = self._try_lp(
                 sentence, target_inv, rho_bool=rho_bool, log_output=log_output
             )
-            if sentence_out is None:
-                raise RuntimeError("LP failed for precomputed ISA sentence.")
+            if sentence_out is not None:
+                return sentence_out, intermediates
         else:
             rho_bool = False  # FIXME!
             for sentence in self.isa.enumerate():
@@ -101,13 +141,8 @@ class GulpsDecomposer:
                     sentence, target_inv, log_output=log_output
                 )
                 if sentence_out is not None:
-                    break
-            else:
-                raise RuntimeError(
-                    "No valid ISA sentence found via LP enumeration, try increasing max_depth."
-                )
-
-        return sentence_out, intermediates
+                    return sentence_out, intermediates
+        raise RuntimeError("No valid ISA sentence found!.")
 
     def _run(
         self,
@@ -125,8 +160,11 @@ class GulpsDecomposer:
             target_inv.monodromy, true_target.monodromy, rtol=1e-14
         ).all()
 
-        # TODO
-        self._eval_edge_case(true_target)
+        # NOTE edge case handles target is identity or local to a gate in this isa
+        # this is because LP assumes sentences of at least two gates
+        edge_output = self._eval_edge_case(true_target, return_dag)
+        if edge_output is not None:
+            return edge_output
 
         # Find the best decomposition using LP
         sentence_out, intermediates = self._best_decomposition(

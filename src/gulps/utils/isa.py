@@ -21,6 +21,8 @@ COST_1Q = 0  # adjust offset cost for 1Q gate layers
 class ISAInvariants:
     """Base class for ISA invariants."""
 
+    identity_inv = GateInvariants(logspec=(0.0, 0.0, 0.0, 0.0))
+
     def __init__(
         self,
         gate_set: List[Gate] | List[np.ndarray],
