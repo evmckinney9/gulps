@@ -159,6 +159,16 @@ class GateInvariants:
     def __str__(self) -> str:
         return self.name
 
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, GateInvariants):
+            return NotImplemented
+        return np.allclose(self.monodromy, other.monodromy, rtol=1e-14, atol=1e-15)
+
+    def __hash__(self) -> int:
+        # Round to 15-digit precision and convert to integers for stable hashing
+        scaled = tuple(np.round(np.array(self.monodromy) / 1e-15).astype(int))
+        return hash(scaled)
+
 
 if __name__ == "__main__":
     from qiskit.circuit.library import iSwapGate

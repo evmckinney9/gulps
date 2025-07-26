@@ -4,7 +4,7 @@ import pytest
 from qiskit.circuit.library import CXGate, XXPlusYYGate, iSwapGate
 from qiskit.quantum_info import random_unitary
 
-from gulps.gulps_synthesis import GulpsDecomposer
+from gulps.gulps_decomposer import GulpsDecomposer
 from gulps.utils.invariants import GateInvariants
 
 

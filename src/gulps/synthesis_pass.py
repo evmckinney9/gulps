@@ -1,16 +1,20 @@
+from typing import List
+
 from qiskit.circuit import Gate
 from qiskit.dagcircuit import DAGCircuit
 from qiskit.transpiler.basepasses import TransformationPass
 from qiskit.transpiler.passes import Collect2qBlocks, ConsolidateBlocks
 
-from gulps.gulps_synthesis import GulpsDecomposer
+from gulps.gulps_decomposer import GulpsDecomposer
+
+# FIXME TODO, hash/cache for the decomposer? avoid constructing it at runtime
 
 
 class GulpsDecompositionPass(TransformationPass):
-    def __init__(self, gate_set, costs, **kwargs) -> None:
-        super().__init__()
+    def __init__(self, gate_set: List[Gate], costs: List[float], **kwargs) -> None:
         self.decomposer = GulpsDecomposer(gate_set, costs, **kwargs)
         self.requires = [Collect2qBlocks(), ConsolidateBlocks()]
+        super().__init__()
 
     def run(self, dag: DAGCircuit) -> DAGCircuit:
         for node in dag.op_nodes():

@@ -33,7 +33,7 @@ class GulpsDecomposer:
         precompute_polytopes: bool = True,
     ):
         if not gate_set:
-            raise ValueError("gate_set must contain at least one GateInvariants.")
+            raise ValueError("gate_set can't be empty.")
 
         self.isa = ISAInvariants(
             gate_set=gate_set,
@@ -58,9 +58,7 @@ class GulpsDecomposer:
         # Check both the target and its rho-reflection against the ISA
         target_variants = [target.monodromy, target.rho_reflect.monodromy]
         for variant in target_variants:
-            if np.isclose(
-                variant, self.isa.identity_inv.monodromy, rtol=rtol, atol=atol
-            ).all():
+            if variant == self.isa.identity:  # use GateInvariants __eq__
                 # TODO FIXME Hand this to a 1Q decomposer instead?
                 logger.debug("Target is identity, returning empty circuit")
                 k1, k2, k3, k4, gphase = recover_local_equivalence(
@@ -75,9 +73,7 @@ class GulpsDecomposer:
 
         for basis_gate in self.isa.gate_set:
             for variant in target_variants:
-                if np.isclose(
-                    variant, basis_gate.monodromy, rtol=rtol, atol=atol
-                ).all():
+                if variant == basis_gate:  # use GateInvariants __eq__
                     logger.debug("Target is local to a gate in the ISA")
                     k1, k2, k3, k4, gphase = recover_local_equivalence(
                         target.unitary, basis_gate.unitary
@@ -156,9 +152,7 @@ class GulpsDecomposer:
         target_inv = GateInvariants.from_unitary(target, enforce_alcove=True)
 
         # if these have same monodromy, already in alcove_c2
-        target_in_ac2 = np.isclose(
-            target_inv.monodromy, true_target.monodromy, rtol=1e-14
-        ).all()
+        target_in_ac2 = target_inv == true_target  # use the GateInvariants __eq__
 
         # NOTE edge case handles target is identity or local to a gate in this isa
         # this is because LP assumes sentences of at least two gates

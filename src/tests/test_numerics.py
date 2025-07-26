@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 from qiskit.quantum_info import Operator
 
-from gulps.gulps_synthesis import GulpsDecomposer
+from gulps.gulps_decomposer import GulpsDecomposer
 from gulps.utils.invariants import GateInvariants
 from gulps.utils.logging_config import logger
 from tests.fixtures.circuits import sampled_reachable_target

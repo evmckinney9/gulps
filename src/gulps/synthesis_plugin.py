@@ -7,7 +7,7 @@ from qiskit.dagcircuit import DAGCircuit
 from qiskit.transpiler.basepasses import TransformationPass
 from qiskit.transpiler.passes.synthesis.plugin import UnitarySynthesisPlugin
 
-from gulps.gulps_synthesis import GulpsDecomposer
+from gulps.gulps_decomposer import GulpsDecomposer
 
 from .synthesis_plugin import UnitarySynthesisPlugin
 
