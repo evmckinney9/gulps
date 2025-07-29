@@ -8,18 +8,19 @@ from qiskit.quantum_info import Operator, average_gate_fidelity, random_unitary
 
 from gulps.gulps_decomposer import GulpsDecomposer
 from gulps.utils.invariants import GateInvariants
+from tests.fixtures.isas import get_all_test_isas
 
 
-def test_swap_into_iswap():
+@pytest.fixture(params=get_all_test_isas())
+def decomposer_fixture(request):
+    gates, costs = request.param
+    return GulpsDecomposer(gates, costs, precompute_polytopes=True)
+
+
+def test_swap(decomposer_fixture):
     """Related to issues #2 and #3"""
     target = SwapGate()
-    decomposer = GulpsDecomposer(
-        gate_set=[iSwapGate().power(1 / 2)],
-        costs=[1.0],
-        precompute_polytopes=True,
-    )
-
-    output_circuit = decomposer._run(target)
+    output_circuit = output_circuit = decomposer_fixture._run(target)
     fidelity = average_gate_fidelity(Operator(target), Operator(output_circuit))
     assert fidelity > 1 - 1e-6, f"ISA gate fidelity too low: {fidelity}"
 
@@ -49,4 +50,6 @@ def test_random_mirror_into_sq3iswap():
     u = random_unitary(4, seed=10)
     v = Operator(decomposer(u))
     fid = average_gate_fidelity(u, v)
+    assert fid > 1 - 1e-6, f"Fidelity too low: {fid}"
+    assert fid > 1 - 1e-6, f"Fidelity too low: {fid}"
     assert fid > 1 - 1e-6, f"Fidelity too low: {fid}"

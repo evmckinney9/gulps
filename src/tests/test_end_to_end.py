@@ -9,7 +9,7 @@ from gulps.gulps_decomposer import GulpsDecomposer
 from gulps.utils.invariants import GateInvariants
 from tests.fixtures.isas import get_all_test_isas
 
-N_tests = 4
+N_tests = 100
 
 
 @pytest.fixture(params=get_all_test_isas())

@@ -1,7 +1,7 @@
 # tests/isas.py
 import numpy as np
 import pytest
-from qiskit.circuit.library import CXGate, XXPlusYYGate, iSwapGate
+from qiskit.circuit.library import CXGate, SwapGate, XXPlusYYGate, iSwapGate
 from qiskit.quantum_info import random_unitary
 
 from gulps.gulps_decomposer import GulpsDecomposer
@@ -15,4 +15,6 @@ def get_all_test_isas():
         ([CXGate(), iSwapGate().power(1 / 2)], [1.0, 0.5]),
         ([iSwapGate(), iSwapGate().power(1 / 2)], [1.0, 0.5]),
         ([CXGate(), CXGate().power(1 / 2)], [1.0, 0.5]),
+        ([iSwapGate(), SwapGate()], [1.0, 0.0]),
+        ([CXGate(), iSwapGate().power(1 / 2), SwapGate()], [1.0, 0.5, 0.0]),
     ]

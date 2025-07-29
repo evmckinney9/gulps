@@ -144,8 +144,9 @@ class GulpsDecomposer:
         return_dag: bool = False,
         log_output: bool = False,
     ) -> QuantumCircuit | DAGCircuit:
-        # FIXME there is better way to handle this
         # NOTE, enforce alcove means target will always be valid by qlr
+        # which has the effect of never needing to check rho(target) case
+        # FIXME there is better way instead of creating 2 objects? not a big deal
         true_target = GateInvariants.from_unitary(target)
         target_inv = GateInvariants.from_unitary(target, enforce_alcove=True)
 
@@ -159,6 +160,8 @@ class GulpsDecomposer:
         sentence_out, intermediates = self._best_decomposition(
             target_inv, log_output=log_output
         )
+
+        # NOTE, becomes unnecessary by using (a,b,-b) case in recover_local_equivalence
         # if these have same monodromy, already in alcove_c2
         # target_in_ac2 = target_inv == true_target  # use the GateInvariants __eq__
         # if not target_in_ac2 and intermediates[-1] != true_target:

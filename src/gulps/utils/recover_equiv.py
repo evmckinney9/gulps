@@ -34,10 +34,11 @@ def recover_local_equivalence(
     U_basis: np.ndarray,
     tol: float = 2e-4,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, float]:
-    """Find single-qubit corrections k1, k2, k3, k4 and a global phase so that:
-        U_target ~= (k1 x k2) · U_basis · (k3 x k4) · exp(i * global_phase)
+    """Find single-qubit corrections k1, k2, k3, k4 and a global phase so that:.
 
-    Cases (exit early):
+        U_target ~= (k1 x k2) · U_basis · (k3 x k4) · exp(i * global_phase).
+
+    Cases:
       1) exact Weyl match         -> identity corrections
       2) target=(a,b,b) & basis=(a,b,-b)
                                   -> insert X,Z before and I,Y after
@@ -64,14 +65,21 @@ def recover_local_equivalence(
         return k1, k2, k3, k4, (T.global_phase - B.global_phase)
 
     # 2) symmetry case: target=(a,b,b), basis=(a,b,-b)?
-    ab_match = np.isclose(a1, a2, atol=tol) and np.isclose(b1, b2, atol=tol)
-    target_abb = np.isclose(c1, b1, atol=tol)
-    basis_abmb = np.isclose(c2, -b2, atol=tol)
+    # ab_match = np.isclose(a1, a2, atol=tol) and np.isclose(b1, b2, atol=tol)
+    # target_abb = np.isclose(c1, b1, atol=tol)
+    # basis_abmb = np.isclose(c2, -b2, atol=tol)
+    # if ab_match and target_abb and basis_abmb:
 
-    if ab_match and target_abb and basis_abmb:
+    ab_match = np.isclose(a1, a2, atol=tol) and np.isclose(b1, b2, atol=tol)
+    if (
+        ab_match
+        and np.isclose(abs(c1), b1, atol=tol)
+        and np.isclose(abs(c2), b2, atol=tol)
+    ):
         logger.debug(
-            "Detected (a,b,b) vs (a,b,-b) symmetry; inserting Pauli corrections."
+            "Detected (a,b,±b) vs (a,b,∓b) symmetry; inserting Pauli corrections."
         )
+
         P0 = YGate().to_matrix()  # pre on qubit 0
         Q0 = XGate().to_matrix()  # post on qubit 0
         Q1 = ZGate().to_matrix()  # post on qubit 1
