@@ -10,9 +10,10 @@ from qiskit.converters import circuit_to_dag
 from qiskit.dagcircuit import DAGCircuit
 from qiskit.quantum_info import Operator
 
-from gulps.utils.invariants import GateInvariants, recover_local_equivalence
+from gulps.utils.invariants import GateInvariants
 from gulps.utils.isa import ISAInvariants
 from gulps.utils.logging_config import logger
+from gulps.utils.recover_equiv import recover_local_equivalence
 
 from .linear_program import MinimalOrderedISAConstraints
 from .local_numerics import SegmentNumericSynthesizer
@@ -52,13 +53,10 @@ class GulpsDecomposer:
         This handles edge cases where the target is exactly a gate in the ISA (up to local unitaries),
         including rho-reflected versions. Works even if polytope precomputation is disabled.
         """
-        rtol = 1e-14
-        atol = 1e-15
-
         # Check both the target and its rho-reflection against the ISA
-        target_variants = [target.monodromy, target.rho_reflect.monodromy]
+        target_variants = [target, target.rho_reflect]
         for variant in target_variants:
-            if variant == self.isa.identity:  # use GateInvariants __eq__
+            if variant == self.isa.identity_inv:  # use GateInvariants __eq__
                 # TODO FIXME Hand this to a 1Q decomposer instead?
                 logger.debug("Target is identity, returning empty circuit")
                 k1, k2, k3, k4, gphase = recover_local_equivalence(
@@ -151,9 +149,6 @@ class GulpsDecomposer:
         true_target = GateInvariants.from_unitary(target)
         target_inv = GateInvariants.from_unitary(target, enforce_alcove=True)
 
-        # if these have same monodromy, already in alcove_c2
-        target_in_ac2 = target_inv == true_target  # use the GateInvariants __eq__
-
         # NOTE edge case handles target is identity or local to a gate in this isa
         # this is because LP assumes sentences of at least two gates
         edge_output = self._eval_edge_case(true_target, return_dag)
@@ -164,10 +159,11 @@ class GulpsDecomposer:
         sentence_out, intermediates = self._best_decomposition(
             target_inv, log_output=log_output
         )
-
-        if not target_in_ac2 and intermediates[-1] is not true_target:
-            logger.debug("Trying reflection of intermediates")
-            intermediates = [x.rho_reflect for x in intermediates]
+        # if these have same monodromy, already in alcove_c2
+        # target_in_ac2 = target_inv == true_target  # use the GateInvariants __eq__
+        # if not target_in_ac2 and intermediates[-1] != true_target:
+        #     logger.debug("Trying reflection of intermediates")
+        #     intermediates = [x.rho_reflect for x in intermediates]
 
         # Convert the sentence to a circuit or DAG
         return self._numerics.run(

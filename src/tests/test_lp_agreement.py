@@ -30,6 +30,6 @@ def test_lp_agrees_with_polytope_solution(decomposer_fixture):
         sentence_out, intermediates, actual_rho = decomposer_fixture._try_lp(
             sentence, target_inv, rho_bool=rho_bool
         )
-        assert sentence_out is not None, (
-            "LP failed even though polytope lookup succeeded."
-        )
+        assert (
+            sentence_out is not None
+        ), "LP failed even though polytope lookup succeeded."

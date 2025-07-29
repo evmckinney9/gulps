@@ -13,7 +13,8 @@ from qiskit.converters import circuit_to_dag, dag_to_circuit
 from qiskit.dagcircuit import DAGCircuit
 from qiskit.quantum_info import Operator
 
-from gulps.utils.invariants import GateInvariants, recover_local_equivalence
+from gulps.utils.invariants import GateInvariants
+from gulps.utils.recover_equiv import recover_local_equivalence
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +22,7 @@ config.update("jax_enable_x64", True)
 
 
 # jax setup and definitions
-# XXX FIXME these are highly-tunable parameters
+# NOTE these are highly-tunable parameters
 CONV_TOL = 1e-8
 A_TOL = 1e-14
 EASY_RESTARTS = 4
@@ -152,16 +153,18 @@ class SegmentNumericSynthesizer:
                     best_residual = residual_norm
                     best_params = j_attempt.params
 
-                logger.debug(
-                    f"[{label.upper()} {i + 1}/{restarts}] "
-                    f"residual={residual_array} (‖residual‖={residual_norm:.2e}, nfev={nfev})"
-                )
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug(
+                        f"[{label.upper()} {i + 1}/{restarts}] "
+                        f"residual={residual_array} (‖residual‖={residual_norm:.2e}, nfev={nfev})"
+                    )
 
                 if jnp.all(jnp.abs(residual_array) <= CONV_TOL):
-                    logger.debug(
-                        f"=> Success on [{label.upper()} {i + 1}] "
-                        f"(componentwise |residual| ≤ {CONV_TOL:.1e})"
-                    )
+                    if logger.isEnabledFor(logging.DEBUG):
+                        logger.debug(
+                            f"=> Success on [{label.upper()} {i + 1}] "
+                            f"(componentwise |residual| ≤ {CONV_TOL:.1e})"
+                        )
                     success_nfev += nfev
                     success = True
                     success_label = label
@@ -178,17 +181,18 @@ class SegmentNumericSynthesizer:
             )
 
         elapsed_time = time.time() - start_time
-
-        if success:
+        ##############
+        if success and logger.isEnabledFor(logging.DEBUG):
             logger.debug(
                 f"✅ LM synthesis SUCCESS on {success_label.upper()} attempt {success_attempt} "
                 f"(residual={best_residual:.2e}, total_nfev={total_nfev}) in {elapsed_time:.3f}s"
             )
-        else:
+        elif logger.isEnabledFor(logging.DEBUG):
             logger.debug(
                 f"❌ LM synthesis FAILED after {EASY_RESTARTS + HARD_RESTARTS} attempts "
                 f"(total_nfev={total_nfev}, best residual={best_residual:.2e}) in {elapsed_time:.3f}s"
             )
+        ##############
 
         return np.array(best_params)
 
@@ -210,6 +214,7 @@ class SegmentNumericSynthesizer:
                 if i == 1
                 else invariant_list[i - 1].canonical_matrix
             )
+            # c_op = invariant_list[i - 1].canonical_matrix
 
             # target = mono_coordinates_to_makhlin(*invariant_list[i])
             target = invariant_list[i].makhlin
@@ -218,6 +223,38 @@ class SegmentNumericSynthesizer:
             segment_sol = SegmentNumericSynthesizer._segment_interior_solve(
                 g_op, c_op, target
             )
+
+            # # ######################################
+            # # # XXX DEBUG only (slow)
+            if logger.isEnabledFor(logging.DEBUG):
+                from qiskit.synthesis.two_qubit import TwoQubitWeylDecomposition
+
+                # piece back to see what the segment looks like
+                U = (
+                    np.array(g_op)
+                    @ np.kron(_rv(segment_sol[:3]), _rv(segment_sol[3:]))
+                    @ np.array(c_op)
+                )
+                construct_inv = _two_qubit_local_invariants(U)
+                qiskit_weyl = TwoQubitWeylDecomposition(U)
+                logger.debug(
+                    f"constructedqiskit convention: {qiskit_weyl.a}, {qiskit_weyl.b}, {qiskit_weyl.c}"
+                )
+                qiskit_weyl2 = TwoQubitWeylDecomposition(
+                    invariant_list[i].canonical_matrix
+                )
+                logger.debug(
+                    f"target qiskit convention: {qiskit_weyl2.a}, {qiskit_weyl2.b}, {qiskit_weyl2.c}"
+                )
+                logger.debug(
+                    f"Segment {i} constructed invariant: {construct_inv} (target: {target})"
+                )
+                logger.debug(
+                    f"Segment {i} constructed monodromy: {GateInvariants.from_unitary(U).monodromy} "
+                    f"(target: {invariant_list[i].monodromy})"
+                )
+            # # ######################################
+
             segment_sols.append(segment_sol)
         return segment_sols
 
@@ -248,6 +285,19 @@ class SegmentNumericSynthesizer:
 
         # first basis gate
         dag.apply_operation_back(gate_list[0].unitary, qreg[0:2])
+
+        ## NOTE we skip local equiv recovery on first segment
+        ## because c_op[0] is already gate_list[0].unitary
+        # can_op = invariant_list[0].canonical_matrix
+        # current_op = Operator(dag_to_circuit(dag)).to_matrix()
+        # k1, k2, k3, k4, gphase = recover_local_equivalence(can_op, current_op)
+        # dag.global_phase += gphase
+        # # prepend k1 tensor k2
+        # dag.apply_operation_front(UnitaryGate(k1), [qreg[0]])
+        # dag.apply_operation_front(UnitaryGate(k2), [qreg[1]])
+        # # append  k3 tensor k4
+        # dag.apply_operation_back(UnitaryGate(k3), [qreg[0]])
+        # dag.apply_operation_back(UnitaryGate(k4), [qreg[1]])
 
         # iterate over every remaining segment
         for idx, params in enumerate(segment_sols, start=1):

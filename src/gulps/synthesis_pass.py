@@ -12,8 +12,8 @@ from gulps.gulps_decomposer import GulpsDecomposer
 
 class GulpsDecompositionPass(TransformationPass):
     def __init__(self, gate_set: List[Gate], costs: List[float], **kwargs) -> None:
-        self.decomposer = GulpsDecomposer(gate_set, costs, **kwargs)
         self.requires = [Collect2qBlocks(), ConsolidateBlocks()]
+        self._decomposer = GulpsDecomposer(gate_set, costs, **kwargs)
         super().__init__()
 
     def run(self, dag: DAGCircuit) -> DAGCircuit:
@@ -30,7 +30,7 @@ class GulpsDecompositionPass(TransformationPass):
             # check_input = not isinstance(node.op, Gate)
 
             # call solovay kitaev
-            decomposed_node = self.decomposer(node.op, return_dag=True)
+            decomposed_node = self._decomposer(node.op, return_dag=True)
             # convert to a dag and replace the gate by the approximation
             dag.substitute_node_with_dag(node, decomposed_node)
 

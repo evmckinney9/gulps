@@ -35,7 +35,7 @@ repos:
       - id: check-added-large-files
       - id: forbid-submodules
       - id: name-tests-test
-        args: [--pytest]
+        args: [--pytest-test-first]
       - id: pretty-format-json
         args: [--autofix]
 

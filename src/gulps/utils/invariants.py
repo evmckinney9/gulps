@@ -12,7 +12,6 @@ from qiskit._accelerate.two_qubit_decompose import weyl_coordinates
 from qiskit.circuit import Gate
 from qiskit.circuit.library import UnitaryGate
 from qiskit.quantum_info import Operator
-from qiskit.synthesis.two_qubit import TwoQubitWeylDecomposition
 from weylchamber import canonical_gate
 
 logger = logging.getLogger(__name__)
@@ -178,52 +177,3 @@ if __name__ == "__main__":
     g = GateInvariants.from_unitary(u)
     assert np.allclose(g1g2g3(u), g.makhlin)
     assert np.allclose(c1c2c3(u), g.weyl)
-
-
-def recover_local_equivalence(U_target, U_basis):
-    """Find local gates such that local.U_basis.local = U_target."""
-    specialization = TwoQubitWeylDecomposition._specializations.General
-    target_decomp = TwoQubitWeylDecomposition(
-        U_target, fidelity=1.0, _specialization=specialization
-    )
-    basis_decomp = TwoQubitWeylDecomposition(
-        U_basis, fidelity=1.0, _specialization=specialization
-    )
-
-    local_coords1 = np.array([target_decomp.a, target_decomp.b, target_decomp.c])
-    local_coords2 = np.array([basis_decomp.a, basis_decomp.b, basis_decomp.c])
-    if not np.allclose(np.abs(local_coords1 - local_coords2), 0, atol=1e-2):
-        if np.isclose(target_decomp.c, -1.0 * basis_decomp.c):
-            logger.warning(
-                "Sign difference in c parameter during local equivalence recovery."
-            )
-        else:
-            logger.warning(
-                f"Gates are not locally equivalent. Difference: {np.abs(local_coords1 - local_coords2)}"
-            )
-
-    k4 = target_decomp.K1l @ np.conjugate(basis_decomp.K1l).T
-    k3 = target_decomp.K1r @ np.conjugate(basis_decomp.K1r).T
-    k2 = np.conjugate(basis_decomp.K2l).T @ target_decomp.K2l
-    k1 = np.conjugate(basis_decomp.K2r).T @ target_decomp.K2r
-    global_phase = target_decomp.global_phase - basis_decomp.global_phase
-    return k1, k2, k3, k4, global_phase
-
-
-if __name__ == "__main__":
-    from qiskit import QuantumCircuit
-    from qiskit.circuit.library import CXGate, CZGate, UnitaryGate
-    from qiskit.quantum_info import Operator, average_gate_fidelity
-
-    target_gate = CXGate()
-    basis_gate = CZGate()
-    print(average_gate_fidelity(target_gate, basis_gate))
-
-    k1, k2, k3, k4, gphase = recover_local_equivalence(target_gate, basis_gate)
-    qc = QuantumCircuit(2, global_phase=gphase)
-    qc.append(UnitaryGate(k1), [0])
-    qc.append(UnitaryGate(k2), [1])
-    qc.append(basis_gate, [0, 1])
-    qc.append(UnitaryGate(k3), [0])
-    qc.append(UnitaryGate(k4), [1])
-    print(average_gate_fidelity(target_gate, Operator(qc)))
