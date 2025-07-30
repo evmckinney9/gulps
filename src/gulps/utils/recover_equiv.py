@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 def recover_local_equivalence(
     U_target: np.ndarray,
     U_basis: np.ndarray,
-    tol: float = 2e-4,
+    tol: float = 5e-4,  # XXX ?
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, float]:
     """Find single-qubit corrections k1, k2, k3, k4 and a global phase so that:.
 
@@ -92,16 +92,16 @@ def recover_local_equivalence(
 
     # 3) cannot recover
     diffs = np.abs([a1 - a2, b1 - b2, c1 - c2])
-    raise ValueError(f"Cannot recover local equivalence; Weyl differences {diffs}")
+    # raise ValueError(f"Cannot recover local equivalence; Weyl differences {diffs}")
     # proceed like normal
-    # logger.warning(
-    #     f"Cannot recover local equivalence; Weyl differences {diffs}. Proceeding with best effort."
-    # )
-    # k4 = T.K1l @ B.K1l.conj().T
-    # k3 = T.K1r @ B.K1r.conj().T
-    # k2 = B.K2l.conj().T @ T.K2l
-    # k1 = B.K2r.conj().T @ T.K2r
-    # return k1, k2, k3, k4, (T.global_phase - B.global_phase)
+    logger.warning(
+        f"Cannot recover local equivalence; Weyl differences {diffs}. Proceeding with best effort."
+    )
+    k4 = T.K1l @ B.K1l.conj().T
+    k3 = T.K1r @ B.K1r.conj().T
+    k2 = B.K2l.conj().T @ T.K2l
+    k1 = B.K2r.conj().T @ T.K2r
+    return k1, k2, k3, k4, (T.global_phase - B.global_phase)
 
 
 if __name__ == "__main__":

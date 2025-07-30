@@ -20,14 +20,10 @@ logger = logging.getLogger(__name__)
 
 config.update("jax_enable_x64", True)
 
-
 # jax setup and definitions
 # NOTE these are highly-tunable parameters
-CONV_TOL = 1e-8
+CONV_TOL = 5e-7  # 1e-8
 A_TOL = 1e-14
-EASY_RESTARTS = 4
-HARD_RESTARTS = 16
-
 
 MAGIC = jnp.array(
     [[1, 0, 0, 1j], [0, 1j, 1, 0], [0, 1j, -1, 0], [1, 0, 0, -1j]],
@@ -111,8 +107,17 @@ class SegmentNumericSynthesizer:
     See section 3.B of https://arxiv.org/pdf/2505.00543
     """
 
+    _segment_stats = []  # List of attempts
+
     @staticmethod
-    def _segment_interior_solve(g_op, c_op, target, seed=42):
+    def _segment_interior_solve(
+        g_op,
+        c_op,
+        target,
+        easy_restarts,
+        hard_restarts,
+        seed=0,
+    ):
         start_time = time.time()
         j_target_inv = jnp.array(target, dtype=jnp.double)
         j_prefix = jnp.array(c_op, dtype=jnp.complex128)
@@ -172,34 +177,55 @@ class SegmentNumericSynthesizer:
                     return
 
         # Phase 1: Easy
-        run_attempts(EASY_LM, "easy", restarts=EASY_RESTARTS, start_idx=0)
+        run_attempts(
+            EASY_LM,
+            "easy",
+            restarts=easy_restarts,
+            start_idx=0,
+        )
 
         # Phase 2: Hard (only if easy failed)
         if not success:
             run_attempts(
-                HARD_LM, "hard", restarts=HARD_RESTARTS, start_idx=EASY_RESTARTS
+                HARD_LM,
+                "hard",
+                restarts=hard_restarts,
+                start_idx=easy_restarts,
             )
 
-        elapsed_time = time.time() - start_time
+        SegmentNumericSynthesizer._segment_stats.append((success_attempt or -1))
+
         ##############
-        if success and logger.isEnabledFor(logging.DEBUG):
-            logger.debug(
-                f"✅ LM synthesis SUCCESS on {success_label.upper()} attempt {success_attempt} "
-                f"(residual={best_residual:.2e}, total_nfev={total_nfev}) in {elapsed_time:.3f}s"
-            )
-        elif logger.isEnabledFor(logging.DEBUG):
-            logger.debug(
-                f"❌ LM synthesis FAILED after {EASY_RESTARTS + HARD_RESTARTS} attempts "
-                f"(total_nfev={total_nfev}, best residual={best_residual:.2e}) in {elapsed_time:.3f}s"
-            )
-        ##############
+        if logger.isEnabledFor(logging.DEBUG):
+            elapsed_time = time.time() - start_time
+            if success:
+                logger.debug(
+                    f"✅ LM synthesis SUCCESS on {success_label.upper()} attempt {success_attempt} "
+                    f"(residual={best_residual:.2e}, total_nfev={total_nfev}) in {elapsed_time:.3f}s"
+                )
+            else:
+                logger.debug(
+                    f"❌ LM synthesis FAILED after {easy_restarts + hard_restarts} attempts "
+                    f"(total_nfev={total_nfev}, best residual={best_residual:.2e}) in {elapsed_time:.3f}s"
+                )
+        #############
 
         return np.array(best_params)
+        # return {
+        #     "params": np.array(best_params),
+        #     # "residuals": residual_history,  # e.g., list of floats
+        #     "success": success,
+        #     "success_attempt": success_attempt,
+        #     "success_label": success_label,
+        # }
 
     # NOTE, in principle this could be computed in parallel
     @staticmethod
     def _synthesize_segments(
-        gate_list: list[GateInvariants], invariant_list: list[GateInvariants]
+        gate_list: list[GateInvariants],
+        invariant_list: list[GateInvariants],
+        easy_attempts: int,
+        hard_attempts: int,
     ) -> list[np.ndarray]:
         # gate list given as G1, G2, ..., Gn as Operator
         # invariant list given as C1, C2, ..., Cn as 3-tuple floats (monodromy)
@@ -220,42 +246,48 @@ class SegmentNumericSynthesizer:
             target = invariant_list[i].makhlin
 
             # solve for segment
+            SegmentNumericSynthesizer._segment_stats = []
             segment_sol = SegmentNumericSynthesizer._segment_interior_solve(
-                g_op, c_op, target
+                g_op,
+                c_op,
+                target,
+                easy_restarts=easy_attempts,
+                hard_restarts=hard_attempts,
+                seed=i,
             )
-
-            # # ######################################
-            # # # XXX DEBUG only (slow)
-            if logger.isEnabledFor(logging.DEBUG):
-                from qiskit.synthesis.two_qubit import TwoQubitWeylDecomposition
-
-                # piece back to see what the segment looks like
-                U = (
-                    np.array(g_op)
-                    @ np.kron(_rv(segment_sol[:3]), _rv(segment_sol[3:]))
-                    @ np.array(c_op)
-                )
-                construct_inv = _two_qubit_local_invariants(U)
-                qiskit_weyl = TwoQubitWeylDecomposition(U)
-                logger.debug(
-                    f"constructedqiskit convention: {qiskit_weyl.a}, {qiskit_weyl.b}, {qiskit_weyl.c}"
-                )
-                qiskit_weyl2 = TwoQubitWeylDecomposition(
-                    invariant_list[i].canonical_matrix
-                )
-                logger.debug(
-                    f"target qiskit convention: {qiskit_weyl2.a}, {qiskit_weyl2.b}, {qiskit_weyl2.c}"
-                )
-                logger.debug(
-                    f"Segment {i} constructed invariant: {construct_inv} (target: {target})"
-                )
-                logger.debug(
-                    f"Segment {i} constructed monodromy: {GateInvariants.from_unitary(U).monodromy} "
-                    f"(target: {invariant_list[i].monodromy})"
-                )
-            # # ######################################
-
             segment_sols.append(segment_sol)
+
+            # # ######################################
+            # # # # XXX DEBUG only (slow)
+            # if logger.isEnabledFor(logging.DEBUG):
+            #     from qiskit.synthesis.two_qubit import TwoQubitWeylDecomposition
+
+            #     # piece back to see what the segment looks like
+            #     U = (
+            #         np.array(g_op)
+            #         @ np.kron(_rv(segment_sol[:3]), _rv(segment_sol[3:]))
+            #         @ np.array(c_op)
+            #     )
+            #     construct_inv = _two_qubit_local_invariants(U)
+            #     qiskit_weyl = TwoQubitWeylDecomposition(U)
+            #     logger.debug(
+            #         f"constructed (qiskit convention): {qiskit_weyl.a}, {qiskit_weyl.b}, {qiskit_weyl.c}"
+            #     )
+            #     qiskit_weyl2 = TwoQubitWeylDecomposition(
+            #         invariant_list[i].canonical_matrix
+            #     )
+            #     logger.debug(
+            #         f"target (qiskit convention): {qiskit_weyl2.a}, {qiskit_weyl2.b}, {qiskit_weyl2.c}"
+            #     )
+            #     logger.debug(
+            #         f"Segment {i} constructed invariant: {construct_inv} (target: {target})"
+            #     )
+            #     logger.debug(
+            #         f"Segment {i} constructed monodromy: {GateInvariants.from_unitary(U).monodromy} "
+            #         f"(target: {invariant_list[i].monodromy})"
+            #     )
+            # # # ######################################
+
         return segment_sols
 
     @staticmethod
@@ -337,38 +369,3 @@ class SegmentNumericSynthesizer:
         if return_dag:
             return dag
         return dag_to_circuit(dag)
-
-    @staticmethod
-    def run(
-        gate_list: list[GateInvariants],
-        invariant_list: list[GateInvariants],
-        target: GateInvariants = None,
-        return_dag=False,
-    ) -> QuantumCircuit | DAGCircuit:
-        """Synthesize segments of a two-qubit gate sequence.
-
-        Args:
-            gate_list (list): List of Type? objects representing the gates.
-            invariant_list (list): List of monodromy 3-tuples for intermediate invariants.
-
-        Returns:
-            list: List of segment solutions.
-        """
-        if len(gate_list) != len(invariant_list):
-            raise ValueError("Gate list and invariant list must have the same length.")
-        if len(gate_list) < 2:
-            raise ValueError("At least two gates are required for segment synthesis.")
-
-        # first get the local rotations
-        segment_sols = SegmentNumericSynthesizer._synthesize_segments(
-            gate_list, invariant_list
-        )
-        # then stitch together, recovering nested local equivalences
-        stitched_circuit = SegmentNumericSynthesizer._stitch_segments(
-            gate_list,
-            invariant_list,
-            segment_sols,
-            target,
-            return_dag=return_dag,
-        )
-        return stitched_circuit

@@ -1,4 +1,5 @@
 import logging
+import time
 from itertools import product
 from typing import List, Union
 
@@ -111,70 +112,100 @@ class GulpsDecomposer:
 
         return None, None, None
 
+    # TODO FIXME, handle true vs alcove target differently
     def _best_decomposition(
         self, target_inv: GateInvariants, log_output: bool = False
     ) -> tuple[List[GateInvariants], List[GateInvariants]]:
+        # assume this is False by default (which means )
+        rho_bool = False
+        alcove_target = GateInvariants.from_unitary(
+            target_inv.unitary, enforce_alcove=True
+        )
+        target_in_ac2 = alcove_target == target_inv
+
         if self.isa._precompute_polytopes:
-            sentence, rho_bool = self.isa.polytope_lookup(target_inv)
+            sentence, rho_bool = self.isa.polytope_lookup(alcove_target)
 
             if sentence is None:
                 raise RuntimeError("No precomputed ISA sentence found for target.")
             sentence_out, intermediates, lp_rho = self._try_lp(
-                sentence, target_inv, rho_bool=rho_bool, log_output=log_output
+                sentence, alcove_target, rho_bool=rho_bool, log_output=log_output
             )
-            if sentence_out is not None:
-                return sentence_out, intermediates
         else:
-            rho_bool = False  # FIXME!
             for sentence in self.isa.enumerate():
                 # heuristic filter to skip a full LP for obvious non-starters
                 if sum(gate.strength for gate in sentence) < target_inv.strength:
                     continue
 
                 sentence_out, intermediates, lp_rho = self._try_lp(
-                    sentence, target_inv, log_output=log_output
+                    sentence, alcove_target, log_output=log_output
                 )
                 if sentence_out is not None:
-                    return sentence_out, intermediates
-        raise RuntimeError("No valid ISA sentence found!.")
+                    break
+
+        if sentence_out is None:
+            raise RuntimeError("No valid ISA sentence found!.")
+
+        # TODO
+        # # FIXME, rho_bool should be used to determine if the LP required a reflection
+        if not target_in_ac2 and intermediates[-1] != target_inv:
+            logger.debug("Trying reflection of intermediates")
+            intermediates = [x.rho_reflect for x in intermediates]
+
+        return sentence_out, intermediates
 
     def _run(
         self,
         target: Union[np.ndarray, Gate],
         return_dag: bool = False,
         log_output: bool = False,
+        easy_attempts: int = 4,
+        hard_attempts: int = 8,
     ) -> QuantumCircuit | DAGCircuit:
-        # NOTE, enforce alcove means target will always be valid by qlr
-        # which has the effect of never needing to check rho(target) case
-        # FIXME there is better way instead of creating 2 objects? not a big deal
         true_target = GateInvariants.from_unitary(target)
-        target_inv = GateInvariants.from_unitary(target, enforce_alcove=True)
 
-        # NOTE edge case handles target is identity or local to a gate in this isa
-        # this is because LP assumes sentences of at least two gates
         edge_output = self._eval_edge_case(true_target, return_dag)
         if edge_output is not None:
             return edge_output
 
-        # Find the best decomposition using LP
+        # --- A) LP ---
+        t0 = time.perf_counter()  # TIMING
         sentence_out, intermediates = self._best_decomposition(
-            target_inv, log_output=log_output
+            true_target, log_output=log_output
         )
 
-        # NOTE, becomes unnecessary by using (a,b,-b) case in recover_local_equivalence
-        # if these have same monodromy, already in alcove_c2
-        # target_in_ac2 = target_inv == true_target  # use the GateInvariants __eq__
-        # if not target_in_ac2 and intermediates[-1] != true_target:
-        #     logger.debug("Trying reflection of intermediates")
-        #     intermediates = [x.rho_reflect for x in intermediates]
+        # --- B1) Segment synthesis ---
+        t1 = time.perf_counter()  # TIMING
+        if len(sentence_out) != len(intermediates):
+            raise ValueError("Gate list and invariant list must have the same length.")
+        if len(sentence_out) < 2:
+            raise ValueError("At least two gates are required for segment synthesis.")
 
-        # Convert the sentence to a circuit or DAG
-        return self._numerics.run(
+        segment_sols = self._numerics._synthesize_segments(
             sentence_out,
             intermediates,
+            easy_attempts=easy_attempts,
+            hard_attempts=hard_attempts,
+        )
+        t2 = time.perf_counter()  # TIMING
+
+        stitched_circuit = self._numerics._stitch_segments(
+            sentence_out,
+            intermediates,
+            segment_sols,
             true_target,
             return_dag=return_dag,
         )
+        t3 = time.perf_counter()  # TIMING
+
+        # Optional: Store or return timing info for analysis
+        self.last_timing = {
+            "lp": t1 - t0,
+            "numeric": t2 - t1,
+            "stitch": t3 - t2,
+        }
+
+        return stitched_circuit
 
     def __call__(
         self,
