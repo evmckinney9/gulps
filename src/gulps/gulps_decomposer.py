@@ -4,6 +4,7 @@ from itertools import product
 from typing import List, Union
 
 import numpy as np
+from monodromy.coordinates import normalize_logspec_AC2
 from qiskit import QuantumCircuit
 from qiskit.circuit import Gate
 from qiskit.circuit.library import UnitaryGate
@@ -150,8 +151,13 @@ class GulpsDecomposer:
         # FIXME, the condition seems to be optimized ISA dependent(?)
         # # FIXME, rho_bool should be used to determine if the LP required a reflection
         if not target_in_ac2:  # and intermediates[-1] != target_inv:
+            # if intermediates[-1] != target_inv:
             logger.debug("Trying reflection of intermediates")
             intermediates = [x.rho_reflect for x in intermediates]
+        # logger.debug("trying norm logspec ac2")
+        # intermediates = [
+        #     GateInvariants(normalize_logspec_AC2(g.logspec)) for g in intermediates
+        # ]
 
         return sentence_out, intermediates
 
@@ -161,7 +167,7 @@ class GulpsDecomposer:
         return_dag: bool = False,
         log_output: bool = False,
         easy_attempts: int = 4,
-        hard_attempts: int = 8,
+        hard_attempts: int = 16,
     ) -> QuantumCircuit | DAGCircuit:
         true_target = GateInvariants.from_unitary(target)
 
@@ -174,6 +180,10 @@ class GulpsDecomposer:
         sentence_out, intermediates = self._best_decomposition(
             true_target, log_output=log_output
         )
+
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(f"Sentence: {[g.name for g in sentence_out]}")
+            logger.debug(f"Intermediates: {[g.logspec for g in intermediates]}")
 
         # --- B1) Segment synthesis ---
         t1 = time.perf_counter()  # TIMING

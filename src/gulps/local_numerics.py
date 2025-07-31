@@ -22,8 +22,9 @@ config.update("jax_enable_x64", True)
 
 # jax setup and definitions
 # NOTE these are highly-tunable parameters
-CONV_TOL = 5e-7  # 1e-8
-A_TOL = 1e-14
+# I believe two_qubit_local_invariants only has 8 decimal places of precision
+CONV_TOL = 5e-9  # 1e-8
+A_TOL = 1e-9
 
 MAGIC = jnp.array(
     [[1, 0, 0, 1j], [0, 1j, 1, 0], [0, 1j, -1, 0], [1, 0, 0, -1j]],
@@ -33,15 +34,22 @@ MAGIC = jnp.array(
 
 @jit
 def _two_qubit_local_invariants(U):
-    # same as qiskit.synthesis.local_invariance.two_qubit_local_invariants
+    # from qiskit.synthesis.two_qubit.local_invariance import two_qubit_local_invariants
     Um = MAGIC.conj().T.dot(U.dot(MAGIC))
     det_um = jnp.complex128(jnp.linalg.det(Um))
     M = jnp.dot(Um.T, Um)
-    m_tr2 = jnp.trace(M)
-    m_tr2 *= m_tr2
-    G1 = m_tr2 / (16 * det_um)
-    G2 = (m_tr2 - jnp.trace(M.dot(M))) / (4 * det_um)
-    return jnp.array([G1.real, G1.imag, G2.real], dtype=jnp.double)
+    t1 = jnp.trace(M)
+    t1s = t1 * t1
+    g1 = t1s / (16.0 * det_um)
+    g2 = (t1s - jnp.trace(M.dot(M))) / (4.0 * det_um)
+    return jnp.array([g1.real, g1.imag, g2.real], dtype=jnp.double)
+    # # Orientation term --------------------------------------------
+    # t2 = jnp.trace(M @ M)
+    # t3 = jnp.trace(M @ M @ M)
+    # delta = t1**3 - 3.0 * t1 * t2 + 2.0 * t3
+    # g4 = jnp.sign(np.imag(delta)) / 4
+
+    # return jnp.array([g1.real, g1.imag, g2.real, g4], dtype=jnp.float64)
 
 
 @jit
@@ -63,7 +71,7 @@ def _rv(v: jnp.ndarray) -> jnp.ndarray:
     )
 
     # If the vector’s length is (numerically) zero, return the identity instead.
-    return jnp.where(angle < 1e-16, jnp.eye(2, dtype=jnp.cdouble), rot)
+    return jnp.where(angle < 1e-12, jnp.eye(2, dtype=jnp.cdouble), rot)
 
 
 @jit
@@ -73,7 +81,7 @@ def _objective_function(
     basis_gate: jnp.ndarray,
     target_inv: jnp.ndarray,
 ):
-    U = basis_gate @ jnp.kron(_rv(x[:3]), _rv(x[3:])) @ prefix_op
+    U = basis_gate @ jnp.kron(_rv(x[:3]), _rv(x[3:6])) @ prefix_op
     construct_inv = _two_qubit_local_invariants(U)
     # return (target_inv - construct_inv) ** 2
     return target_inv - construct_inv  # faster
@@ -158,18 +166,18 @@ class SegmentNumericSynthesizer:
                     best_residual = residual_norm
                     best_params = j_attempt.params
 
-                if logger.isEnabledFor(logging.DEBUG):
-                    logger.debug(
-                        f"[{label.upper()} {i + 1}/{restarts}] "
-                        f"residual={residual_array} (‖residual‖={residual_norm:.2e}, nfev={nfev})"
-                    )
+                # if logger.isEnabledFor(logging.DEBUG):
+                #     logger.debug(
+                #         f"[{label.upper()} {i + 1}/{restarts}] "
+                #         f"residual={residual_array} (‖residual‖={residual_norm:.2e}, nfev={nfev})"
+                #     )
 
                 if jnp.all(jnp.abs(residual_array) <= CONV_TOL):
-                    if logger.isEnabledFor(logging.DEBUG):
-                        logger.debug(
-                            f"=> Success on [{label.upper()} {i + 1}] "
-                            f"(componentwise |residual| ≤ {CONV_TOL:.1e})"
-                        )
+                    # if logger.isEnabledFor(logging.DEBUG):
+                    #     logger.debug(
+                    #         f"=> Success on [{label.upper()} {i + 1}] "
+                    #         f"(componentwise |residual| ≤ {CONV_TOL:.1e})"
+                    #     )
                     success_nfev += nfev
                     success = True
                     success_label = label
@@ -193,6 +201,7 @@ class SegmentNumericSynthesizer:
                 start_idx=easy_restarts,
             )
 
+        # XXX, messy way to get an attribute from a class used statically
         SegmentNumericSynthesizer._segment_stats.append((success_attempt or -1))
 
         ##############
@@ -208,16 +217,7 @@ class SegmentNumericSynthesizer:
                     f"❌ LM synthesis FAILED after {easy_restarts + hard_restarts} attempts "
                     f"(total_nfev={total_nfev}, best residual={best_residual:.2e}) in {elapsed_time:.3f}s"
                 )
-        #############
-
         return np.array(best_params)
-        # return {
-        #     "params": np.array(best_params),
-        #     # "residuals": residual_history,  # e.g., list of floats
-        #     "success": success,
-        #     "success_attempt": success_attempt,
-        #     "success_label": success_label,
-        # }
 
     # NOTE, in principle this could be computed in parallel
     @staticmethod
@@ -253,40 +253,34 @@ class SegmentNumericSynthesizer:
                 target,
                 easy_restarts=easy_attempts,
                 hard_restarts=hard_attempts,
-                seed=i,
             )
             segment_sols.append(segment_sol)
 
-            # # ######################################
-            # # # # XXX DEBUG only (slow)
-            # if logger.isEnabledFor(logging.DEBUG):
-            #     from qiskit.synthesis.two_qubit import TwoQubitWeylDecomposition
+            # ######################################
+            # # # XXX DEBUG only (slow)
+            if (
+                logger.isEnabledFor(logging.DEBUG)
+                and SegmentNumericSynthesizer._segment_stats[-1] == -1  # failed
+            ):
+                from qiskit._accelerate.two_qubit_decompose import weyl_coordinates
 
-            #     # piece back to see what the segment looks like
-            #     U = (
-            #         np.array(g_op)
-            #         @ np.kron(_rv(segment_sol[:3]), _rv(segment_sol[3:]))
-            #         @ np.array(c_op)
-            #     )
-            #     construct_inv = _two_qubit_local_invariants(U)
-            #     qiskit_weyl = TwoQubitWeylDecomposition(U)
-            #     logger.debug(
-            #         f"constructed (qiskit convention): {qiskit_weyl.a}, {qiskit_weyl.b}, {qiskit_weyl.c}"
-            #     )
-            #     qiskit_weyl2 = TwoQubitWeylDecomposition(
-            #         invariant_list[i].canonical_matrix
-            #     )
-            #     logger.debug(
-            #         f"target (qiskit convention): {qiskit_weyl2.a}, {qiskit_weyl2.b}, {qiskit_weyl2.c}"
-            #     )
-            #     logger.debug(
-            #         f"Segment {i} constructed invariant: {construct_inv} (target: {target})"
-            #     )
-            #     logger.debug(
-            #         f"Segment {i} constructed monodromy: {GateInvariants.from_unitary(U).monodromy} "
-            #         f"(target: {invariant_list[i].monodromy})"
-            #     )
-            # # # ######################################
+                # piece back to see what the segment looks like
+                U = (
+                    np.array(g_op)
+                    @ np.kron(_rv(segment_sol[:3]), _rv(segment_sol[3:6]))
+                    @ np.array(c_op)
+                )
+                U_inv = GateInvariants.from_unitary(U)
+                logger.debug(f"constructed makh: {U_inv.makhlin}")
+                logger.debug(f"target makh: {invariant_list[i].makhlin}")
+                logger.debug(f"rho(t) makh: {invariant_list[i].rho_reflect.makhlin}")
+                logger.debug(f"constructed weyl: {U_inv.weyl}")
+                logger.debug(f"target weyl: {invariant_list[i].weyl}")
+                logger.debug(f"rho(t) weyl: {invariant_list[i].rho_reflect.weyl}")
+                logger.debug(f"constructed logspec: {U_inv.logspec}")
+                logger.debug(f"target logspec: {invariant_list[i].logspec}")
+                logger.debug(f"rho(t) logspec: {invariant_list[i].rho_reflect.logspec}")
+            # # ######################################
 
         return segment_sols
 
@@ -335,7 +329,7 @@ class SegmentNumericSynthesizer:
         for idx, params in enumerate(segment_sols, start=1):
             # (a) inner local RVs
             rv0 = RVGate(*params[:3])
-            rv1 = RVGate(*params[3:])
+            rv1 = RVGate(*params[3:6])
 
             dag.apply_operation_back(rv0, [qreg[1]])
             dag.apply_operation_back(rv1, [qreg[0]])
