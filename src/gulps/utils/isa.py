@@ -15,13 +15,31 @@ logger = logging.getLogger(__name__)
 # NOTE this is useful for tiebreakers between fractional parts
 # example 2 iswaps versus 4 sqrtiswaps both cost 4
 # with adjustment it is 2+2eps versus 2+4eps
-COST_1Q = 0  # adjust offset cost for 1Q gate layers
+
+from monodromy.haar import distance_polynomial_integrals
+
+
+def expected_haar_and_depth(coverage_set, chatty=False):
+    """Simple modification to monodromy.haar.expected_cost"""
+    integrals = distance_polynomial_integrals(coverage_set, chatty=chatty)
+    expected_cost = 0
+    expected_depth = 0
+
+    for polytope in coverage_set:
+        expected_cost += polytope.cost * integrals[tuple(polytope.operations)][0]
+        expected_depth += (
+            len(polytope.instructions) * integrals[tuple(polytope.operations)][0]
+        )
+
+    return expected_cost, expected_depth
 
 
 class ISAInvariants:
     """Base class for ISA invariants."""
 
     identity_inv = GateInvariants(logspec=(0.0, 0.0, 0.0, 0.0))
+    # FIXME
+    DEFAULT_COST_1Q = 1e-5  # adjust offset cost for 1Q gate layers
 
     def __init__(
         self,
@@ -29,6 +47,7 @@ class ISAInvariants:
         costs: List[float],
         names: List[str] | None = None,
         precompute_polytopes: bool = False,
+        single_qubit_cost: float = DEFAULT_COST_1Q,
     ):
         if not gate_set:
             raise ValueError("gate_set can't be empty.")
@@ -43,6 +62,7 @@ class ISAInvariants:
             raise ValueError("gate_set must contain unique GateInvariants.")
 
         self.cost_dict = {g: c for g, c in zip(self.gate_set, costs)}
+        self.single_qubit_cost = single_qubit_cost
         self._precompute_polytopes = precompute_polytopes
         if precompute_polytopes:
             self._build_coverage_set()
@@ -65,7 +85,7 @@ class ISAInvariants:
                 if sequence and self.cost_dict[gate] < self.cost_dict[sequence[-1]]:
                     continue
                 new_sequence = sequence + [gate]
-                new_cost = cost + self.cost_dict[gate] + COST_1Q
+                new_cost = cost + self.cost_dict[gate] + self.single_qubit_cost
                 heapq.heappush(priority_queue, (new_cost, next(counter), new_sequence))
 
             if len(sequence) >= 2:
@@ -76,7 +96,7 @@ class ISAInvariants:
             *[g.unitary for g in self.gate_set],
             costs=[self.cost_dict[g] for g in self.gate_set],
             names=[f"{g.name}_{i}" for i, g in enumerate(self.gate_set)],
-            single_qubit_cost=COST_1Q,
+            single_qubit_cost=self.single_qubit_cost,
             instructions=self.gate_set,
         )
 
@@ -169,4 +189,8 @@ class ISAInvariants:
     #     self._ineq_matrix = np.array(unique_inequalities)
     #     self._eq_matrix = np.array(unique_equalities)
     #     self._subpolytope_to_ineq = subpolytope_to_ineq
+    #     self._subpolytope_to_eq = subpolytope_to_eq
+    #     self._subpolytope_to_eq = subpolytope_to_eq
+    #     self._subpolytope_to_eq = subpolytope_to_eq
+    #     self._subpolytope_to_eq = subpolytope_to_eq
     #     self._subpolytope_to_eq = subpolytope_to_eq
