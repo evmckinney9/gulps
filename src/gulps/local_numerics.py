@@ -34,22 +34,24 @@ MAGIC = jnp.array(
 
 @jit
 def _two_qubit_local_invariants(U):
-    # from qiskit.synthesis.two_qubit.local_invariance import two_qubit_local_invariants
+    from qiskit.synthesis.two_qubit.local_invariance import two_qubit_local_invariants
+
     Um = MAGIC.conj().T.dot(U.dot(MAGIC))
     det_um = jnp.complex128(jnp.linalg.det(Um))
     M = jnp.dot(Um.T, Um)
     t1 = jnp.trace(M)
     t1s = t1 * t1
+    t2 = jnp.trace(M @ M)
+    # t3 = jnp.trace(M @ M @ M)
     g1 = t1s / (16.0 * det_um)
-    g2 = (t1s - jnp.trace(M.dot(M))) / (4.0 * det_um)
+    g2 = (t1s - t2) / (4.0 * det_um)
     return jnp.array([g1.real, g1.imag, g2.real], dtype=jnp.double)
     # # Orientation term --------------------------------------------
-    # t2 = jnp.trace(M @ M)
-    # t3 = jnp.trace(M @ M @ M)
-    # delta = t1**3 - 3.0 * t1 * t2 + 2.0 * t3
-    # g4 = jnp.sign(np.imag(delta)) / 4
-
-    # return jnp.array([g1.real, g1.imag, g2.real, g4], dtype=jnp.float64)
+    # Continuous orientation moment  (breaks the symmetry)
+    # delta_im = jnp.imag(t1**3 - 3.0 * t1 * t2 + 2.0 * t3)
+    # # Normalise to match g-scales (~1): divide by 16*|det_um|
+    # g4 = 1e-6 * delta_im / (16.0 * jnp.abs(det_um))
+    # return jnp.array([g1.real, g1.imag, g2.real, g4], dtype=jnp.double)
 
 
 @jit
@@ -81,20 +83,36 @@ def _objective_function(
     basis_gate: jnp.ndarray,
     target_inv: jnp.ndarray,
 ):
-    U = basis_gate @ jnp.kron(_rv(x[:3]), _rv(x[3:6])) @ prefix_op
+    U = (
+        basis_gate
+        # @ jnp.kron(
+        #     jnp.array([[0.0 + 0.0j, 0.0 - 1.0j], [0.0 + 1.0j, 0.0 + 0.0j]]),
+        #     jnp.eye(2, dtype=jnp.cdouble),
+        # )
+        @ jnp.kron(_rv(x[:3]), _rv(x[3:6]))
+        # @ jnp.kron(
+        #     jnp.array([[0.0 + 0.0j, 1.0 + 0.0j], [1.0 + 0.0j, 0.0 + 0.0j]]),
+        #     jnp.array([[0.0 + 0.0j, 0.0 - 1.0j], [0.0 + 1.0j, 0.0 + 0.0j]]),
+        # )
+        @ prefix_op
+    )
     construct_inv = _two_qubit_local_invariants(U)
     # return (target_inv - construct_inv) ** 2
-    return target_inv - construct_inv  # faster
+    return target_inv - construct_inv
+    # return (target_inv - construct_inv) + 0.0 * target_inv
 
 
 EASY_LM = LevenbergMarquardt(
     residual_fun=_objective_function,
     solver=solve_cg,
+    xtol=1e-6,  # 1e-3
+    gtol=1e-6,  # 1e-3
+    damping_parameter=1e-6,  # 1e-4
+    maxiter=128,
+    tol=A_TOL,
     implicit_diff=False,
     materialize_jac=True,
     jit=True,
-    maxiter=256,
-    tol=A_TOL,  # stops early if parameter updates get small
 )
 
 HARD_LM = LevenbergMarquardt(
@@ -128,6 +146,7 @@ class SegmentNumericSynthesizer:
     ):
         start_time = time.time()
         j_target_inv = jnp.array(target, dtype=jnp.double)
+
         j_prefix = jnp.array(c_op, dtype=jnp.complex128)
         j_gate = jnp.array(g_op, dtype=jnp.complex128)
 
@@ -166,18 +185,18 @@ class SegmentNumericSynthesizer:
                     best_residual = residual_norm
                     best_params = j_attempt.params
 
-                # if logger.isEnabledFor(logging.DEBUG):
-                #     logger.debug(
-                #         f"[{label.upper()} {i + 1}/{restarts}] "
-                #         f"residual={residual_array} (‖residual‖={residual_norm:.2e}, nfev={nfev})"
-                #     )
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug(
+                        f"[{label.upper()} {i + 1}/{restarts}] "
+                        f"residual={residual_array} (‖residual‖={residual_norm:.2e}, nfev={nfev})"
+                    )
 
                 if jnp.all(jnp.abs(residual_array) <= CONV_TOL):
-                    # if logger.isEnabledFor(logging.DEBUG):
-                    #     logger.debug(
-                    #         f"=> Success on [{label.upper()} {i + 1}] "
-                    #         f"(componentwise |residual| ≤ {CONV_TOL:.1e})"
-                    #     )
+                    if logger.isEnabledFor(logging.DEBUG):
+                        logger.debug(
+                            f"=> Success on [{label.upper()} {i + 1}] "
+                            f"(componentwise |residual| ≤ {CONV_TOL:.1e})"
+                        )
                     success_nfev += nfev
                     success = True
                     success_label = label
@@ -224,8 +243,8 @@ class SegmentNumericSynthesizer:
     def _synthesize_segments(
         gate_list: list[GateInvariants],
         invariant_list: list[GateInvariants],
-        easy_attempts: int,
-        hard_attempts: int,
+        easy_attempts: int = 8,
+        hard_attempts: int = 16,
     ) -> list[np.ndarray]:
         # gate list given as G1, G2, ..., Gn as Operator
         # invariant list given as C1, C2, ..., Cn as 3-tuple floats (monodromy)
@@ -242,8 +261,10 @@ class SegmentNumericSynthesizer:
             )
             # c_op = invariant_list[i - 1].canonical_matrix
 
-            # target = mono_coordinates_to_makhlin(*invariant_list[i])
-            target = invariant_list[i].makhlin
+            # XXX FIXME temporary, use function instaed of makhlin while I am
+            # messing around with the definition of the invariants
+            # target = invariant_list[i].makhlin
+            target = _two_qubit_local_invariants(invariant_list[i].canonical_matrix)
 
             # solve for segment
             SegmentNumericSynthesizer._segment_stats = []
@@ -260,7 +281,7 @@ class SegmentNumericSynthesizer:
             # # # XXX DEBUG only (slow)
             if (
                 logger.isEnabledFor(logging.DEBUG)
-                and SegmentNumericSynthesizer._segment_stats[-1] == -1  # failed
+                # and SegmentNumericSynthesizer._segment_stats[-1] == -1  # failed
             ):
                 from qiskit._accelerate.two_qubit_decompose import weyl_coordinates
 

@@ -34,18 +34,21 @@ class GulpsDecomposer:
         costs: List[float],
         names: List[str] | None = None,
         precompute_polytopes: bool = True,
+        isa: ISAInvariants | None = None,
     ):
-        if not gate_set:
-            raise ValueError("gate_set can't be empty.")
+        if isa:
+            self.isa = isa
+        else:
+            if not gate_set:
+                raise ValueError("gate_set can't be empty.")
 
-        self.isa = ISAInvariants(
-            gate_set=gate_set,
-            costs=costs,
-            names=names,
-            precompute_polytopes=precompute_polytopes,
-        )
+            self.isa = ISAInvariants(
+                gate_set=gate_set,
+                costs=costs,
+                names=names,
+                precompute_polytopes=precompute_polytopes,
+            )
         self._numerics = SegmentNumericSynthesizer()
-        self._constraint_cache = {}
 
     def _eval_edge_case(
         self, target: GateInvariants, return_dag: bool
@@ -166,7 +169,7 @@ class GulpsDecomposer:
         target: Union[np.ndarray, Gate],
         return_dag: bool = False,
         log_output: bool = False,
-        easy_attempts: int = 4,
+        easy_attempts: int = 8,
         hard_attempts: int = 16,
     ) -> QuantumCircuit | DAGCircuit:
         true_target = GateInvariants.from_unitary(target)

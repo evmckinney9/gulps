@@ -19,19 +19,21 @@ logger = logging.getLogger(__name__)
 from monodromy.haar import distance_polynomial_integrals
 
 
-def expected_haar_and_depth(coverage_set, chatty=False):
+def expected_costs(coverage_set, chatty=False):
     """Simple modification to monodromy.haar.expected_cost"""
     integrals = distance_polynomial_integrals(coverage_set, chatty=chatty)
     expected_cost = 0
     expected_depth = 0
+    expected_index = 0
 
-    for polytope in coverage_set:
+    for i, polytope in enumerate(coverage_set):
         expected_cost += polytope.cost * integrals[tuple(polytope.operations)][0]
         expected_depth += (
             len(polytope.instructions) * integrals[tuple(polytope.operations)][0]
         )
+        expected_index += i * integrals[tuple(polytope.operations)][0]
 
-    return expected_cost, expected_depth
+    return expected_cost, expected_depth, expected_index
 
 
 class ISAInvariants:
