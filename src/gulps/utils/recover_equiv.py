@@ -64,22 +64,16 @@ def recover_local_equivalence(
         k1 = B.K2r.conj().T @ T.K2r
         return k1, k2, k3, k4, (T.global_phase - B.global_phase)
 
-    # 2) symmetry case: target=(a,b,b), basis=(a,b,-b)?
-    # ab_match = np.isclose(a1, a2, atol=tol) and np.isclose(b1, b2, atol=tol)
-    # target_abb = np.isclose(c1, b1, atol=tol)
-    # basis_abmb = np.isclose(c2, -b2, atol=tol)
-    # if ab_match and target_abb and basis_abmb:
-
-    ab_match = np.isclose(a1, a2, atol=tol) and np.isclose(b1, b2, atol=tol)
+    # 2) rho reflection case: target=(a,b,c), basis=(pi/2-a,b,-c)?
+    # if a1==a2 or a1 == pi/2 - a2
+    # and b==b
+    # and c1=-c2
     if (
-        ab_match
-        and np.isclose(abs(c1), b1, atol=tol)
-        and np.isclose(abs(c2), b2, atol=tol)
+        (np.isclose(a1, a2, atol=tol) or np.isclose(a1, np.pi / 2 - a2, atol=tol))
+        and np.isclose(b1, b2, atol=tol)
+        and np.isclose(c1, -c2, atol=tol)
     ):
-        logger.debug(
-            "Detected (a,b,±b) vs (a,b,∓b) symmetry; inserting Pauli corrections."
-        )
-
+        logger.debug("Detected rho reflect; inserting Pauli corrections.")
         P0 = YGate().to_matrix()  # pre on qubit 0
         Q0 = XGate().to_matrix()  # post on qubit 0
         Q1 = ZGate().to_matrix()  # post on qubit 1

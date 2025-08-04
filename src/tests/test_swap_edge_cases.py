@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 from qiskit import QuantumCircuit
-from qiskit.circuit.library import SwapGate, XXPlusYYGate, iSwapGate
+from qiskit.circuit.library import CXGate, SwapGate, XXPlusYYGate, iSwapGate
 from qiskit.quantum_info import Operator, average_gate_fidelity, random_unitary
 
 from gulps.gulps_decomposer import GulpsDecomposer
@@ -25,6 +25,20 @@ def test_swap(decomposer_fixture):
     assert fidelity > 1 - 1e-6, f"ISA gate fidelity too low: {fidelity}"
 
 
+def test_mirror_isa():
+    isa = [
+        (CXGate().power(1 / 2), 1 / 2, "sqrt2cx"),
+        (iSwapGate().power(1 / 2), 1 / 2, "sqrt2iswap"),
+        (SwapGate(), 0.0, "swap"),
+    ]
+    gate_set, costs, names = zip(*isa)
+    decomposer = GulpsDecomposer(gate_set=gate_set, costs=costs, names=names)
+    u = random_unitary(4, seed=0)
+    v = decomposer(u)
+    fid = average_gate_fidelity(Operator(u), Operator(v))
+    assert fid > 1 - 1e-6, f"Fidelity too low: {fid}"
+
+
 def test_swap_into_fsim():
     """Issue #2"""
 
@@ -39,8 +53,8 @@ def test_swap_into_fsim():
         costs=[1.0],
     )
     u = SwapGate()
-    v = Operator(decomposer(u))
-    fid = average_gate_fidelity(u, v)
+    v = decomposer(u)
+    fid = average_gate_fidelity(Operator(u), Operator(v))
     assert fid > 1 - 1e-6, f"Fidelity too low: {fid}"
 
 
@@ -48,8 +62,8 @@ def test_random_mirror_into_sq3iswap():
     """Issue #3"""
     decomposer = GulpsDecomposer([iSwapGate().power(1 / 3), SwapGate()], [1 / 3, 0.0])
     u = random_unitary(4, seed=10)
-    v = Operator(decomposer(u))
-    fid = average_gate_fidelity(u, v)
+    v = decomposer(u)
+    fid = average_gate_fidelity(Operator(u), Operator(v))
     assert fid > 1 - 1e-6, f"Fidelity too low: {fid}"
     assert fid > 1 - 1e-6, f"Fidelity too low: {fid}"
     assert fid > 1 - 1e-6, f"Fidelity too low: {fid}"

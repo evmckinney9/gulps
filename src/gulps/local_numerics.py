@@ -360,8 +360,28 @@ class SegmentNumericSynthesizer:
 
             # (c) recover local equivalence → CAN(C_i)
             # XXX TODO, unnecessary dag conversions?
-            can_op = invariant_list[idx].canonical_matrix
+            # can_op = invariant_list[idx].canonical_matrix
+            # TODO, move this inside recover_local_equivalence?
             current_op = Operator(dag_to_circuit(dag)).to_matrix()
+            current_inv = GateInvariants.from_unitary(current_op)
+            can_inv = invariant_list[idx]
+            can_op = can_inv.canonical_matrix
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(f"starting from weyl: {current_inv.weyl}")
+                logger.debug(f"recovering to weyl {can_inv.weyl} ")
+            # if np.allclose(can_inv.monodromy, current_inv.monodromy, rtol=1e-9):
+            #     can_op = can_inv.canonical_matrix
+            #     logger.debug(f"recovering to weyl {can_inv.weyl}")
+            # elif np.allclose(
+            #     can_inv.rho_reflect.monodromy, current_inv.monodromy, rtol=1e-9
+            # ):
+            #     can_op = can_inv.rho_reflect.canonical_matrix
+            #     logger.debug(f"recovering to rho weyl {can_inv.rho_reflect.weyl}")
+            # else:
+            #     raise ValueError(
+            #         f"Current invariant {current_inv} does not match "
+            #         f"target invariant {can_inv} or its rho-reflect."
+            #     )
 
             # on last iteration, recover to decomposition target instead of CAN
             if idx == len(segment_sols) and target is not None:
@@ -371,6 +391,11 @@ class SegmentNumericSynthesizer:
 
             else:
                 k1, k2, k3, k4, gphase = recover_local_equivalence(can_op, current_op)
+
+            if logger.isEnabledFor(logging.DEBUG):
+                after_recovery_op = Operator(dag_to_circuit(dag)).to_matrix()
+                after_recovery_inv = GateInvariants.from_unitary(after_recovery_op)
+                logger.debug(f"finished at weyl {after_recovery_inv.weyl} ")
 
             dag.global_phase += gphase
             # prepend k1 tensor k2

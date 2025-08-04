@@ -150,13 +150,12 @@ class GulpsDecomposer:
         if sentence_out is None:
             raise RuntimeError("No valid ISA sentence found!.")
 
-        # TODO
         # FIXME, the condition seems to be optimized ISA dependent(?)
         # # FIXME, rho_bool should be used to determine if the LP required a reflection
-        if not target_in_ac2:  # and intermediates[-1] != target_inv:
-            # if intermediates[-1] != target_inv:
-            logger.debug("Trying reflection of intermediates")
-            intermediates = [x.rho_reflect for x in intermediates]
+        # if intermediates[-1] != target_inv:
+        #     logger.debug("Trying reflection of intermediates")
+        #     intermediates = [x.rho_reflect for x in intermediates]
+        # if not target_in_ac2:  # and intermediates[-1] != target_inv:
         # logger.debug("trying norm logspec ac2")
         # intermediates = [
         #     GateInvariants(normalize_logspec_AC2(g.logspec)) for g in intermediates
