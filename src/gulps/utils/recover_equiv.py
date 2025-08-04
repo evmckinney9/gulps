@@ -86,7 +86,7 @@ def recover_local_equivalence(
 
     # 3) cannot recover
     diffs = np.abs([a1 - a2, b1 - b2, c1 - c2])
-    # raise ValueError(f"Cannot recover local equivalence; Weyl differences {diffs}")
+    raise ValueError(f"Cannot recover local equivalence; Weyl differences {diffs}")
     # proceed like normal
     logger.warning(
         f"Cannot recover local equivalence; Weyl differences {diffs}. Proceeding with best effort."

@@ -42,11 +42,11 @@ def _two_qubit_local_invariants(U):
     t1 = jnp.trace(M)
     t1s = t1 * t1
     t2 = jnp.trace(M @ M)
-    # t3 = jnp.trace(M @ M @ M)
     g1 = t1s / (16.0 * det_um)
     g2 = (t1s - t2) / (4.0 * det_um)
     return jnp.array([g1.real, g1.imag, g2.real], dtype=jnp.double)
     # # Orientation term --------------------------------------------
+    # t3 = jnp.trace(M @ M @ M)
     # Continuous orientation moment  (breaks the symmetry)
     # delta_im = jnp.imag(t1**3 - 3.0 * t1 * t2 + 2.0 * t3)
     # # Normalise to match g-scales (~1): divide by 16*|det_um|
@@ -99,7 +99,6 @@ def _objective_function(
     construct_inv = _two_qubit_local_invariants(U)
     # return (target_inv - construct_inv) ** 2
     return target_inv - construct_inv
-    # return (target_inv - construct_inv) + 0.0 * target_inv
 
 
 EASY_LM = LevenbergMarquardt(
@@ -118,11 +117,11 @@ EASY_LM = LevenbergMarquardt(
 HARD_LM = LevenbergMarquardt(
     residual_fun=_objective_function,
     solver=solve_cg,
+    maxiter=2048,
+    tol=0.0,  # never gives up until maxiter
     implicit_diff=False,
     materialize_jac=True,
     jit=True,
-    maxiter=2048,
-    tol=0.0,  # never gives up until maxiter
 )
 
 
@@ -185,11 +184,11 @@ class SegmentNumericSynthesizer:
                     best_residual = residual_norm
                     best_params = j_attempt.params
 
-                if logger.isEnabledFor(logging.DEBUG):
-                    logger.debug(
-                        f"[{label.upper()} {i + 1}/{restarts}] "
-                        f"residual={residual_array} (‖residual‖={residual_norm:.2e}, nfev={nfev})"
-                    )
+                # if logger.isEnabledFor(logging.DEBUG):
+                #     logger.debug(
+                #         f"[{label.upper()} {i + 1}/{restarts}] "
+                #         f"residual={residual_array} (‖residual‖={residual_norm:.2e}, nfev={nfev})"
+                #     )
 
                 if jnp.all(jnp.abs(residual_array) <= CONV_TOL):
                     if logger.isEnabledFor(logging.DEBUG):
@@ -333,19 +332,6 @@ class SegmentNumericSynthesizer:
         # first basis gate
         dag.apply_operation_back(gate_list[0].unitary, qreg[0:2])
 
-        ## NOTE we skip local equiv recovery on first segment
-        ## because c_op[0] is already gate_list[0].unitary
-        # can_op = invariant_list[0].canonical_matrix
-        # current_op = Operator(dag_to_circuit(dag)).to_matrix()
-        # k1, k2, k3, k4, gphase = recover_local_equivalence(can_op, current_op)
-        # dag.global_phase += gphase
-        # # prepend k1 tensor k2
-        # dag.apply_operation_front(UnitaryGate(k1), [qreg[0]])
-        # dag.apply_operation_front(UnitaryGate(k2), [qreg[1]])
-        # # append  k3 tensor k4
-        # dag.apply_operation_back(UnitaryGate(k3), [qreg[0]])
-        # dag.apply_operation_back(UnitaryGate(k4), [qreg[1]])
-
         # iterate over every remaining segment
         for idx, params in enumerate(segment_sols, start=1):
             # (a) inner local RVs
@@ -360,8 +346,6 @@ class SegmentNumericSynthesizer:
 
             # (c) recover local equivalence → CAN(C_i)
             # XXX TODO, unnecessary dag conversions?
-            # can_op = invariant_list[idx].canonical_matrix
-            # TODO, move this inside recover_local_equivalence?
             current_op = Operator(dag_to_circuit(dag)).to_matrix()
             current_inv = GateInvariants.from_unitary(current_op)
             can_inv = invariant_list[idx]
@@ -369,26 +353,12 @@ class SegmentNumericSynthesizer:
             if logger.isEnabledFor(logging.DEBUG):
                 logger.debug(f"starting from weyl: {current_inv.weyl}")
                 logger.debug(f"recovering to weyl {can_inv.weyl} ")
-            # if np.allclose(can_inv.monodromy, current_inv.monodromy, rtol=1e-9):
-            #     can_op = can_inv.canonical_matrix
-            #     logger.debug(f"recovering to weyl {can_inv.weyl}")
-            # elif np.allclose(
-            #     can_inv.rho_reflect.monodromy, current_inv.monodromy, rtol=1e-9
-            # ):
-            #     can_op = can_inv.rho_reflect.canonical_matrix
-            #     logger.debug(f"recovering to rho weyl {can_inv.rho_reflect.weyl}")
-            # else:
-            #     raise ValueError(
-            #         f"Current invariant {current_inv} does not match "
-            #         f"target invariant {can_inv} or its rho-reflect."
-            #     )
 
             # on last iteration, recover to decomposition target instead of CAN
             if idx == len(segment_sols) and target is not None:
                 k1, k2, k3, k4, gphase = recover_local_equivalence(
                     target.unitary, current_op
                 )
-
             else:
                 k1, k2, k3, k4, gphase = recover_local_equivalence(can_op, current_op)
 

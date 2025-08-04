@@ -125,15 +125,14 @@ class GulpsDecomposer:
         alcove_target = GateInvariants.from_unitary(
             target_inv.unitary, enforce_alcove=True
         )
-        target_in_ac2 = alcove_target == target_inv
 
         if self.isa._precompute_polytopes:
             sentence, rho_bool = self.isa.polytope_lookup(alcove_target)
 
             if sentence is None:
                 raise RuntimeError("No precomputed ISA sentence found for target.")
-            sentence_out, intermediates, lp_rho = self._try_lp(
-                sentence, alcove_target, rho_bool=rho_bool, log_output=log_output
+            sentence_out, intermediates, _ = self._try_lp(
+                sentence, target_inv, rho_bool=rho_bool, log_output=log_output
             )
         else:
             for sentence in self.isa.enumerate():
@@ -141,7 +140,7 @@ class GulpsDecomposer:
                 if sum(gate.strength for gate in sentence) < target_inv.strength:
                     continue
 
-                sentence_out, intermediates, lp_rho = self._try_lp(
+                sentence_out, intermediates, _ = self._try_lp(
                     sentence, alcove_target, log_output=log_output
                 )
                 if sentence_out is not None:
@@ -150,8 +149,7 @@ class GulpsDecomposer:
         if sentence_out is None:
             raise RuntimeError("No valid ISA sentence found!.")
 
-        # FIXME, the condition seems to be optimized ISA dependent(?)
-        # # FIXME, rho_bool should be used to determine if the LP required a reflection
+        # target_in_ac2 = alcove_target == target_inv
         # if intermediates[-1] != target_inv:
         #     logger.debug("Trying reflection of intermediates")
         #     intermediates = [x.rho_reflect for x in intermediates]

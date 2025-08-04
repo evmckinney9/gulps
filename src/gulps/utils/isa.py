@@ -80,9 +80,13 @@ class ISAInvariants:
             cost, _, sequence = heapq.heappop(priority_queue)
 
             if len(sequence) == max_depth:
-                break
+                continue
 
             for gate in self.gate_set:
+                # skip if trying to reuse a zero-cost gate already in the sequence
+                # used for example with SWAP-mirrors, cost 0.0 basis gates
+                if self.cost_dict[gate] == 0.0 and gate in sequence:
+                    continue
                 # enforce monotonic sequence cost order
                 if sequence and self.cost_dict[gate] < self.cost_dict[sequence[-1]]:
                     continue
