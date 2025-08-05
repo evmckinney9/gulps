@@ -14,7 +14,7 @@ from scipy.optimize import minimize
 
 # from os import getpid
 
-_MAX_NUM_LAYERS = 6
+_MAX_NUM_LAYERS = 18
 optimise1qgates = Optimize1qGates()
 
 

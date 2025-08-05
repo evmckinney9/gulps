@@ -12,7 +12,7 @@ from gulps.utils.invariants import GateInvariants
 from tests.fixtures.isas import get_all_test_isas
 
 
-def test_cx_iswap_on_hard_seeds():
+def test_cx_iswap_on_slow_seeds():
     isa = [
         (CXGate(), 1.0, "cx"),
         (CXGate().power(1 / 2), 1 / 2, "sqrt2cx"),
@@ -22,8 +22,8 @@ def test_cx_iswap_on_hard_seeds():
     gate_set, costs, names = zip(*isa)
     decomposer = GulpsDecomposer(gate_set=gate_set, costs=costs, names=names)
 
-    hard_seeds = [956, 587, 891, 217, 330, 244, 781, 594, 996, 437]
-    for seed in hard_seeds:
+    slow_seeds = [956, 587, 891, 217, 330, 244, 781, 594, 996, 437]
+    for seed in slow_seeds:
         target_unitary = random_unitary(4, seed=seed)
         output_circuit = decomposer._run(target_unitary)
 
@@ -36,15 +36,15 @@ def test_cx_iswap_on_hard_seeds():
         )
 
 
-def test_sq4iswap_on_hard_seeds():
+def test_sq4iswap_on_slow_seeds():
     isa = [
         (iSwapGate().power(1 / 4), 1 / 4, "sqrt4iswap"),
     ]
     gate_set, costs, names = zip(*isa)
     decomposer = GulpsDecomposer(gate_set=gate_set, costs=costs, names=names)
 
-    hard_seeds = [638, 437, 386, 529, 16, 627, 674, 718, 189, 261]
-    for seed in hard_seeds:
+    slow_seeds = [638, 437, 386, 529, 16, 627, 674, 718, 189, 261]
+    for seed in slow_seeds:
         target_unitary = random_unitary(4, seed=seed)
         output_circuit = decomposer._run(target_unitary)
 
@@ -57,15 +57,15 @@ def test_sq4iswap_on_hard_seeds():
         )
 
 
-def test_sq2iswap_on_hard_seeds():
+def test_sq2iswap_on_slow_seeds():
     isa = [
         (iSwapGate().power(1 / 2), 1 / 2, "sqrt2iswap"),
     ]
     gate_set, costs, names = zip(*isa)
     decomposer = GulpsDecomposer(gate_set=gate_set, costs=costs, names=names)
 
-    hard_seeds = [984, 573, 781, 244, 217, 324, 627, 690, 117]
-    for seed in hard_seeds:
+    slow_seeds = [984, 573, 781, 244, 217, 324, 627, 690, 117]
+    for seed in slow_seeds:
         target_unitary = random_unitary(4, seed=seed)
         output_circuit = decomposer._run(target_unitary)
 

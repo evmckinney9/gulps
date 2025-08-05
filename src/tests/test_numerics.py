@@ -1,22 +1,22 @@
-# test_decomposer_numerics.py
+# # test_decomposer_numerics.py
 
-import numpy as np
-import pytest
-from qiskit.quantum_info import Operator
+# import numpy as np
+# import pytest
+# from qiskit.quantum_info import Operator
 
-from gulps.gulps_decomposer import GulpsDecomposer
-from gulps.utils.invariants import GateInvariants
-from gulps.utils.logging_config import logger
-from tests.fixtures.circuits import sampled_reachable_target
-from tests.fixtures.isas import get_all_test_isas
+# from gulps.gulps_decomposer import GulpsDecomposer
+# from gulps.utils.invariants import GateInvariants
+# from gulps.utils.logging_config import logger
+# from tests.fixtures.circuits import sampled_reachable_target
+# from tests.fixtures.isas import get_all_test_isas
 
-N_tests = 4
+# N_tests = 4
 
 
-@pytest.fixture(params=get_all_test_isas())
-def decomposer_fixture(request):
-    gates, costs = request.param
-    return GulpsDecomposer(gates, costs, precompute_polytopes=True)
+# @pytest.fixture(params=get_all_test_isas())
+# def decomposer_fixture(request):
+#     gates, costs = request.param
+#     return GulpsDecomposer(gates, costs, precompute_polytopes=True)
 
 
 # def test_segment_synthesis(decomposer_fixture, sampled_reachable_target):

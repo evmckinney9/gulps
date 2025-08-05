@@ -166,8 +166,8 @@ class GulpsDecomposer:
         target: Union[np.ndarray, Gate],
         return_dag: bool = False,
         log_output: bool = False,
-        easy_attempts: int = 8,
-        hard_attempts: int = 16,
+        easy_attempts: int = 4,
+        hard_attempts: int = 8,
     ) -> QuantumCircuit | DAGCircuit:
         true_target = GateInvariants.from_unitary(target)
 
