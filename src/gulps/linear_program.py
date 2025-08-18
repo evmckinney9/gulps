@@ -12,11 +12,14 @@ from scipy.optimize import linprog
 from gulps.utils.invariants import LEN_GATE_INVARIANTS, GateInvariants
 from gulps.utils.qlr import len_qlr, qlr_inequalities
 
-# id_inv = GateInvariants(logspec=(0.0, 0.0, 0.0, 0.0))
-
 
 class MinimalOrderedISAConstraints:
-    """Minimal LP constraints for ordered, defined ISA sequences."""
+    """Minimal LP constraints for ordered, defined ISA sequences.
+
+    This is specialized assuming a fixed sentence of constant Gs.
+    (a) G contributions can be moved to RHS (b_i)
+    (b) C_1 is trivially G_1
+    """
 
     _ci_block, _gi_block, _ciplus1_block, _bi = qlr_inequalities
 
@@ -76,7 +79,6 @@ class MinimalOrderedISAConstraints:
             # NOTE, try eps here but if causes problems maybe need to go to next enumerated sentence
             if np.all(-5e-7 <= self.b_ub):  # 0<=self.b_ub
                 intermediate_invariants = (
-                    # id_inv,
                     self.isa_sequence[0],
                     self._target_def,
                 )
@@ -108,7 +110,6 @@ class MinimalOrderedISAConstraints:
 
         # Build full intermediate sequence
         intermediate_invariants = (
-            # id_inv,
             self.isa_sequence[0],
             *lp_invariants,
             self._target_def,

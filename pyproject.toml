@@ -25,6 +25,7 @@ dependencies = [
 dev = [
     "matplotlib",
     "SciencePlots",
+    "LovelyPlots",
     "ipykernel",
     "pre-commit",
     "pylatexenc",

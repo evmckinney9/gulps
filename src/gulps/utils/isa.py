@@ -70,7 +70,7 @@ class ISAInvariants:
             self._build_coverage_set()
 
     def enumerate(
-        self, max_depth: int = 10
+        self, max_depth: int = 32
     ) -> Generator[List[GateInvariants], None, None]:
         """Generate all ordered gate sequences up to max_depth."""
         counter = itertools.count()  # acts as cost tie-breaker
