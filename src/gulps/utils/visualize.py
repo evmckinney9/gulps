@@ -44,7 +44,7 @@ def render_path(
     #         for p in self.mono_points
     #     ]
     # trajectory_invariants.insert(0, GateInvariants(logspec=(0.0, 0.0, 0.0, 0.0)))
-    traj_points = [g.weyl for g in trajectory_invariants]
+    traj_points = [abs(g.weyl) for g in trajectory_invariants]
     traj_points.insert(0, (0.0, 0.0, 0.0))  # Start at origin
 
     # Set up the 3D plot

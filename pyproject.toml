@@ -16,6 +16,7 @@ dependencies = [
     "weylchamber @ git+https://github.com/evmckinney9/weylchamber.git",
     "qiskit",
     "qiskit-algorithms",
+    "qiskit-optimization[cplex]",
     "qutip",
     "monodromy @ git+https://github.com/evmckinney9/monodromy.git",
     "jaxopt",
