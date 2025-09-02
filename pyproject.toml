@@ -16,13 +16,12 @@ dependencies = [
     "weylchamber @ git+https://github.com/evmckinney9/weylchamber.git",
     "qiskit",
     "qiskit-algorithms",
-    "qiskit-optimization[cplex]",
     "qutip",
     "monodromy @ git+https://github.com/evmckinney9/monodromy.git",
     "jaxopt",
 ]
-
 [project.optional-dependencies]
+cplex = ["qiskit-optimization[cplex]"]
 dev = [
     "matplotlib",
     "SciencePlots",
@@ -67,3 +66,4 @@ profile = "black"
 
 [tool.distutils.bdist_wheel]
 py_limited_api = "cp39"
+
