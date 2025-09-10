@@ -11,6 +11,20 @@ from gulps.utils.invariants import GateInvariants
 # color_map = {gate: color for gate, color in zip(self.gate_set, colors)}
 
 
+def scatter_plot(invariant_list: List[GateInvariants]):
+    """Scatter plot of a list of GateInvariants in the Weyl chamber."""
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection="3d", computed_zorder=False)
+    w = WeylChamber()
+    ax.set_proj_type("persp")
+    w.labels = {}
+    w.render(ax)
+
+    points = np.array([abs(g.weyl) for g in invariant_list])
+    ax.scatter(points[:, 0], points[:, 1], points[:, 2], zorder=1)
+    return fig, ax
+
+
 def render_path(
     trajectory_invariants: List[GateInvariants],
 ):

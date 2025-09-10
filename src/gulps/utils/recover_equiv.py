@@ -46,8 +46,8 @@ def recover_local_equivalence(
     """
     # Weyl decompose both unitaries
     spec = None
-    T = TwoQubitWeylDecomposition(U_target, fidelity=1.0, _specialization=spec)
-    B = TwoQubitWeylDecomposition(U_basis, fidelity=1.0, _specialization=spec)
+    T = TwoQubitWeylDecomposition(U_target, _specialization=spec)
+    B = TwoQubitWeylDecomposition(U_basis, _specialization=spec)
 
     a1, b1, c1 = T.a, T.b, T.c
     a2, b2, c2 = B.a, B.b, B.c

@@ -17,26 +17,3 @@ class Sqrt4iSwapGate(ConstantGate, QubitGate):
             [0.0 + 0.0j, 0.0 + 0.0j, 0.0 + 0.0j, 1.0 + 0.0j],
         ]
     )
-
-
-class Sqrt4CXGate(ConstantGate, QubitGate):
-    _num_qudits = 2
-    _qasm_name = "sq4cx"
-    _utry = UnitaryMatrix(
-        [
-            [1.0 + 0.0j, 0.0 + 0.0j, 0.0 + 0.0j, 0.0 + 0.0j],
-            [
-                0.0 + 0.0j,
-                0.85355339 + 0.35355339j,
-                0.0 + 0.0j,
-                0.14644661 - 0.35355339j,
-            ],
-            [0.0 + 0.0j, 0.0 + 0.0j, 1.0 + 0.0j, 0.0 + 0.0j],
-            [
-                0.0 + 0.0j,
-                0.14644661 - 0.35355339j,
-                0.0 + 0.0j,
-                0.85355339 + 0.35355339j,
-            ],
-        ]
-    )
