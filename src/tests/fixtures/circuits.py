@@ -21,9 +21,9 @@ def sampled_reachable_target():
         intermediates = []
 
         for i, gate in enumerate(sampled_sentence):
-            p = ParameterVector(f"p_{i}", 3)
+            p = ParameterVector(f"p_{i}", 6)
             qc.rv(p[0], p[1], p[2], 0)
-            qc.rv(p[0], p[1], p[2], 1)
+            qc.rv(p[3], p[4], p[5], 1)
             qc.append(gate.unitary, [0, 1])
 
             # Get current intermediate unitary and convert to invariant
@@ -35,9 +35,9 @@ def sampled_reachable_target():
             intermediates.append(GateInvariants.from_unitary(current_unitary))
 
         # Final layer of 1Q gates
-        p = ParameterVector("p_final", 3)
+        p = ParameterVector("p_final", 6)
         qc.rv(p[0], p[1], p[2], 0)
-        qc.rv(p[0], p[1], p[2], 1)
+        qc.rv(p[3], p[4], p[5], 1)
 
         qc.assign_parameters(
             {param: np.random.uniform(-np.pi, np.pi) for param in qc.parameters},
