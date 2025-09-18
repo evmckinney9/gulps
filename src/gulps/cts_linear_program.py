@@ -61,6 +61,8 @@ class ContinuousISAConstraints:
         offset=1e-6,
     ):
         self.N = sequence_length
+        if self.N < 2:
+            raise ValueError("sequence_length must be at least 2")
         self.B = base.monodromy
         self.offset = offset
         self.model = self._create_model()
@@ -69,7 +71,7 @@ class ContinuousISAConstraints:
 
     def set_target(self, target_gate: GateInvariants, rho_bool: bool = False):
         if rho_bool:
-            self._target_def = target_gate.rho_reflect().monodromy
+            self._target_def = target_gate.rho_reflect.monodromy
         else:
             self._target_def = target_gate.monodromy
 
@@ -113,7 +115,8 @@ class ContinuousISAConstraints:
 
         # ---- prune trailing zeros ----
         tol = max(self.offset, 1e-12)
-        zero_index = next((i for i, k in enumerate(ks) if k <= tol), self.N)
+        nz = [i for i, k in enumerate(ks) if k > tol]
+        zero_index = (max(nz) + 1) if nz else 0
 
         gi_list = gi_list[:zero_index]
         intermediate_invariants = intermediate_invariants[:zero_index]
@@ -125,7 +128,7 @@ class ContinuousISAConstraints:
         # Define variables, constraints, and objective here
         # STEP 1. CREATE ALL VARIABLES
         # Variables
-        self.k_vars = [m.continuous_var(lb=0, ub=1) for _ in range(self.N)]
+        self.k_vars = m.semicontinuous_var_list(self.N, lb=0.1, ub=1)
         self.gi_nested = [
             m.continuous_var_list(3, lb=-1.0, ub=1.0) for _ in range(self.N)
         ]
@@ -145,7 +148,7 @@ class ContinuousISAConstraints:
         self._qlr_constraints(m)
 
         # STEP 4. OBJECTIVE FUNCTION
-        # primary: minimize total mass  ∑ k_i
+        # primary: minimize total fractional gate cost ∑ k_i
         # secondary (ε tie-breaker): penalize later k's more to zero the tail
         eps = self.offset  # tiny (e.g., 1e-9)
         w = [2.0**i for i in range(self.N)]  # strong tail emphasis with k[i] >= k[i+1]
