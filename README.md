@@ -113,6 +113,8 @@ See more:
  - https://threeplusone.com/pubs/on_gates.pdf
  - https://chromotopy.org/latex/papers/xx-synthesis.pdf
  - https://github.com/qiskit-advocate/qamp-spring-23/issues/33
+ - https://github.com/Qiskit/qiskit/pull/9375
  - https://weylchamber.readthedocs.io/en/latest/readme.html
+
 
 
