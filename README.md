@@ -108,4 +108,11 @@ Output unitary weyl invariants: (np.float64(0.44173763), np.float64(0.34153949),
 ```
 ![final](images/final.png)
 
+___
+See more:
+ - https://threeplusone.com/pubs/on_gates.pdf
+ - https://chromotopy.org/latex/papers/xx-synthesis.pdf
+ - https://github.com/qiskit-advocate/qamp-spring-23/issues/33
+ - https://weylchamber.readthedocs.io/en/latest/readme.html
+
 
