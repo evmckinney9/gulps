@@ -29,6 +29,10 @@ class GateInvariants:
         unitary: Optional[np.ndarray] = None,
         rho_reflect: Optional["GateInvariants"] = None,
     ):
+        # XXX
+        # if logspec is a np.ndarray, convert to tuple
+        if isinstance(logspec, np.ndarray):
+            logspec = tuple(logspec.tolist())
         if len(logspec) == LEN_GATE_INVARIANTS:
             logspec = logspec + (-1.0 * sum(logspec),)
         self.logspec = logspec
@@ -176,6 +180,11 @@ class GateInvariants:
         # Round to 15-digit precision and convert to integers for stable hashing
         scaled = tuple(np.round(np.array(self.monodromy) / 1e-15).astype(int))
         return hash(scaled)
+
+    def plot(self):
+        from gulps.utils.visualize import scatter_plot
+
+        return scatter_plot([self])
 
 
 if __name__ == "__main__":
