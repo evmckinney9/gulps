@@ -27,11 +27,10 @@ def expected_costs(coverage_set, chatty=False):
     expected_index = 0
 
     for i, polytope in enumerate(coverage_set):
-        expected_cost += polytope.cost * integrals[tuple(polytope.operations)][0]
-        expected_depth += (
-            len(polytope.instructions) * integrals[tuple(polytope.operations)][0]
-        )
-        expected_index += i * integrals[tuple(polytope.operations)][0]
+        haar_vol = integrals[tuple(polytope.operations)][0]
+        expected_cost += polytope.cost * haar_vol
+        expected_depth += len(polytope.instructions) * haar_vol
+        expected_index += i * haar_vol
 
     return expected_cost, expected_depth, expected_index
 
