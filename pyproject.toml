@@ -7,17 +7,16 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gulps"
-description = "transpilation tools to enable experiments using heterogeous ISAs"
+description = "compile arbitrary two-qubit unitaries"
 version = "0.0.2"
 authors = [{ name = "evm9" }]
 requires-python = ">=3.9"
 dependencies = [
-    "numpy",
-    "weylchamber @ git+https://github.com/evmckinney9/weylchamber.git",
     "qiskit",
-    "qiskit-algorithms",
+    "monodromy @ git+https://github.com/qiskit-community/monodromy.git",
+    "weylchamber",
     "qutip",
-    "monodromy @ git+https://github.com/evmckinney9/monodromy.git",
+    "numpy",
     "jaxopt",
 ]
 [project.optional-dependencies]
@@ -33,14 +32,7 @@ dev = [
     "snakeviz",
     "ipywidgets",
 ]
-format = [
-    "pre-commit",
-    "black[jupyter]",
-    "isort",
-    "tomli",
-    "ruff",
-    "docformatter[tomli]",
-]
+format = ["pre-commit", "ruff"]
 test = ["pytest"]
 
 [tool.ruff]
@@ -66,4 +58,3 @@ profile = "black"
 
 [tool.distutils.bdist_wheel]
 py_limited_api = "cp39"
-
