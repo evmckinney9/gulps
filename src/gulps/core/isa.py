@@ -8,13 +8,10 @@ from monodromy.coverage import gates_to_coverage
 from monodromy.polytopes import ConvexPolytope
 from qiskit.circuit import Gate
 
-from gulps.utils.invariants import GateInvariants
+from gulps import GateInvariants
 
 logger = logging.getLogger(__name__)
 
-# NOTE this is useful for tiebreakers between fractional parts
-# example 2 iswaps versus 4 sqrtiswaps both cost 4
-# with adjustment it is 2+2eps versus 2+4eps
 
 from monodromy.haar import distance_polynomial_integrals
 
@@ -39,7 +36,9 @@ class ISAInvariants:
     """Base class for ISA invariants."""
 
     identity_inv = GateInvariants(logspec=(0.0, 0.0, 0.0, 0.0))
-    # FIXME
+    # NOTE this is useful for tiebreakers between fractional parts
+    # example 2 iswaps versus 4 sqrtiswaps both cost 4
+    # with adjustment it is 2+2eps versus 2+4eps
     DEFAULT_COST_1Q = 1e-5  # adjust offset cost for 1Q gate layers
 
     def __init__(
@@ -194,6 +193,10 @@ class ISAInvariants:
     #     self._ineq_matrix = np.array(unique_inequalities)
     #     self._eq_matrix = np.array(unique_equalities)
     #     self._subpolytope_to_ineq = subpolytope_to_ineq
+    #     self._subpolytope_to_eq = subpolytope_to_eq
+    #     self._subpolytope_to_eq = subpolytope_to_eq
+    #     self._subpolytope_to_eq = subpolytope_to_eq
+    #     self._subpolytope_to_eq = subpolytope_to_eq
     #     self._subpolytope_to_eq = subpolytope_to_eq
     #     self._subpolytope_to_eq = subpolytope_to_eq
     #     self._subpolytope_to_eq = subpolytope_to_eq

@@ -4,8 +4,8 @@ import pytest
 from qiskit.circuit.library import CXGate, SwapGate, XXPlusYYGate, iSwapGate
 from qiskit.quantum_info import random_unitary
 
-from gulps.gulps_decomposer import GulpsDecomposer
-from gulps.utils.invariants import GateInvariants
+from gulps.core.invariants import GateInvariants
+from gulps.synthesis.gulps_decomposer import GulpsDecomposer
 
 
 def get_all_test_isas():

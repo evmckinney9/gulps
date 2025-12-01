@@ -4,9 +4,9 @@
 # import pytest
 # from qiskit.quantum_info import Operator
 
-# from gulps.gulps_decomposer import GulpsDecomposer
-# from gulps.utils.invariants import GateInvariants
-# from gulps.utils.logging_config import logger
+# from gulps.synthesis.gulps_decomposer import GulpsDecomposer
+# from gulps.core.invariants import GateInvariants
+# from gulps import logger
 # from tests.fixtures.circuits import sampled_reachable_target
 # from tests.fixtures.isas import get_all_test_isas
 

@@ -1,23 +1,22 @@
+"""Gulps Decomposer module."""
+
 import logging
 import time
-from itertools import product
 from typing import List, Union
 
 import numpy as np
-from monodromy.coordinates import normalize_logspec_AC2
 from qiskit import QuantumCircuit
 from qiskit.circuit import Gate
 from qiskit.circuit.library import UnitaryGate
 from qiskit.converters import circuit_to_dag
 from qiskit.dagcircuit import DAGCircuit
-from qiskit.quantum_info import Operator
 
-from gulps.utils.invariants import GateInvariants
-from gulps.utils.isa import ISAInvariants
-from gulps.utils.logging_config import logger
-from gulps.utils.recover_equiv import recover_local_equivalence
+from gulps import GateInvariants
+from gulps._internal.logging_config import logger
+from gulps.core.isa import ISAInvariants
+from gulps.linear_program import MinimalOrderedISAConstraints
+from gulps.synthesis.recover_equiv import recover_local_equivalence
 
-from .linear_program import MinimalOrderedISAConstraints
 from .local_numerics import SegmentNumericSynthesizer
 
 logger = logging.getLogger(__name__)
@@ -25,6 +24,7 @@ logger = logging.getLogger(__name__)
 
 class GulpsDecomposer:
     """Decompose a two-qubit unitary using a monodromy LP and numeric segment synthesis.
+
     Gate sentences are drawn from a fixed gate set and enumerated up to a specified depth.
     """
 
@@ -53,7 +53,7 @@ class GulpsDecomposer:
     def _eval_edge_case(
         self, target: GateInvariants, return_dag: bool
     ) -> QuantumCircuit | None:
-        """Return an exact synthesis if the target is locally equivalent to a basis gate.
+        """Return an exact synthesis if the target is locally equivalent to any basis gate.
 
         This handles edge cases where the target is exactly a gate in the ISA (up to local unitaries),
         including rho-reflected versions. Works even if polytope precomputation is disabled.
@@ -110,8 +110,7 @@ class GulpsDecomposer:
         constraints.set_target(target, rho_bool=not rho_bool)
         sentence_out, intermediates = constraints.solve(log_output=log_output)
         if sentence_out is not None:
-            # if LP succeeds with rho-reflection, return the reflected trajectory
-            logger.debug("lp falls back to opposite rho_reflect")
+            logger.debug("lp succeeded on opposite rho_reflect")
             return sentence_out, intermediates, not rho_bool
 
         return None, None, None
@@ -120,8 +119,7 @@ class GulpsDecomposer:
     def _best_decomposition(
         self, target_inv: GateInvariants, log_output: bool = False
     ) -> tuple[List[GateInvariants], List[GateInvariants]]:
-        # assume this is False by default (which means )
-        rho_bool = False
+        rho_bool = False  # assume this is False by default
         alcove_target = GateInvariants.from_unitary(
             target_inv.unitary, enforce_alcove=True
         )

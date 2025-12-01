@@ -5,7 +5,7 @@ from qiskit.dagcircuit import DAGCircuit
 from qiskit.transpiler.basepasses import TransformationPass
 from qiskit.transpiler.passes import Collect2qBlocks, ConsolidateBlocks
 
-from gulps.gulps_decomposer import GulpsDecomposer
+from gulps.synthesis.gulps_decomposer import GulpsDecomposer
 
 # FIXME TODO, hash/cache for the decomposer? avoid constructing it at runtime
 

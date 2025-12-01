@@ -182,7 +182,7 @@ class GateInvariants:
         return hash(scaled)
 
     def plot(self):
-        from gulps.utils.visualize import scatter_plot
+        from gulps.viz.invariant_viz import scatter_plot
 
         return scatter_plot([self])
 

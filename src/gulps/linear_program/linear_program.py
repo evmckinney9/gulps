@@ -9,8 +9,8 @@ from typing import List, Tuple
 import numpy as np
 from scipy.optimize import linprog
 
-from gulps.utils.invariants import LEN_GATE_INVARIANTS, GateInvariants
-from gulps.utils.qlr import len_qlr, qlr_inequalities
+from gulps.core.invariants import LEN_GATE_INVARIANTS, GateInvariants
+from gulps.linear_program.qlr import len_qlr, qlr_inequalities
 
 
 class MinimalOrderedISAConstraints:

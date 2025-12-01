@@ -13,8 +13,8 @@ from qiskit.converters import circuit_to_dag, dag_to_circuit
 from qiskit.dagcircuit import DAGCircuit
 from qiskit.quantum_info import Operator
 
-from gulps.utils.invariants import GateInvariants
-from gulps.utils.recover_equiv import recover_local_equivalence
+from gulps.core.invariants import GateInvariants
+from gulps.synthesis.recover_equiv import recover_local_equivalence
 
 logger = logging.getLogger(__name__)
 
@@ -34,8 +34,7 @@ MAGIC = jnp.array(
 
 @jit
 def _two_qubit_local_invariants(U):
-    from qiskit.synthesis.two_qubit.local_invariance import two_qubit_local_invariants
-
+    # from qiskit.synthesis.two_qubit.local_invariance import two_qubit_local_invariants
     Um = MAGIC.conj().T.dot(U.dot(MAGIC))
     det_um = jnp.complex128(jnp.linalg.det(Um))
     M = jnp.dot(Um.T, Um)

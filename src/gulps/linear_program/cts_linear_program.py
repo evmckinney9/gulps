@@ -4,8 +4,8 @@ import numpy as np
 from docplex.mp.dvar import Var
 from docplex.mp.model import Model
 
-from gulps.utils.invariants import GateInvariants
-from gulps.utils.qlr import len_qlr, qlr_inequalities
+from gulps import GateInvariants
+from gulps.linear_program.qlr import len_qlr, qlr_inequalities
 
 
 class ContinuousISAConstraints:

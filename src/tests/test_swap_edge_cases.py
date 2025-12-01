@@ -6,8 +6,8 @@ from qiskit import QuantumCircuit
 from qiskit.circuit.library import CXGate, SwapGate, XXPlusYYGate, iSwapGate
 from qiskit.quantum_info import Operator, average_gate_fidelity, random_unitary
 
-from gulps.gulps_decomposer import GulpsDecomposer
-from gulps.utils.invariants import GateInvariants
+from gulps.core.invariants import GateInvariants
+from gulps.synthesis.gulps_decomposer import GulpsDecomposer
 from tests.fixtures.isas import get_all_test_isas
 
 

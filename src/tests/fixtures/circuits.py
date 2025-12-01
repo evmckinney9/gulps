@@ -6,7 +6,7 @@ from qiskit import QuantumCircuit
 from qiskit.circuit import ParameterVector
 from qiskit.quantum_info import Operator
 
-from gulps.utils.invariants import GateInvariants
+from gulps.core.invariants import GateInvariants
 
 
 @pytest.fixture

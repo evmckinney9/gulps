@@ -5,8 +5,8 @@ import pytest
 from qiskit.circuit.library import CXGate, XXPlusYYGate, iSwapGate
 from qiskit.quantum_info import random_unitary
 
-from gulps.gulps_decomposer import GulpsDecomposer
-from gulps.utils.invariants import GateInvariants
+from gulps.core.invariants import GateInvariants
+from gulps.synthesis.gulps_decomposer import GulpsDecomposer
 from tests.fixtures.isas import get_all_test_isas
 
 
@@ -30,6 +30,6 @@ def test_lp_agrees_with_polytope_solution(decomposer_fixture):
         sentence_out, intermediates, actual_rho = decomposer_fixture._try_lp(
             sentence, target_inv, rho_bool=rho_bool
         )
-        assert (
-            sentence_out is not None
-        ), "LP failed even though polytope lookup succeeded."
+        assert sentence_out is not None, (
+            "LP failed even though polytope lookup succeeded."
+        )
