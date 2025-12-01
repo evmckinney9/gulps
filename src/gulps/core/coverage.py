@@ -1,0 +1,91 @@
+# from monodromy.coverage import gates_to_coverage
+# NOTE, previously we had modified CircuitPolytope to include instruction metadata.
+# now, we won't modify monodromy.coverage.build_coverage_set
+# instead, we will hold a str->Instruction mapping, handling lookup in gulps
+from fractions import Fraction
+from typing import List
+
+from monodromy.coordinates import unitary_to_monodromy_coordinate
+from monodromy.coverage import (
+    CircuitPolytope,
+    build_coverage_set,
+    deduce_qlr_consequences,
+)
+from monodromy.haar import distance_polynomial_integrals
+from monodromy.static.examples import everything_polytope, exactly, identity_polytope
+from numpy import ndarray
+
+
+def _operation_to_circuit_polytope(
+    unitary: ndarray,
+    op_name: str,
+    cost: float,
+    single_qubit_cost: float = 0.0,
+) -> CircuitPolytope:
+    b_polytope = exactly(
+        *(
+            Fraction(x).limit_denominator(10_000)
+            for x in unitary_to_monodromy_coordinate(unitary)[:-1]
+        )
+    )
+    convex_polytope = deduce_qlr_consequences(
+        target="c",
+        a_polytope=identity_polytope,
+        b_polytope=b_polytope,
+        c_polytope=everything_polytope,
+    )
+
+    return CircuitPolytope(
+        operations=[op_name],
+        # NOTE new convention only counts 1 1Q gate per layer
+        # FIXME, this undercounts, should actually be offset by +2 for exterior layers
+        cost=cost + single_qubit_cost,
+        convex_subpolytopes=convex_polytope.convex_subpolytopes,
+    )
+
+
+def isa_to_coverage(
+    isa: "ISAInvariants",
+    sort=True,
+) -> List[CircuitPolytope]:
+    """Calculates coverage given a basis gate set."""
+    unitaries = [g.unitary for g in isa.gate_set]
+    costs = [isa.cost_dict[g] for g in isa.gate_set]
+    names = [f"{g.name}_{i}" for i, g in enumerate(isa.gate_set)]
+    single_qubit_cost = isa.single_qubit_cost
+
+    operations = [
+        _operation_to_circuit_polytope(
+            unitary=u, op_name=n, cost=c, single_qubit_cost=single_qubit_cost
+        )
+        for u, n, c in zip(unitaries, names, costs)
+    ]
+    coverage_set = build_coverage_set(operations)
+
+    # XXX slightly hacky modification to avoid changing build_coverage_set
+    # for each polytope, we need to attach instruction metadata
+    name_to_instruction = {n: g for n, g in zip(names, isa.gate_set)}
+    for polytope in coverage_set:
+        instructions = [name_to_instruction[op_name] for op_name in polytope.operations]
+        polytope.instructions = instructions
+
+    if sort:
+        return sorted(coverage_set, key=lambda k: k.cost)
+
+    return coverage_set
+
+
+def expected_costs(coverage_set, chatty=False):
+    """Modification to monodromy.haar.expected_cost()."""
+    integrals = distance_polynomial_integrals(coverage_set, chatty=chatty)
+    expected_cost = 0
+    expected_depth = 0
+    expected_index = 0
+
+    for i, polytope in enumerate(coverage_set):
+        haar_vol = integrals[tuple(polytope.operations)][0]
+        expected_cost += polytope.cost * haar_vol
+        expected_depth += len(polytope.instructions) * haar_vol
+        expected_index += i * haar_vol
+
+    return expected_cost, expected_depth, expected_index

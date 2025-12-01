@@ -14,7 +14,8 @@ from qiskit.circuit.library import (
 )
 from qutip import sigmax, sigmay, tensor
 
-from gulps.core.isa import ISAInvariants, expected_costs
+from gulps.core.coverage import expected_costs
+from gulps.core.isa import ISAInvariants
 
 logger = logging.getLogger(__name__)
 

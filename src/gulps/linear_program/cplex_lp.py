@@ -1,3 +1,11 @@
+try:
+    import docplex  # or the precise submodule you need
+except ModuleNotFoundError as exc:
+    raise ImportError(
+        "ContinuousISAConstraints requires the 'cplex' extra. "
+        "Install with `pip install gulps[cplex]`."
+    ) from exc
+
 from typing import List, Optional, Tuple
 
 import numpy as np

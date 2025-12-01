@@ -14,7 +14,7 @@ from qiskit.dagcircuit import DAGCircuit
 from gulps import GateInvariants
 from gulps._internal.logging_config import logger
 from gulps.core.isa import ISAInvariants
-from gulps.linear_program import MinimalOrderedISAConstraints
+from gulps.linear_program.scipy_lp import MinimalOrderedISAConstraints
 from gulps.synthesis.recover_equiv import recover_local_equivalence
 
 from .local_numerics import SegmentNumericSynthesizer
