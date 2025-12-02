@@ -91,4 +91,3 @@ class ISAInvariants:
                 )
                 return convex_polytope.instructions, True
         return None, None
-        return None, None
