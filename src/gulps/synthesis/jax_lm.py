@@ -6,7 +6,7 @@ import jax.numpy as jnp
 import numpy as np
 from jax import config, jit
 from jax.random import PRNGKey, split, uniform
-from jaxopt import LevenbergMarquardt
+from jaxopt import GaussNewton, LevenbergMarquardt
 from jaxopt.linear_solve import solve_cg
 
 from gulps.synthesis.segments_abc import SegmentSolution, SegmentSolver
@@ -92,8 +92,8 @@ def _objective_function(
 
 @dataclass(frozen=True)
 class JaxLMConfig:
-    easy_restarts: int = 8
-    hard_restarts: int = 16
+    easy_restarts: int = 16
+    hard_restarts: int = 4
     conv_tol: float = CONV_TOL
     # could add xtol/gtol/etc here later
 
@@ -118,16 +118,11 @@ class JaxLMSegmentSolver(SegmentSolver):
         self.config = config or JaxLMConfig()
 
         # These are instance attributes instead of module globals.
-        self._easy_lm = LevenbergMarquardt(
+        self._easy_lm = GaussNewton(
             residual_fun=_objective_function,
-            solver=solve_cg,
-            xtol=1e-6,
-            gtol=1e-6,
-            damping_parameter=1e-6,
             maxiter=128,
             tol=A_TOL,
             implicit_diff=False,
-            materialize_jac=True,
             jit=True,
         )
         self._hard_lm = LevenbergMarquardt(
@@ -239,7 +234,7 @@ class JaxLMSegmentSolver(SegmentSolver):
                     if logger.isEnabledFor(logging.DEBUG):
                         logger.debug(
                             f"Segment solver SUCCESS [{attempt.label} attempt {attempt.attempt_index}] "
-                            f"(residual={attempt.residual_norm:.2e}, "
+                            f"(residual norm={attempt.residual_norm:.2e}, "
                             f"nfev={total_nfev}) in {elapsed:.3f}s"
                         )
                     u0, u1 = _params_to_locals(attempt.params)
@@ -263,7 +258,7 @@ class JaxLMSegmentSolver(SegmentSolver):
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug(
                 f"Segment solver FAILED after {total_attempts} attempts "
-                f"(best residual={best_result.residual_norm:.2e}, "
+                f"(best residual norm={best_result.residual_norm:.2e}, "
                 f"nfev={total_nfev}) in {elapsed:.3f}s"
             )
 

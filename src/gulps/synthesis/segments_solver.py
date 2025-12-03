@@ -68,7 +68,7 @@ class SegmentSynthesizer:
 
             if not sol.success:
                 raise RuntimeError(
-                    f"Segment {i} synthesis failed (residual={sol.residual_norm:.2e})."
+                    f"Segment {i} synthesis failed (residual norm={sol.residual_norm:.2e})."
                 )
 
             segment_sols.append(sol)

@@ -31,13 +31,27 @@ class GulpsDecomposer:
 
     def __init__(
         self,
-        gate_set: List[Gate],
-        costs: List[float],
+        gate_set: List[Gate] = None,
+        costs: List[float] = None,
         names: List[str] | None = None,
         precompute_polytopes: bool = True,
         isa: ISAInvariants | None = None,
         segment_solver: SegmentSolver | None = None,
     ):
+        """Initialize the GulpsDecomposer.
+
+        Parameters:
+            gate_set: List of two-qubit Gate objects comprising the ISA (required if isa not provided).
+            costs: List of costs corresponding to gate_set (required if isa not provided).
+            names: Optional list of names for the gates in gate_set.
+            precompute_polytopes: Whether to precompute ISA polytopes for faster lookup.
+            isa: Optional pre-built ISAInvariants instance to use instead of constructing one.
+            segment_solver: Optional SegmentSolver instance used for local segment synthesis.
+        """
+        # gate_set/costs can only be None if isa is provided
+        if not isa and (gate_set is None or costs is None):
+            raise ValueError("Either isa or (gate_set, costs) must be provided.")
+
         if isa:
             self.isa = isa
         else:
