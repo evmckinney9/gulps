@@ -15,9 +15,10 @@ from gulps import GateInvariants
 from gulps._internal.logging_config import logger
 from gulps.core.isa import ISAInvariants
 from gulps.linear_program.scipy_lp import MinimalOrderedISAConstraints
+from gulps.synthesis.jax_lm import JaxLMSegmentSolver
 from gulps.synthesis.recover_equiv import recover_local_equivalence
-
-from .local_numerics import SegmentNumericSynthesizer
+from gulps.synthesis.segments_abc import SegmentSolver
+from gulps.synthesis.segments_solver import SegmentSynthesizer
 
 logger = logging.getLogger(__name__)
 
@@ -30,12 +31,27 @@ class GulpsDecomposer:
 
     def __init__(
         self,
-        gate_set: List[Gate],
-        costs: List[float],
+        gate_set: List[Gate] = None,
+        costs: List[float] = None,
         names: List[str] | None = None,
         precompute_polytopes: bool = True,
         isa: ISAInvariants | None = None,
+        segment_solver: SegmentSolver | None = None,
     ):
+        """Initialize the GulpsDecomposer.
+
+        Parameters:
+            gate_set: List of two-qubit Gate objects comprising the ISA (required if isa not provided).
+            costs: List of costs corresponding to gate_set (required if isa not provided).
+            names: Optional list of names for the gates in gate_set.
+            precompute_polytopes: Whether to precompute ISA polytopes for faster lookup.
+            isa: Optional pre-built ISAInvariants instance to use instead of constructing one.
+            segment_solver: Optional SegmentSolver instance used for local segment synthesis.
+        """
+        # gate_set/costs can only be None if isa is provided
+        if not isa and (gate_set is None or costs is None):
+            raise ValueError("Either isa or (gate_set, costs) must be provided.")
+
         if isa:
             self.isa = isa
         else:
@@ -48,7 +64,9 @@ class GulpsDecomposer:
                 names=names,
                 precompute_polytopes=precompute_polytopes,
             )
-        self._numerics = SegmentNumericSynthesizer()
+        if segment_solver is None:
+            segment_solver = JaxLMSegmentSolver()
+        self._local_synthesis = SegmentSynthesizer(solver=segment_solver)
 
     def _eval_edge_case(
         self, target: GateInvariants, return_dag: bool
@@ -164,8 +182,6 @@ class GulpsDecomposer:
         target: Union[np.ndarray, Gate],
         return_dag: bool = False,
         log_output: bool = False,
-        easy_attempts: int = 4,
-        hard_attempts: int = 8,
     ) -> QuantumCircuit | DAGCircuit:
         true_target = GateInvariants.from_unitary(target)
 
@@ -190,19 +206,17 @@ class GulpsDecomposer:
         if len(sentence_out) < 2:
             raise ValueError("At least two gates are required for segment synthesis.")
 
-        segment_sols = self._numerics._synthesize_segments(
-            sentence_out,
-            intermediates,
-            easy_attempts=easy_attempts,
-            hard_attempts=hard_attempts,
+        segment_sols = self._local_synthesis.synthesize_segments(
+            gate_list=sentence_out,
+            invariant_list=intermediates,
         )
         t2 = time.perf_counter()  # TIMING
 
-        stitched_circuit = self._numerics._stitch_segments(
-            sentence_out,
-            intermediates,
-            segment_sols,
-            true_target,
+        stitched_circuit = self._local_synthesis.stitch_segments(
+            gate_list=sentence_out,
+            invariant_list=intermediates,
+            segment_sols=segment_sols,
+            target=true_target,
             return_dag=return_dag,
         )
         t3 = time.perf_counter()  # TIMING

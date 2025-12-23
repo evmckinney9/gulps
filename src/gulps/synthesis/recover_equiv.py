@@ -121,3 +121,5 @@ if __name__ == "__main__":
     qc.append(UnitaryGate(k3), [0])
     qc.append(UnitaryGate(k4), [1])
     print(average_gate_fidelity(target_gate, Operator(qc)))
+    print(qc.draw())
+    # print("\n.")
