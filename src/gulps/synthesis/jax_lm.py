@@ -39,35 +39,39 @@ def _two_qubit_local_invariants(U):
     g1 = t1s / (16.0 * det_um)
     g2 = (t1s - t2) / (4.0 * det_um)
     return jnp.array([g1.real, g1.imag, g2.real], dtype=jnp.double)
-    # # Orientation term --------------------------------------------
-    # t3 = jnp.trace(M @ M @ M)
-    # Continuous orientation moment  (breaks the symmetry)
-    # delta_im = jnp.imag(t1**3 - 3.0 * t1 * t2 + 2.0 * t3)
-    # # Normalise to match g-scales (~1): divide by 16*|det_um|
-    # g4 = 1e-6 * delta_im / (16.0 * jnp.abs(det_um))
-    # return jnp.array([g1.real, g1.imag, g2.real, g4], dtype=jnp.double)
 
 
 @jit
 def _rv(v: jnp.ndarray) -> jnp.ndarray:
-    """Rotation-vector (RV) single-qubit gate, safe for ‖v‖≈0 and tracer-friendly."""
-    angle = jnp.linalg.norm(v)  # scalar tracer
-    safe_angle = jnp.where(angle < 1e-16, 1.0, angle)  # never zero
-    nx, ny, nz = v / safe_angle
+    """Smooth rotation-vector (RV) single-qubit gate.
+    Implements exp(-i/2 * v·σ) with a numerically stable sinc,
+    no branching, C^∞ everywhere (LM / GN friendly).
+    """
+    a = jnp.linalg.norm(v)  # ||v||
+    half = 0.5 * a
 
-    sin = jnp.sin(angle / 2)
-    cos = jnp.cos(angle / 2)
+    # Stable sinc(x) = sin(x)/x with series near 0
+    def sinc(x):
+        return jnp.where(
+            jnp.abs(x) < 1e-6,
+            1.0 - (x * x) / 6.0 + (x**4) / 120.0,
+            jnp.sin(x) / x,
+        )
 
-    rot = jnp.array(
-        [
-            [cos - 1j * nz * sin, (-ny - 1j * nx) * sin],
-            [(ny - 1j * nx) * sin, cos + 1j * nz * sin],
-        ],
-        dtype=jnp.cdouble,
-    )
+    s = sinc(half)
+    c = jnp.cos(half)
 
-    # If the vector’s length is (numerically) zero, return the identity instead.
-    return jnp.where(angle < 1e-12, jnp.eye(2, dtype=jnp.cdouble), rot)
+    vx, vy, vz = v
+
+    # Pauli matrices
+    X = jnp.array([[0, 1], [1, 0]], dtype=jnp.cdouble)
+    Y = jnp.array([[0, -1j], [1j, 0]], dtype=jnp.cdouble)
+    Z = jnp.array([[1, 0], [0, -1]], dtype=jnp.cdouble)
+
+    H = vx * X + vy * Y + vz * Z
+
+    # exp(-i/2 * v·σ) = cos(a/2) I - i sinc(a/2) (v·σ)/2
+    return c * jnp.eye(2, dtype=jnp.cdouble) - 1j * (0.5 * s) * H
 
 
 def _params_to_locals(params: jnp.ndarray) -> tuple[np.ndarray, np.ndarray]:
