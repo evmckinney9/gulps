@@ -100,9 +100,8 @@ class SegmentSynthesizer:
             if sol.u0 is None or sol.u1 is None:
                 raise RuntimeError(f"Missing locals for segment {idx}")
 
-            # NOTE, endianess is flipping here
-            dag.apply_operation_back(UnitaryGate(sol.u0), [qreg[1]])
-            dag.apply_operation_back(UnitaryGate(sol.u1), [qreg[0]])
+            dag.apply_operation_back(UnitaryGate(sol.u0), [qreg[0]])
+            dag.apply_operation_back(UnitaryGate(sol.u1), [qreg[1]])
 
             dag.apply_operation_back(gate_list[idx].unitary, qreg[0:2])
 
@@ -145,7 +144,7 @@ class SegmentSynthesizer:
         """Optional debugging reconstruction to log invariants."""
         if not logger.isEnabledFor(logging.DEBUG):
             return
-        U = np.array(g_op) @ np.kron(sol.u0, sol.u1) @ np.array(c_op)
+        U = np.array(g_op) @ np.kron(sol.u1, sol.u0) @ np.array(c_op)
         U_inv = GateInvariants.from_unitary(U)
         logger.debug(f"[segment {i}] constructed makh: {U_inv.makhlin}")
         logger.debug(f"[segment {i}] target makh: {target_inv.makhlin}")

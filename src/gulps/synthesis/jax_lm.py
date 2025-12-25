@@ -4,10 +4,10 @@ from dataclasses import dataclass
 
 import jax.numpy as jnp
 import numpy as np
-from jax import config, jit
+from jax import config, device_get, jit
 from jax.random import PRNGKey, split, uniform
 from jaxopt import GaussNewton, LevenbergMarquardt
-from jaxopt.linear_solve import solve_cg
+from jaxopt.linear_solve import solve_lu
 
 from gulps.synthesis.segments_abc import SegmentSolution, SegmentSolver
 
@@ -23,62 +23,61 @@ A_TOL = 1e-9
 
 MAGIC = jnp.array(
     [[1, 0, 0, 1j], [0, 1j, 1, 0], [0, 1j, -1, 0], [1, 0, 0, -1j]],
-    dtype=jnp.cdouble,
+    dtype=jnp.complex128,
 ) / jnp.sqrt(2)
+MAGIC_DAG = MAGIC.conj().T  # precompute once
 
 
 @jit
 def _two_qubit_local_invariants(U):
     # from qiskit.synthesis.two_qubit.local_invariance import two_qubit_local_invariants
-    Um = MAGIC.conj().T.dot(U.dot(MAGIC))
-    det_um = jnp.complex128(jnp.linalg.det(Um))
-    M = jnp.dot(Um.T, Um)
+    Um = MAGIC_DAG @ (U @ MAGIC)
+    det_um = 1.0  # jnp.linalg.det(Um) #XXX enforce this earlier?
+    # det_um = jnp.linalg.det(Um)
+    M = Um.T @ Um
     t1 = jnp.trace(M)
     t1s = t1 * t1
     t2 = jnp.trace(M @ M)
     g1 = t1s / (16.0 * det_um)
     g2 = (t1s - t2) / (4.0 * det_um)
-    return jnp.array([g1.real, g1.imag, g2.real], dtype=jnp.double)
+    return jnp.array([jnp.real(g1), jnp.imag(g1), jnp.real(g2)], dtype=jnp.float64)
+
+
+X = jnp.array([[0, 1], [1, 0]], dtype=jnp.complex128)
+Y = jnp.array([[0, -1j], [1j, 0]], dtype=jnp.complex128)
+Z = jnp.array([[1, 0], [0, -1]], dtype=jnp.complex128)
+I2 = jnp.eye(2, dtype=jnp.complex128)
 
 
 @jit
 def _rv(v: jnp.ndarray) -> jnp.ndarray:
-    """Smooth rotation-vector (RV) single-qubit gate.
-    Implements exp(-i/2 * v·σ) with a numerically stable sinc,
-    no branching, C^∞ everywhere (LM / GN friendly).
-    """
-    a = jnp.linalg.norm(v)  # ||v||
+    a = jnp.linalg.norm(v)
     half = 0.5 * a
 
-    # Stable sinc(x) = sin(x)/x with series near 0
-    def sinc(x):
-        return jnp.where(
-            jnp.abs(x) < 1e-6,
-            1.0 - (x * x) / 6.0 + (x**4) / 120.0,
-            jnp.sin(x) / x,
-        )
-
-    s = sinc(half)
+    # stable sinc(half) = sin(half)/half
+    s = jnp.where(
+        jnp.abs(half) < 1e-6,
+        1.0 - (half * half) / 6.0 + (half**4) / 120.0,
+        jnp.sin(half) / half,
+    )
     c = jnp.cos(half)
 
     vx, vy, vz = v
-
-    # Pauli matrices
-    X = jnp.array([[0, 1], [1, 0]], dtype=jnp.cdouble)
-    Y = jnp.array([[0, -1j], [1j, 0]], dtype=jnp.cdouble)
-    Z = jnp.array([[1, 0], [0, -1]], dtype=jnp.cdouble)
-
     H = vx * X + vy * Y + vz * Z
-
-    # exp(-i/2 * v·σ) = cos(a/2) I - i sinc(a/2) (v·σ)/2
-    return c * jnp.eye(2, dtype=jnp.cdouble) - 1j * (0.5 * s) * H
+    return c * I2 - 1j * (0.5 * s) * H
 
 
 def _params_to_locals(params: jnp.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """Helper to turn RV parameters into two 2x2 unitaries."""
-    u0 = _rv(params[:3])
-    u1 = _rv(params[3:6])
-    return np.array(u0), np.array(u1)
+    u0 = _rv(params[3:6])
+    u1 = _rv(params[:3])
+    return device_get(u0), device_get(u1)
+
+
+@jit
+def kron2(A, B):
+    # (2,2) ⊗ (2,2) -> (4,4)
+    return jnp.einsum("ab,cd->acbd", A, B).reshape(4, 4)
 
 
 @jit
@@ -88,9 +87,8 @@ def _objective_function(
     basis_gate: jnp.ndarray,
     target_inv: jnp.ndarray,
 ):
-    U = basis_gate @ jnp.kron(_rv(x[:3]), _rv(x[3:6])) @ prefix_op
+    U = basis_gate @ kron2(_rv(x[3:6]), _rv(x[:3])) @ prefix_op
     construct_inv = _two_qubit_local_invariants(U)
-    # return (target_inv - construct_inv) ** 2
     return target_inv - construct_inv
 
 
@@ -131,7 +129,7 @@ class JaxLMSegmentSolver(SegmentSolver):
         )
         self._hard_lm = LevenbergMarquardt(
             residual_fun=_objective_function,
-            solver=solve_cg,
+            solver=solve_lu,
             maxiter=2048,
             tol=0.0,  # never gives up until maxiter
             implicit_diff=False,
@@ -153,8 +151,8 @@ class JaxLMSegmentSolver(SegmentSolver):
         j_init = uniform(
             key,
             shape=(6,),
-            minval=-2 * jnp.pi,
-            maxval=2 * jnp.pi,
+            minval=-jnp.pi / 2,
+            maxval=jnp.pi / 2,
         )
 
         j_attempt = lm.run(
@@ -163,12 +161,16 @@ class JaxLMSegmentSolver(SegmentSolver):
             basis_gate=gate,
             target_inv=target_inv,
         )
-        # We need residual_array to test convergence; this blocks anyway.
-        residual_array = j_attempt.state.residual.block_until_ready()
-        residual_norm = float(j_attempt.state.value)
-        nfev = int(j_attempt.state.iter_num)
+        # # We need residual_array to test convergence; this blocks anyway.
+        # residual_array = j_attempt.state.residual.block_until_ready()
+        # residual_norm = float(j_attempt.state.value)
+        # conv = bool(jnp.all(jnp.abs(residual_array) <= self.config.conv_tol))
 
-        conv = bool(jnp.all(jnp.abs(residual_array) <= self.config.conv_tol))
+        # No residual array readback; use objective value only.
+        residual = j_attempt.state.residual  # shape (3,)
+        conv = jnp.max(jnp.abs(residual)) <= self.config.conv_tol
+        residual_norm = jnp.linalg.norm(residual)  # this is a real norm for logging
+        nfev = int(j_attempt.state.iter_num)
 
         return _AttemptResult(
             params=j_attempt.params,
@@ -196,9 +198,9 @@ class JaxLMSegmentSolver(SegmentSolver):
 
         j_prefix = jnp.array(prefix_op, dtype=jnp.complex128)
         j_gate = jnp.array(basis_gate, dtype=jnp.complex128)
-        j_target_inv = _two_qubit_local_invariants(jnp.array(target, dtype=jnp.cdouble))
-
-        # Policy is now expressed as data:
+        j_target_inv = _two_qubit_local_invariants(
+            jnp.array(target, dtype=jnp.complex128)
+        )
         phases = [
             (self._easy_lm, "easy", self.config.easy_restarts),
             (self._hard_lm, "hard", self.config.hard_restarts),
@@ -207,13 +209,17 @@ class JaxLMSegmentSolver(SegmentSolver):
         best_result: _AttemptResult | None = None
         total_attempts = sum(restarts for _, _, restarts in phases)
         total_nfev = 0
-
+        # Pre-split all attempt keys up front.
+        base_key = PRNGKey(rng_seed_base)
+        attempt_keys = split(base_key, total_attempts)
+        key_cursor = 0  # walks through attempt_keys
         start_time = time.perf_counter()
 
         for lm, label, restarts in phases:
             for local_idx in range(restarts):
                 # Derive a fresh subkey for each attempt
-                subkey = PRNGKey(rng_seed_base + total_nfev + local_idx)
+                subkey = attempt_keys[key_cursor]
+                key_cursor += 1
                 attempt = self._run_one_attempt(
                     lm=lm,
                     label=label,
