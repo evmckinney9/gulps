@@ -18,7 +18,7 @@ config.update("jax_enable_x64", True)
 # jax setup and definitions
 # NOTE these are highly-tunable parameters
 # I believe two_qubit_local_invariants only has 8 decimal places of precision
-CONV_TOL = 5e-9
+CONV_TOL = 1e-8
 A_TOL = 1e-9
 
 MAGIC = jnp.array(
@@ -32,8 +32,9 @@ MAGIC_DAG = MAGIC.conj().T  # precompute once
 def _two_qubit_local_invariants(U):
     # from qiskit.synthesis.two_qubit.local_invariance import two_qubit_local_invariants
     Um = MAGIC_DAG @ (U @ MAGIC)
-    det_um = 1.0  # jnp.linalg.det(Um) #XXX enforce this earlier?
-    # det_um = jnp.linalg.det(Um)
+    # det_um = 1.0  # jnp.linalg.det(Um) #XXX enforce this earlier?
+    det_um = jnp.linalg.det(Um)
+    det_um = det_um / jnp.abs(det_um)
     M = Um.T @ Um
     t1 = jnp.trace(M)
     t1s = t1 * t1

@@ -8,6 +8,7 @@ from monodromy.coordinates import (
     positive_canonical_to_monodromy_coordinate,
     unitary_to_monodromy_coordinate,
 )
+from qiskit._accelerate.two_qubit_decompose import two_qubit_local_invariants as tqli_rs
 from qiskit._accelerate.two_qubit_decompose import weyl_coordinates
 from qiskit.circuit import Gate
 from qiskit.circuit.library import UnitaryGate
@@ -108,10 +109,6 @@ class GateInvariants:
 
         Matches the normalized convention from weylchamber.g1g2g3
         """
-        from qiskit._accelerate.two_qubit_decompose import (
-            two_qubit_local_invariants as tqli_rs,
-        )
-
         return tqli_rs(Operator(self.unitary).data)
 
         # U = Operator(self.unitary).data

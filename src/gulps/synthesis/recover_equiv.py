@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 def recover_local_equivalence(
     U_target: np.ndarray,
     U_basis: np.ndarray,
-    tol: float = 5e-4,  # XXX ?
+    tol: float = 1e-5,  # XXX ?
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, float]:
     """Find single-qubit corrections k1, k2, k3, k4 and a global phase so that:.
 

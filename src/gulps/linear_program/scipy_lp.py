@@ -12,6 +12,8 @@ from scipy.optimize import linprog
 from gulps.core.invariants import LEN_GATE_INVARIANTS, GateInvariants
 from gulps.linear_program.qlr import len_qlr, qlr_inequalities
 
+epsilon_lp = 1e-10
+
 
 class MinimalOrderedISAConstraints:
     """Minimal LP constraints for ordered, defined ISA sequences.
@@ -77,7 +79,7 @@ class MinimalOrderedISAConstraints:
         # edge case, if there were no free variables in x_vec
         if len(self.A_ub[0]) == 0:
             # NOTE, try eps here but if causes problems maybe need to go to next enumerated sentence
-            if np.all(-5e-7 <= self.b_ub):  # 0<=self.b_ub
+            if np.all(-10 * epsilon_lp <= self.b_ub):  # 0<=self.b_ub
                 intermediate_invariants = (
                     self.isa_sequence[0],
                     self._target_def,
@@ -94,8 +96,8 @@ class MinimalOrderedISAConstraints:
             options={
                 "disp": log_output,
                 "presolve": True,
-                # "primal_feasibility_tolerance": 1e-7,
-                # "dual_feasibility_tolerance": 1e-7,
+                "primal_feasibility_tolerance": epsilon_lp,
+                "dual_feasibility_tolerance": epsilon_lp,
             },
         )
         if result.success:
