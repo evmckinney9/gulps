@@ -65,15 +65,16 @@ class ContinuousISAConstraints:
     def __init__(
         self,
         base: GateInvariants,
-        sequence_length: int = 8,
+        max_sequence_length: int = 8,
         offset=1e-8,
+        k_lb: float = 0.01,
     ):
-        self.N = sequence_length
+        self.N = max_sequence_length
         if self.N < 2:
             raise ValueError("sequence_length must be at least 2")
         self.B = base.monodromy
         self.offset = offset
-        self.k_lb = 0.01
+        self.k_lb = 0.05 if k_lb < 0.0 else k_lb
         self.model = self._create_model()
         self._target_def: Optional[np.ndarray] = None
         self._target_cts: List = []  # holds the 3 equality constraints for c_N
