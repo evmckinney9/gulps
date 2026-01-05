@@ -20,7 +20,7 @@ class SegmentSolver(ABC):
     Given prefix_op C, basis_gate G, and a target canonical representative,
     solves for single-qubit unitaries u0, u1 such that
 
-        U ≈ G · (u0 ⊗ u1) · C
+        U ≈ G · (u1 ⊗ u0) · C
 
     is locally equivalent to the target (up to invariants).
     """

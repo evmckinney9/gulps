@@ -146,7 +146,11 @@ class GulpsDecomposer:
             sentence, rho_bool = self.isa.polytope_lookup(alcove_target)
 
             if sentence is None:
-                raise RuntimeError("No precomputed ISA sentence found for target.")
+                raise RuntimeError(
+                    "No precomputed ISA sentence found for target. "
+                    "This means the ISA is not universal and your target is unreachable."
+                    "If you believe this is an error, try increasing isa.max_depth for very fine-grained sentences."
+                )
             sentence_out, intermediates, _ = self._try_lp(
                 sentence, target_inv, rho_bool=rho_bool, log_output=log_output
             )
@@ -163,7 +167,11 @@ class GulpsDecomposer:
                     break
 
         if sentence_out is None:
-            raise RuntimeError("No valid ISA sentence found!.")
+            raise RuntimeError(
+                "No valid ISA sentence found! "
+                "This means the ISA is not universal and your target is unreachable."
+                "If you believe this is an error, try increasing isa.max_depth for very fine-grained sentences."
+            )
 
         # target_in_ac2 = alcove_target == target_inv
         # if intermediates[-1] != target_inv:
@@ -206,26 +214,18 @@ class GulpsDecomposer:
         if len(sentence_out) < 2:
             raise ValueError("At least two gates are required for segment synthesis.")
 
-        segment_sols = self._local_synthesis.synthesize_segments(
+        stitched_circuit = self._local_synthesis.synthesize_segments(
             gate_list=sentence_out,
             invariant_list=intermediates,
-        )
-        t2 = time.perf_counter()  # TIMING
-
-        stitched_circuit = self._local_synthesis.stitch_segments(
-            gate_list=sentence_out,
-            invariant_list=intermediates,
-            segment_sols=segment_sols,
             target=true_target,
             return_dag=return_dag,
         )
-        t3 = time.perf_counter()  # TIMING
+        t2 = time.perf_counter()  # TIMING
 
         # Optional: Store or return timing info for analysis
         self.last_timing = {
-            "lp": t1 - t0,
-            "numeric": t2 - t1,
-            "stitch": t3 - t2,
+            "lp_sentence": t1 - t0,
+            "segments": t2 - t1,
         }
 
         return stitched_circuit
