@@ -89,3 +89,84 @@ def expected_costs(coverage_set, chatty=False):
         expected_index += i * haar_vol
 
     return expected_cost, expected_depth, expected_index
+
+
+def analyze_coverage(coverage_set, chatty=False):
+    """Compute comprehensive coverage analysis with a single integral calculation.
+
+    This is more efficient than calling compute_volume_by_cost() and expected_costs()
+    separately, as it only computes distance_polynomial_integrals once.
+
+    Args:
+        coverage_set: List of CircuitPolytope objects.
+        chatty: Whether to print verbose output during integral calculation.
+
+    Returns:
+        dict: Dictionary containing:
+            - 'volume_info': dict mapping cost to (unique_vol, cumulative_vol) tuples
+            - 'expected_cost': float, Haar-averaged cost
+            - 'expected_depth': float, Haar-averaged circuit depth
+            - 'expected_index': float, Haar-averaged position in coverage_set
+            - 'total_coverage': float, total volume covered by all polytopes
+    """
+    # Calculate integrals once (expensive operation)
+    integrals = distance_polynomial_integrals(coverage_set, chatty=chatty)
+
+    # Initialize accumulators
+    volume_by_cost = {}
+    expected_cost = 0.0
+    expected_depth = 0.0
+    expected_index = 0.0
+    total_coverage = 0.0
+
+    # Single pass through coverage_set to compute everything
+    for i, polytope in enumerate(coverage_set):
+        cost = polytope.cost
+        haar_vol = integrals[tuple(polytope.operations)][0]
+
+        # Accumulate for expected values
+        expected_cost += polytope.cost * haar_vol
+        expected_depth += len(polytope.instructions) * haar_vol
+        expected_index += i * haar_vol
+        total_coverage += haar_vol
+
+        # Group volumes by cost (skip zero-cost)
+        if cost == 0:
+            continue
+
+        if cost not in volume_by_cost:
+            volume_by_cost[cost] = 0.0
+        volume_by_cost[cost] += haar_vol
+
+    # Calculate cumulative volumes
+    volume_info = {}
+    cumulative_sum = 0.0
+    for cost in sorted(volume_by_cost.keys()):
+        unique_vol = volume_by_cost[cost]
+        cumulative_sum += unique_vol
+        volume_info[cost] = (unique_vol, cumulative_sum)
+
+    return {
+        "volume_info": volume_info,
+        "expected_cost": expected_cost,
+        "expected_depth": expected_depth,
+        "expected_index": expected_index,
+        "total_coverage": total_coverage,
+    }
+
+
+def print_coverage_report(analysis_result):
+    """Print a formatted report from analyze_coverage() results.
+
+    Args:
+        analysis_result: Dictionary returned by analyze_coverage().
+    """
+    print("=" * 60)
+    print("Coverage Set Statistics (Haar-averaged over SU(4))")
+    print("=" * 60)
+    print(f"Expected Cost:  {analysis_result['expected_cost']:.6f}")
+    print(f"  → Average cost per random 2-qubit unitary")
+    print()
+    print(f"Expected Depth: {analysis_result['expected_depth']:.6f}")
+    print(f"  → Average number of 2-qubit gates")
+    print("=" * 60)

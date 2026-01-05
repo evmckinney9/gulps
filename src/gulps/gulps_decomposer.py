@@ -1,8 +1,8 @@
-"""Gulps Decomposer module."""
+"""Gulps Decomposer module for two-qubit unitary synthesis."""
 
 import logging
 import time
-from typing import List, Union
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 from qiskit import QuantumCircuit
@@ -24,29 +24,53 @@ logger = logging.getLogger(__name__)
 
 
 class GulpsDecomposer:
-    """Decompose a two-qubit unitary using a monodromy LP and numeric segment synthesis.
+    """Decompose two-qubit unitaries optimally into heterogeneous instruction sets.
 
-    Gate sentences are drawn from a fixed gate set and enumerated up to a specified depth.
+    GULPS (Global Unitary Linear Programming Synthesis) combines linear programming
+    over monodromy polytopes with numerical segment synthesis to compile arbitrary
+    two-qubit unitaries into optimal gate sequences from non-standard ISAs.
+
+    The decomposition process:
+        1. Find the cheapest valid gate sentence using polytope lookup or enumeration
+        2. Solve a linear program to determine intermediate invariant targets
+        3. Synthesize each segment using numerical optimization (Levenberg-Marquardt)
+        4. Stitch segments together and recover full unitary equivalence
+
+    Attributes:
+        isa: ISAInvariants object containing gate set, costs, and polytope coverage.
+        last_timing: Dict with timing breakdown of last decomposition (lp_sentence, segments).
+            Units are seconds. Only populated after a successful decomposition.
     """
 
     def __init__(
         self,
-        gate_set: List[Gate] = None,
-        costs: List[float] = None,
-        names: List[str] | None = None,
+        gate_set: Optional[List[Gate]] = None,
+        costs: Optional[List[float]] = None,
+        names: Optional[List[str]] = None,
         precompute_polytopes: bool = True,
-        isa: ISAInvariants | None = None,
-        segment_solver: SegmentSolver | None = None,
+        isa: Optional[ISAInvariants] = None,
+        segment_solver: Optional[SegmentSolver] = None,
     ):
         """Initialize the GulpsDecomposer.
 
-        Parameters:
-            gate_set: List of two-qubit Gate objects comprising the ISA (required if isa not provided).
-            costs: List of costs corresponding to gate_set (required if isa not provided).
+        Args:
+            gate_set: List of two-qubit Gate objects comprising the ISA.
+                Required if isa not provided. All gates must be two-qubit.
+            costs: List of costs corresponding to gate_set. Required if isa not provided.
+                Costs are typically normalized gate durations or error rates.
             names: Optional list of names for the gates in gate_set.
-            precompute_polytopes: Whether to precompute ISA polytopes for faster lookup.
-            isa: Optional pre-built ISAInvariants instance to use instead of constructing one.
-            segment_solver: Optional SegmentSolver instance used for local segment synthesis.
+                Used for debugging logs. Defaults to generic labels if None.
+            precompute_polytopes: Whether to precompute monodromy polytope coverage.
+                When True, enables O(1) sentence lookup. When False, enumerates sentences
+                on-demand. Recommended True for repeated decompositions.
+            isa: Optional pre-built ISAInvariants instance. If provided, gate_set and
+                costs are ignored. Use this to share ISA configuration across decomposers.
+            segment_solver: Optional SegmentSolver for numerical synthesis.
+                Defaults to JaxLMSegmentSolver() if None.
+
+        Raises:
+            ValueError: If neither isa nor (gate_set, costs) are provided.
+            ValueError: If gate_set is empty.
         """
         # gate_set/costs can only be None if isa is provided
         if not isa and (gate_set is None or costs is None):
@@ -70,18 +94,32 @@ class GulpsDecomposer:
 
     def _eval_edge_case(
         self, target: GateInvariants, return_dag: bool
-    ) -> QuantumCircuit | None:
-        """Return an exact synthesis if the target is locally equivalent to any basis gate.
+    ) -> Optional[Union[QuantumCircuit, DAGCircuit]]:
+        """Check if target is locally equivalent to identity or any basis gate.
 
-        This handles edge cases where the target is exactly a gate in the ISA (up to local unitaries),
-        including rho-reflected versions. Works even if polytope precomputation is disabled.
+        This fast path handles edge cases where the target can be synthesized exactly
+        using only single-qubit gates or a single basis gate plus single-qubit corrections.
+        Checks both the target and its rho-reflection.
+
+        Args:
+            target: GateInvariants representation of the target unitary.
+            return_dag: If True, return DAGCircuit instead of QuantumCircuit.
+
+        Returns:
+            Synthesized circuit if an edge case is detected, None otherwise.
+            The circuit has structure: k1⊗k2 · G · k3⊗k4 where G is identity or a basis gate.
+
+        Note:
+            Works even when polytope precomputation is disabled, providing a reliable
+            fallback for trivial cases.
         """
         # Check both the target and its rho-reflection against the ISA
         target_variants = [target, target.rho_reflect]
         for variant in target_variants:
             if variant == self.isa.identity_inv:  # use GateInvariants __eq__
-                # TODO FIXME Hand this to a 1Q decomposer instead?
-                logger.debug("Target is identity, returning empty circuit")
+                # NOTE: Target is locally equivalent to identity - return 1Q corrections only
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug("Target is identity, returning empty circuit")
                 k1, k2, k3, k4, gphase = recover_local_equivalence(
                     target.unitary, self.isa.identity_inv.unitary
                 )
@@ -95,7 +133,8 @@ class GulpsDecomposer:
         for basis_gate in self.isa.gate_set:
             for variant in target_variants:
                 if variant == basis_gate:  # use GateInvariants __eq__
-                    logger.debug("Target is local to a gate in the ISA")
+                    if logger.isEnabledFor(logging.DEBUG):
+                        logger.debug("Target is local to a gate in the ISA")
                     k1, k2, k3, k4, gphase = recover_local_equivalence(
                         target.unitary, basis_gate.unitary
                     )
@@ -115,8 +154,30 @@ class GulpsDecomposer:
         target: GateInvariants,
         rho_bool: bool = False,
         log_output: bool = False,
-    ) -> tuple[Union[List[GateInvariants], None], Union[List[GateInvariants], None]]:
-        """Try solving LP for the sentence with rho-reflection fallback."""
+    ) -> Tuple[
+        Optional[List[GateInvariants]], Optional[List[GateInvariants]], Optional[bool]
+    ]:
+        """Solve linear program to find intermediate invariants for a gate sentence.
+
+        Attempts to solve the LP with the given rho-reflection orientation. If that fails,
+        automatically retries with the opposite orientation.
+
+        Args:
+            sentence: Ordered list of basis gates forming a candidate decomposition.
+            target: Target gate invariants to reach.
+            rho_bool: Initial rho-reflection orientation. If True, uses target.rho_reflect.
+            log_output: If True, enable verbose LP solver output.
+
+        Returns:
+            Tuple of (sentence_out, intermediates, final_rho_bool):
+                - sentence_out: The input sentence if successful, None if LP infeasible
+                - intermediates: List of intermediate GateInvariants if successful, None otherwise
+                - final_rho_bool: The rho orientation that succeeded, None if both failed
+
+        Note:
+            The LP determines a path through monodromy space: I → C₁ → C₂ → ... → target,
+            where each Cᵢ represents the cumulative action after gate i.
+        """
         constraints = MinimalOrderedISAConstraints(sentence)
         constraints.set_target(target, rho_bool=rho_bool)
         sentence_out, intermediates = constraints.solve(log_output=log_output)
@@ -128,15 +189,37 @@ class GulpsDecomposer:
         constraints.set_target(target, rho_bool=not rho_bool)
         sentence_out, intermediates = constraints.solve(log_output=log_output)
         if sentence_out is not None:
-            logger.debug("lp succeeded on opposite rho_reflect")
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug("LP succeeded on opposite rho_reflect")
             return sentence_out, intermediates, not rho_bool
 
         return None, None, None
 
-    # TODO FIXME, handle true vs alcove target differently
     def _best_decomposition(
         self, target_inv: GateInvariants, log_output: bool = False
-    ) -> tuple[List[GateInvariants], List[GateInvariants]]:
+    ) -> Tuple[List[GateInvariants], List[GateInvariants]]:
+        """Find the optimal gate sentence and intermediate invariants for the target.
+
+        Uses either polytope lookup (if precomputed) or sentence enumeration to find
+        the cheapest valid decomposition. The LP determines intermediate targets.
+
+        Args:
+            target_inv: Target gate invariants to decompose.
+            log_output: If True, enable verbose LP solver output.
+
+        Returns:
+            Tuple of (sentence_out, intermediates):
+                - sentence_out: Ordered list of basis gates forming the optimal sentence
+                - intermediates: Corresponding intermediate invariants for each gate
+
+        Raises:
+            RuntimeError: If no valid sentence found (polytope mode) or LP fails for all
+                enumerated sentences.
+
+        Note:
+            In polytope mode, the lookup is against the alcove-normalized target.
+            The LP then solves against the true target to handle orientations correctly.
+        """
         rho_bool = False  # assume this is False by default
         alcove_target = GateInvariants.from_unitary(
             target_inv.unitary, enforce_alcove=True
@@ -147,9 +230,9 @@ class GulpsDecomposer:
 
             if sentence is None:
                 raise RuntimeError(
-                    "No precomputed ISA sentence found for target. "
-                    "This means the ISA is not universal and your target is unreachable."
-                    "If you believe this is an error, try increasing isa.max_depth for very fine-grained sentences."
+                    f"No precomputed ISA sentence found for target with monodromy {alcove_target.monodromy}. "
+                    f"The target may lie outside all polytope coverage. "
+                    f"Try disabling precompute_polytopes or expanding the gate set."
                 )
             sentence_out, intermediates, _ = self._try_lp(
                 sentence, target_inv, rho_bool=rho_bool, log_output=log_output
@@ -168,20 +251,10 @@ class GulpsDecomposer:
 
         if sentence_out is None:
             raise RuntimeError(
-                "No valid ISA sentence found! "
-                "This means the ISA is not universal and your target is unreachable."
-                "If you believe this is an error, try increasing isa.max_depth for very fine-grained sentences."
+                f"No valid ISA sentence found for target with monodromy {alcove_target.monodromy}. "
+                f"All enumerated sentences failed the LP feasibility check. "
+                f"This may indicate insufficient gate set strength or numerical issues."
             )
-
-        # target_in_ac2 = alcove_target == target_inv
-        # if intermediates[-1] != target_inv:
-        #     logger.debug("Trying reflection of intermediates")
-        #     intermediates = [x.rho_reflect for x in intermediates]
-        # if not target_in_ac2:  # and intermediates[-1] != target_inv:
-        # logger.debug("trying norm logspec ac2")
-        # intermediates = [
-        #     GateInvariants(normalize_logspec_AC2(g.logspec)) for g in intermediates
-        # ]
 
         return sentence_out, intermediates
 
@@ -190,7 +263,25 @@ class GulpsDecomposer:
         target: Union[np.ndarray, Gate],
         return_dag: bool = False,
         log_output: bool = False,
-    ) -> QuantumCircuit | DAGCircuit:
+    ) -> Union[QuantumCircuit, DAGCircuit]:
+        """Core decomposition routine.
+
+        Args:
+            target: Two-qubit unitary as 4x4 numpy array or Qiskit Gate.
+            return_dag: If True, return DAGCircuit instead of QuantumCircuit.
+            log_output: If True, enable verbose LP solver output.
+
+        Returns:
+            Quantum circuit implementing the target unitary using the configured ISA.
+
+        Raises:
+            RuntimeError: If no valid sentence found or segment synthesis fails.
+            ValueError: If gate_list and invariant_list have mismatched lengths or < 2 gates.
+
+        Note:
+            Timing information for the last decomposition is stored in self.last_timing
+            with keys 'lp_sentence' and 'segments' (in seconds).
+        """
         true_target = GateInvariants.from_unitary(target)
 
         edge_output = self._eval_edge_case(true_target, return_dag)
@@ -235,7 +326,33 @@ class GulpsDecomposer:
         target: Union[np.ndarray, Gate],
         return_dag: bool = False,
         log_output: bool = False,
-    ) -> QuantumCircuit | DAGCircuit:
+    ) -> Union[QuantumCircuit, DAGCircuit]:
+        """Decompose a two-qubit unitary into the configured instruction set.
+
+        Args:
+            target: Two-qubit unitary as 4x4 numpy array or Qiskit Gate.
+            return_dag: If True, return DAGCircuit instead of QuantumCircuit.
+                Useful for transpiler integration.
+            log_output: If True, enable verbose LP solver output for debugging.
+
+        Returns:
+            Quantum circuit implementing the target unitary using the configured ISA.
+            Single-qubit gates are returned as generic UnitaryGate objects.
+
+        Raises:
+            RuntimeError: If no valid sentence found or segment synthesis fails.
+            ValueError: If target is not a valid two-qubit unitary.
+
+        Examples:
+            >>> from qiskit.circuit.library import iSwapGate
+            >>> from qiskit.quantum_info import random_unitary
+            >>> gate_set = [iSwapGate().power(1/2), iSwapGate().power(1/3)]
+            >>> costs = [0.5, 0.33]
+            >>> decomposer = GulpsDecomposer(gate_set=gate_set, costs=costs)
+            >>> u = random_unitary(4, seed=42)
+            >>> circuit = decomposer(u)
+            >>> print(f"Used {len([op for op in circuit.data if op[0].num_qubits == 2])} 2Q gates")
+        """
         return self._run(
             target=target,
             return_dag=return_dag,

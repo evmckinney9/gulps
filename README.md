@@ -1,4 +1,4 @@
-##  [GULPS](https://c.tenor.com/NAwgHzRfK_wAAAAC/tenor.gif) 
+##  [GULPS](https://c.tenor.com/NAwgHzRfK_wAAAAC/tenor.gif)
  GULPS (Global Unitary Linear Programming Synthesis) is the first open tool that **robustly compiles arbitrary two-qubit unitaries optimally into non-standard instruction sets**.  
 
 Most existing compilers only target CNOT gates. Analytical rules exist for a few special cases — fractional CNOT (XX family), Berkeley (B), and $\sqrt{\text{iSWAP}}$ — but nothing more general. Numerical methods can in principle handle arbitrary gates, but they are slow, unreliable, and do not scale as instruction sets grow.  **GULPS fills this gap** by combining linear programming with lightweight numerics to achieve:  
@@ -85,7 +85,7 @@ The intermediate points break the problem into simpler subproblems, each corresp
 
 We solve for the local one-qubit gates in each segment using a numerical root-finding routine:
 ```python
-example_segment_solutions = decomposer._numerics._synthesize_segments(
+example_segment_solutions = decomposer._local_synthesis._synthesize_segments(
     example_sentence, example_intermediates
 )
 print("Segment solutions:", example_segment_solutions)
@@ -96,7 +96,7 @@ array([-2.49813347, -4.0929992 ,  0.14047136,  2.82952009,  4.63593378, 0.326785
 After solving the individual segments, we apply a final stitching step to handle orietation between segments and to promote local equivalence into global unitary equivalence:
 ```python
 # Recover unitary equivalence by promoting local equivalence
-ret = decomposer._numerics._stitch_segments(
+ret = decomposer._local_synthesis._stitch_segments(
     example_sentence, example_intermediates, example_segment_solutions
 )
 U, V = c1c2c3(example_input), c1c2c3(Operator(ret).data)
@@ -115,7 +115,3 @@ See more:
  - https://github.com/qiskit-advocate/qamp-spring-23/issues/33
  - https://github.com/Qiskit/qiskit/pull/9375
  - https://weylchamber.readthedocs.io/en/latest/readme.html
-
-
-
-

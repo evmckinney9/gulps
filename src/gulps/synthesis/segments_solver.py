@@ -51,8 +51,8 @@ class SegmentSynthesizer:
         self,
         gate_list: List[GateInvariants],
         invariant_list: List[GateInvariants],
+        target: GateInvariants,
         *,
-        target: GateInvariants = None,
         method: Literal["sequential", "batch"] = "batch",
         return_dag: bool = False,
     ) -> QuantumCircuit | DAGCircuit:

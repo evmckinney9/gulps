@@ -37,12 +37,13 @@ def _plot_polytope(circuit_polytope, w, color="red"):
             w.ax.add_collection3d(faces)
 
 
-def _plot_coverage_set(coverage_set, overlap=False):
+def _plot_coverage_set(coverage_set, overlap=False, volume_info=None):
     """Plot a set of 3D polytopes.
 
     Args:
         coverage_set (list): a list of CircuitPolytope objects.
         overlap (bool): If True, all polytopes are drawn on the same plot. If False, each polytope is drawn in a separate subplot.
+        volume_info (dict, optional): Dictionary mapping cost to (unique_volume, cumulative_volume) tuples.
     """
     colors = [
         "red",
@@ -89,6 +90,17 @@ def _plot_coverage_set(coverage_set, overlap=False):
             color = colors[i % len(colors)]
             for circuit_polytope in polytopes:
                 _plot_polytope(circuit_polytope, color=color, w=w)
-            w.ax.set_title(f"Cost: {cost}")
+
+            # Create title with optional volume information
+            if volume_info and cost in volume_info:
+                unique_vol, cumulative_vol = volume_info[cost]
+                title = (
+                    f"Cost: {cost}\n"
+                    f"Unique vol: {unique_vol:.4f}\n"
+                    f"Cumulative vol: {cumulative_vol:.4f}"
+                )
+            else:
+                title = f"Cost: {cost}"
+            w.ax.set_title(title)
 
     plt.show()
