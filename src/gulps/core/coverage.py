@@ -15,6 +15,8 @@ from monodromy.haar import distance_polynomial_integrals
 from monodromy.static.examples import everything_polytope, exactly, identity_polytope
 from numpy import ndarray
 
+from gulps.viz.polytope_viz import plot_coverage_set
+
 
 def _operation_to_circuit_polytope(
     unitary: ndarray,
@@ -75,39 +77,16 @@ def isa_to_coverage(
     return coverage_set
 
 
-def expected_costs(coverage_set, chatty=False):
-    """Modification to monodromy.haar.expected_cost()."""
-    integrals = distance_polynomial_integrals(coverage_set, chatty=chatty)
-    expected_cost = 0
-    expected_depth = 0
-    expected_index = 0
-
-    for i, polytope in enumerate(coverage_set):
-        haar_vol = integrals[tuple(polytope.operations)][0]
-        expected_cost += polytope.cost * haar_vol
-        expected_depth += len(polytope.instructions) * haar_vol
-        expected_index += i * haar_vol
-
-    return expected_cost, expected_depth, expected_index
-
-
-def analyze_coverage(coverage_set, chatty=False):
-    """Compute comprehensive coverage analysis with a single integral calculation.
-
-    This is more efficient than calling compute_volume_by_cost() and expected_costs()
-    separately, as it only computes distance_polynomial_integrals once.
+def coverage_report(coverage_set, chatty=False):
+    """Analyze, plot, and print coverage statistics.
 
     Args:
         coverage_set: List of CircuitPolytope objects.
         chatty: Whether to print verbose output during integral calculation.
 
     Returns:
-        dict: Dictionary containing:
-            - 'volume_info': dict mapping cost to (unique_vol, cumulative_vol) tuples
-            - 'expected_cost': float, Haar-averaged cost
-            - 'expected_depth': float, Haar-averaged circuit depth
-            - 'expected_index': float, Haar-averaged position in coverage_set
-            - 'total_coverage': float, total volume covered by all polytopes
+        dict: Coverage analysis containing volume_info, expected_cost,
+            expected_depth, expected_index, and total_coverage.
     """
     # Calculate integrals once (expensive operation)
     integrals = distance_polynomial_integrals(coverage_set, chatty=chatty)
@@ -146,7 +125,7 @@ def analyze_coverage(coverage_set, chatty=False):
         cumulative_sum += unique_vol
         volume_info[cost] = (unique_vol, cumulative_sum)
 
-    return {
+    report = {
         "volume_info": volume_info,
         "expected_cost": expected_cost,
         "expected_depth": expected_depth,
@@ -154,19 +133,18 @@ def analyze_coverage(coverage_set, chatty=False):
         "total_coverage": total_coverage,
     }
 
+    # Plot
+    plot_coverage_set(coverage_set, volume_info=volume_info)
 
-def print_coverage_report(analysis_result):
-    """Print a formatted report from analyze_coverage() results.
-
-    Args:
-        analysis_result: Dictionary returned by analyze_coverage().
-    """
+    # Print
     print("=" * 60)
     print("Coverage Set Statistics (Haar-averaged over SU(4))")
     print("=" * 60)
-    print(f"Expected Cost:  {analysis_result['expected_cost']:.6f}")
+    print(f"Expected Cost:  {expected_cost:.6f}")
     print(f"  → Average cost per random 2-qubit unitary")
     print()
-    print(f"Expected Depth: {analysis_result['expected_depth']:.6f}")
+    print(f"Expected Depth: {expected_depth:.6f}")
     print(f"  → Average number of 2-qubit gates")
     print("=" * 60)
+
+    return report

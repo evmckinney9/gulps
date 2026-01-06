@@ -95,8 +95,8 @@ def _objective_function(
 
 @dataclass(frozen=True)
 class JaxLMConfig:
-    easy_restarts: int = 8
-    hard_restarts: int = 4
+    easy_restarts: int = 16
+    hard_restarts: int = 0
     conv_tol: float = CONV_TOL
     # could add xtol/gtol/etc here later
 

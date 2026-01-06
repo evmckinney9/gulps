@@ -5,8 +5,33 @@ from monodromy.coordinates import monodromy_to_positive_canonical_polytope
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from weylchamber import WeylChamber
 
+# Maximum columns in subplot grid
+MAX_COLS = 5
 
-def _plot_polytope(circuit_polytope, w, color="red"):
+# Color palette for cost levels
+COLORS = [
+    "red",
+    "green",
+    "blue",
+    "orange",
+    "purple",
+    "cyan",
+    "black",
+    "pink",
+    "brown",
+    "grey",
+]
+
+
+def _plot_polytope(circuit_polytope, ax, w, color="red"):
+    """Plot a single circuit polytope on the given axes.
+
+    Args:
+        circuit_polytope: CircuitPolytope object to plot.
+        ax: Matplotlib 3D axes.
+        w: WeylChamber object.
+        color: Color for the polytope faces.
+    """
     polytope_vertices = (
         monodromy_to_positive_canonical_polytope(circuit_polytope).reduce().vertices
     )
@@ -37,36 +62,42 @@ def _plot_polytope(circuit_polytope, w, color="red"):
             w.ax.add_collection3d(faces)
 
 
-def _plot_coverage_set(coverage_set, overlap=False, volume_info=None):
-    """Plot a set of 3D polytopes.
+def _organize_by_cost(coverage_set):
+    """Group CircuitPolytope objects by their cost.
 
     Args:
-        coverage_set (list): a list of CircuitPolytope objects.
-        overlap (bool): If True, all polytopes are drawn on the same plot. If False, each polytope is drawn in a separate subplot.
-        volume_info (dict, optional): Dictionary mapping cost to (unique_volume, cumulative_volume) tuples.
-    """
-    colors = [
-        "red",
-        "green",
-        "blue",
-        "orange",
-        "purple",
-        "cyan",
-        "black",
-        "pink",
-        "brown",
-        "grey",
-    ]
+        coverage_set: List of CircuitPolytope objects.
 
-    # Preprocess coverage_set to organize CircuitPolytope objects based on their cost
-    organized_set = {}
-    for circuit_polytope in coverage_set:
-        cost = circuit_polytope.cost
+    Returns:
+        dict: Mapping from cost to list of polytopes with that cost.
+              Zero-cost polytopes are excluded.
+    """
+    organized = {}
+    for polytope in coverage_set:
+        cost = polytope.cost
         if cost == 0:
             continue
-        if cost not in organized_set:
-            organized_set[cost] = []
-        organized_set[cost].append(circuit_polytope)
+        if cost not in organized:
+            organized[cost] = []
+        organized[cost].append(polytope)
+    return organized
+
+
+def plot_coverage_set(coverage_set, overlap=False, volume_info=None):
+    """Plot a coverage set of 3D polytopes in the Weyl chamber.
+
+    Args:
+        coverage_set: List of CircuitPolytope objects.
+        overlap: If True, all polytopes are drawn on the same plot.
+            If False, each cost level gets a separate subplot.
+        volume_info: Optional dict mapping cost to (unique_volume, cumulative_volume)
+            tuples. When provided, volume information is displayed in subplot titles.
+    """
+    organized_set = _organize_by_cost(coverage_set)
+
+    if not organized_set:
+        print("No non-zero cost polytopes to plot.")
+        return
 
     if overlap:
         fig, ax = plt.subplots(1, 1, subplot_kw={"projection": "3d"})
@@ -74,22 +105,33 @@ def _plot_coverage_set(coverage_set, overlap=False, volume_info=None):
         w.labels = {}
         w.render(ax)
         for i, (cost, polytopes) in enumerate(organized_set.items()):
-            color = colors[i % len(colors)]
-            for circuit_polytope in polytopes:
-                _plot_polytope(circuit_polytope, color=color, w=w)
+            color = COLORS[i % len(COLORS)]
+            for polytope in polytopes:
+                _plot_polytope(polytope, ax, w, color=color)
     else:
         n = len(organized_set)
+        ncols = min(n, MAX_COLS)
+        nrows = (n + ncols - 1) // ncols
         fig, axs = plt.subplots(
-            1, n, subplot_kw={"projection": "3d"}, figsize=(n * 5, 5)
-        )  # Adjust size to avoid crowding
+            nrows,
+            ncols,
+            subplot_kw={"projection": "3d"},
+            figsize=(ncols * 5, nrows * 5),
+        )
+        # Flatten to 1D array for consistent indexing
+        if n == 1:
+            axs = [axs]
+        else:
+            axs = np.array(axs).flatten()
+
         for i, (cost, polytopes) in enumerate(organized_set.items()):
-            ax = axs[i] if n > 1 else axs
+            ax = axs[i]
             w = WeylChamber()
             w.labels = {}
             w.render(ax)
-            color = colors[i % len(colors)]
-            for circuit_polytope in polytopes:
-                _plot_polytope(circuit_polytope, color=color, w=w)
+            color = COLORS[i % len(COLORS)]
+            for polytope in polytopes:
+                _plot_polytope(polytope, ax, w, color=color)
 
             # Create title with optional volume information
             if volume_info and cost in volume_info:
@@ -102,5 +144,9 @@ def _plot_coverage_set(coverage_set, overlap=False, volume_info=None):
             else:
                 title = f"Cost: {cost}"
             w.ax.set_title(title)
+
+        # Hide empty subplots
+        for j in range(n, len(axs)):
+            axs[j].set_visible(False)
 
     plt.show()
