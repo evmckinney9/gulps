@@ -39,8 +39,6 @@ def _operation_to_circuit_polytope(
 
     return CircuitPolytope(
         operations=[op_name],
-        # NOTE new convention only counts 1 1Q gate per layer
-        # FIXME, this undercounts, should actually be offset by +2 for exterior layers
         cost=cost + single_qubit_cost,
         convex_subpolytopes=convex_polytope.convex_subpolytopes,
     )
@@ -64,12 +62,14 @@ def isa_to_coverage(
     ]
     coverage_set = build_coverage_set(operations)
 
-    # XXX slightly hacky modification to avoid changing build_coverage_set
-    # for each polytope, we need to attach instruction metadata
+    # NOTE slightly hacky modification to avoid modifying build_coverage_set
     name_to_instruction = {n: g for n, g in zip(names, isa.gate_set)}
     for polytope in coverage_set:
+        # first, for each polytope, we need to attach instruction metadata
         instructions = [name_to_instruction[op_name] for op_name in polytope.operations]
         polytope.instructions = instructions
+        # second, a bit pedantic but we can fix the off by-one in cost here
+        polytope.cost += single_qubit_cost
 
     if sort:
         return sorted(coverage_set, key=lambda k: k.cost)
