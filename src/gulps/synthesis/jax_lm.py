@@ -8,13 +8,11 @@ from jax.random import PRNGKey, split, uniform
 from jaxopt import GaussNewton, LevenbergMarquardt
 from jaxopt.linear_solve import solve_lu
 
+from gulps.config import GulpsConfig
 from gulps.core.jax_invariants import get_invariant_function
 from gulps.synthesis.segments_abc import SegmentSolution, SegmentSolver
 
 config.update("jax_enable_x64", True)
-
-DEFAULT_CONV_TOL = 1e-9
-DEFAULT_SOLVER_TOL = 1e-10
 
 # Pauli matrices
 X = jnp.array([[0, 1], [1, 0]], dtype=jnp.complex128)
@@ -69,25 +67,11 @@ def _make_residual_fn(invariant_fn):
     return residual
 
 
-@dataclass(frozen=True)
-class JaxLMConfig:
-    """Configuration for two-stage Makhlin→Weyl segment solver."""
-
-    makhlin_restarts: int = 32
-    makhlin_conv_tol: float = DEFAULT_CONV_TOL
-    makhlin_maxiter: int = 362
-    weyl_restarts: int = 16
-    weyl_conv_tol: float = DEFAULT_CONV_TOL
-    weyl_maxiter: int = 64
-    weyl_perturb_scale: float = 1e-4
-    solver_tol: float = DEFAULT_SOLVER_TOL
-
-
 class JaxLMSegmentSolver(SegmentSolver):
     """Two-stage Makhlin→Weyl segment solver."""
 
-    def __init__(self, config: JaxLMConfig | None = None):
-        self.config = config or JaxLMConfig()
+    def __init__(self, config: GulpsConfig | None = None):
+        self.config = config or GulpsConfig()
 
         self._makhlin_fn = get_invariant_function("makhlin")
         self._weyl_fn = get_invariant_function("weyl")
@@ -95,7 +79,7 @@ class JaxLMSegmentSolver(SegmentSolver):
         self._makhlin_solver = GaussNewton(
             residual_fun=_make_residual_fn(self._makhlin_fn),
             maxiter=self.config.makhlin_maxiter,
-            tol=self.config.solver_tol,
+            tol=self.config.segment_solver_tol,
             implicit_diff=False,
             jit=True,
         )
@@ -103,7 +87,7 @@ class JaxLMSegmentSolver(SegmentSolver):
         self._weyl_solver = LevenbergMarquardt(
             residual_fun=_make_residual_fn(self._weyl_fn),
             maxiter=self.config.weyl_maxiter,
-            tol=self.config.solver_tol,
+            tol=self.config.segment_solver_tol,
             implicit_diff=False,
             jit=True,
             materialize_jac=True,

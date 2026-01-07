@@ -17,6 +17,8 @@ from qiskit.circuit.library import (
 from qiskit.quantum_info import Operator
 from qiskit.synthesis.two_qubit import TwoQubitWeylDecomposition
 
+from gulps.config import GulpsConfig
+
 logger = logging.getLogger(__name__)
 
 # TODO, this works great and is general enough and robust
@@ -25,13 +27,11 @@ logger = logging.getLogger(__name__)
 # maybe there is something more efficient if we purely need the exterior locals?
 # especially useful if we need something cleaner when dealing with Symbolic params.
 
-DEFAULT_EQUIV_RECOVERY_TOL = 1e-5
-
 
 def recover_local_equivalence(
     U_target: np.ndarray,
     U_basis: np.ndarray,
-    tol: float | None = None,
+    config: GulpsConfig | None = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, float]:
     """Find single-qubit corrections k1, k2, k3, k4 and a global phase so that:.
 
@@ -43,8 +43,9 @@ def recover_local_equivalence(
                                   -> insert X,Z before and I,Y after
       3) otherwise                -> ValueError
     """
-    if tol is None:
-        tol = DEFAULT_EQUIV_RECOVERY_TOL
+    if config is None:
+        config = GulpsConfig()
+    tol = config.equiv_recovery_tol
 
     # Weyl decompose both unitaries
     spec = None

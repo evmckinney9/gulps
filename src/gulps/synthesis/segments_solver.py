@@ -8,6 +8,7 @@ from qiskit.converters import circuit_to_dag, dag_to_circuit
 from qiskit.dagcircuit import DAGCircuit
 from qiskit.quantum_info import Operator
 
+from gulps.config import GulpsConfig
 from gulps.core.invariants import GateInvariants
 from gulps.synthesis.recover_equiv import recover_local_equivalence
 from gulps.synthesis.segments_abc import SegmentSolution, SegmentSolver
@@ -44,9 +45,9 @@ class SegmentSynthesizer:
       solver is so unsatisfactory.
     """
 
-    def __init__(self, solver: SegmentSolver, equiv_recovery_tol: float | None = None):
+    def __init__(self, solver: SegmentSolver, config: GulpsConfig | None = None):
         self._solver = solver
-        self.equiv_recovery_tol = equiv_recovery_tol
+        self.config = config or GulpsConfig()
 
     def synthesize_segments(
         self,
@@ -93,7 +94,7 @@ class SegmentSynthesizer:
 
         # Final recovery to true target
         k1, k2, k3, k4, gphase = recover_local_equivalence(
-            target.unitary, P, tol=self.equiv_recovery_tol
+            target.unitary, P, config=self.config
         )
         dag.global_phase += gphase
         dag.apply_operation_front(UnitaryGate(k1), [qreg[0]])
@@ -150,7 +151,7 @@ class SegmentSynthesizer:
             else:
                 P = Operator(dag_to_circuit(dag)).data  # TODO remove this conversion
                 k1, k2, k3, k4, gphase = recover_local_equivalence(
-                    Ci, P, tol=self.equiv_recovery_tol
+                    Ci, P, config=self.config
                 )
                 dag.global_phase += gphase
                 dag.apply_operation_back(UnitaryGate(k3), [qreg[0]])

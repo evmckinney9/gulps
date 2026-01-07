@@ -2,7 +2,6 @@
 
 import logging
 import time
-from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
 import numpy as np
@@ -14,6 +13,7 @@ from qiskit.dagcircuit import DAGCircuit
 
 from gulps import GateInvariants
 from gulps._internal.logging_config import logger
+from gulps.config import GulpsConfig
 from gulps.core.isa import ISAInvariants
 from gulps.linear_program.scipy_lp import MinimalOrderedISAConstraints
 from gulps.synthesis.jax_lm import JaxLMSegmentSolver
@@ -22,30 +22,6 @@ from gulps.synthesis.segments_abc import SegmentSolver
 from gulps.synthesis.segments_solver import SegmentSynthesizer
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class ToleranceConfig:
-    """Tolerance settings for GULPS decomposition pipeline.
-
-    Attributes:
-        lp_feasibility_tol: Linear program primal/dual feasibility tolerance.
-            Used in scipy linprog solver. Default: 1e-10
-        makhlin_conv_tol: Stage 1 (Makhlin) convergence tolerance.
-            Maximum residual in Makhlin invariant space. Default: 1e-7
-        weyl_conv_tol: Stage 2 (Weyl) convergence tolerance.
-            Maximum residual in Weyl coordinate space. Default: 1e-12
-        segment_solver_tol: Linear solver tolerance for Newton steps.
-            Controls numerical precision of internal linear algebra. Default: 1e-10
-        equiv_recovery_tol: Local equivalence matching tolerance.
-            Used when comparing Weyl coordinates in recovery. Default: 1e-5
-    """
-
-    lp_feasibility_tol: float = 1e-10
-    makhlin_conv_tol: float = 1e-9
-    weyl_conv_tol: float = 5e-5
-    segment_solver_tol: float = 1e-11
-    equiv_recovery_tol: float = 1e-5
 
 
 class GulpsDecomposer:
@@ -75,7 +51,7 @@ class GulpsDecomposer:
         precompute_polytopes: bool = True,
         isa: Optional[ISAInvariants] = None,
         segment_solver: Optional[SegmentSolver] = None,
-        tolerance_config: Optional[ToleranceConfig] = None,
+        tolerance_config: Optional[GulpsConfig] = None,
     ):
         """Initialize the GulpsDecomposer.
 
@@ -93,8 +69,8 @@ class GulpsDecomposer:
                 costs are ignored. Use this to share ISA configuration across decomposers.
             segment_solver: Optional SegmentSolver for numerical synthesis.
                 Defaults to JaxLMSegmentSolver() if None.
-            tolerance_config: Optional ToleranceConfig for pipeline tolerances.
-                If None, uses default tolerances. See ToleranceConfig for details.
+            tolerance_config: Optional GulpsConfig for all pipeline settings.
+                If None, uses default values. See GulpsConfig for all tunable parameters.
 
         Raises:
             ValueError: If neither isa nor (gate_set, costs) are provided.
@@ -117,21 +93,14 @@ class GulpsDecomposer:
                 precompute_polytopes=precompute_polytopes,
             )
 
-        self.tolerance_config = tolerance_config or ToleranceConfig()
+        self.config = tolerance_config or GulpsConfig()
 
         if segment_solver is None:
-            from gulps.synthesis.jax_lm import JaxLMConfig
+            segment_solver = JaxLMSegmentSolver(config=self.config)
 
-            segment_solver = JaxLMSegmentSolver(
-                config=JaxLMConfig(
-                    makhlin_conv_tol=self.tolerance_config.makhlin_conv_tol,
-                    weyl_conv_tol=self.tolerance_config.weyl_conv_tol,
-                    solver_tol=self.tolerance_config.segment_solver_tol,
-                )
-            )
         self._local_synthesis = SegmentSynthesizer(
             solver=segment_solver,
-            equiv_recovery_tol=self.tolerance_config.equiv_recovery_tol,
+            config=self.config,
         )
 
     def _eval_edge_case(
@@ -165,7 +134,7 @@ class GulpsDecomposer:
                 k1, k2, k3, k4, gphase = recover_local_equivalence(
                     target.unitary,
                     self.isa.identity_inv.unitary,
-                    tol=self.tolerance_config.equiv_recovery_tol,
+                    config=self.config,
                 )
                 qc = QuantumCircuit(2, global_phase=gphase)
                 qc.append(UnitaryGate(k1), [0])
@@ -182,7 +151,7 @@ class GulpsDecomposer:
                     k1, k2, k3, k4, gphase = recover_local_equivalence(
                         target.unitary,
                         basis_gate.unitary,
-                        tol=self.tolerance_config.equiv_recovery_tol,
+                        config=self.config,
                     )
                     qc = QuantumCircuit(2, global_phase=gphase)
                     qc.append(UnitaryGate(k1), [0])
@@ -225,7 +194,7 @@ class GulpsDecomposer:
             where each Cᵢ represents the cumulative action after gate i.
         """
         constraints = MinimalOrderedISAConstraints(
-            sentence, epsilon_lp=self.tolerance_config.lp_feasibility_tol
+            sentence, config=self.config
         )
         constraints.set_target(target, rho_bool=rho_bool)
         sentence_out, intermediates = constraints.solve(log_output=log_output)
