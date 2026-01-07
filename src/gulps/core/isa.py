@@ -93,10 +93,18 @@ class ISAInvariants:
 
         for convex_polytope in self.coverage_set:
             if convex_polytope.has_element(target.monodromy):
-                return convex_polytope.instructions, False
+                # Sort instructions by cost for consistency with enumerate()
+                sorted_instructions = sorted(
+                    convex_polytope.instructions, key=lambda g: self.cost_dict[g]
+                )
+                return sorted_instructions, False
             elif convex_polytope.has_element(target.rho_reflect.monodromy):
                 logger.debug(
                     "lookup falls back to rho-reflect, check did you not enforce alcove_c2 on the target gate?"
                 )
-                return convex_polytope.instructions, True
+                # Sort instructions by cost for consistency with enumerate()
+                sorted_instructions = sorted(
+                    convex_polytope.instructions, key=lambda g: self.cost_dict[g]
+                )
+                return sorted_instructions, True
         return None, None

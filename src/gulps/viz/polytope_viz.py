@@ -62,91 +62,55 @@ def _plot_polytope(circuit_polytope, ax, w, color="red"):
             w.ax.add_collection3d(faces)
 
 
-def _organize_by_cost(coverage_set):
-    """Group CircuitPolytope objects by their cost.
-
-    Args:
-        coverage_set: List of CircuitPolytope objects.
-
-    Returns:
-        dict: Mapping from cost to list of polytopes with that cost.
-              Zero-cost polytopes are excluded.
-    """
-    organized = {}
-    for polytope in coverage_set:
-        cost = polytope.cost
-        if cost == 0:
-            continue
-        if cost not in organized:
-            organized[cost] = []
-        organized[cost].append(polytope)
-    return organized
-
-
-def plot_coverage_set(coverage_set, overlap=False, volume_info=None):
+def plot_coverage_set(coverage_set, volume_info=None):
     """Plot a coverage set of 3D polytopes in the Weyl chamber.
 
     Args:
-        coverage_set: List of CircuitPolytope objects.
-        overlap: If True, all polytopes are drawn on the same plot.
-            If False, each cost level gets a separate subplot.
-        volume_info: Optional dict mapping cost to (unique_volume, cumulative_volume)
-            tuples. When provided, volume information is displayed in subplot titles.
+        coverage_set: List of CircuitPolytope objects. Each gets its own subplot.
+        volume_info: Optional list of (cost, depth, unique_volume, cumulative_volume)
+            tuples. When provided, depth and volume information are displayed in subplot titles.
     """
-    organized_set = _organize_by_cost(coverage_set)
-
-    if not organized_set:
-        print("No non-zero cost polytopes to plot.")
+    if not coverage_set:
+        print("No polytopes to plot.")
         return
 
-    if overlap:
-        fig, ax = plt.subplots(1, 1, subplot_kw={"projection": "3d"})
+    n = len(coverage_set)
+    ncols = min(n, MAX_COLS)
+    nrows = (n + ncols - 1) // ncols
+    _, axs = plt.subplots(
+        nrows,
+        ncols,
+        subplot_kw={"projection": "3d"},
+        figsize=(ncols * 5, nrows * 5),
+    )
+    # Flatten to 1D array for consistent indexing
+    if n == 1:
+        axs = [axs]
+    else:
+        axs = np.array(axs).flatten()
+
+    for i, polytope in enumerate(coverage_set):
+        ax = axs[i]
         w = WeylChamber()
         w.labels = {}
         w.render(ax)
-        for i, (cost, polytopes) in enumerate(organized_set.items()):
-            color = COLORS[i % len(COLORS)]
-            for polytope in polytopes:
-                _plot_polytope(polytope, ax, w, color=color)
-    else:
-        n = len(organized_set)
-        ncols = min(n, MAX_COLS)
-        nrows = (n + ncols - 1) // ncols
-        fig, axs = plt.subplots(
-            nrows,
-            ncols,
-            subplot_kw={"projection": "3d"},
-            figsize=(ncols * 5, nrows * 5),
-        )
-        # Flatten to 1D array for consistent indexing
-        if n == 1:
-            axs = [axs]
+        color = COLORS[i % len(COLORS)]
+        _plot_polytope(polytope, ax, w, color=color)
+
+        # Create title with optional volume information
+        if volume_info and i < len(volume_info):
+            cost, depth, unique_vol, cumulative_vol = volume_info[i]
+            title = (
+                f"Cost: {cost:.4f} | Depth: {depth}\n"
+                f"New vol: {unique_vol:.4f} | Cum. vol: {cumulative_vol:.4f} \n"
+                f""
+            )
         else:
-            axs = np.array(axs).flatten()
+            title = f"Cost: {polytope.cost:.4f}"
+        w.ax.set_title(title)
 
-        for i, (cost, polytopes) in enumerate(organized_set.items()):
-            ax = axs[i]
-            w = WeylChamber()
-            w.labels = {}
-            w.render(ax)
-            color = COLORS[i % len(COLORS)]
-            for polytope in polytopes:
-                _plot_polytope(polytope, ax, w, color=color)
-
-            # Create title with optional volume information
-            if volume_info and cost in volume_info:
-                unique_vol, cumulative_vol = volume_info[cost]
-                title = (
-                    f"Cost: {cost}\n"
-                    f"Unique vol: {unique_vol:.4f}\n"
-                    f"Cumulative vol: {cumulative_vol:.4f}"
-                )
-            else:
-                title = f"Cost: {cost}"
-            w.ax.set_title(title)
-
-        # Hide empty subplots
-        for j in range(n, len(axs)):
-            axs[j].set_visible(False)
+    # Hide empty subplots
+    for j in range(n, len(axs)):
+        axs[j].set_visible(False)
 
     plt.show()

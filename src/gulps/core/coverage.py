@@ -92,38 +92,32 @@ def coverage_report(coverage_set, chatty=False):
     integrals = distance_polynomial_integrals(coverage_set, chatty=chatty)
 
     # Initialize accumulators
-    volume_by_cost = {}
     expected_cost = 0.0
     expected_depth = 0.0
     expected_index = 0.0
     total_coverage = 0.0
+    cumulative_sum = 0.0
+
+    # Build list of (cost, depth, volume, cumulative_vol) for each polytope
+    volume_info = []
 
     # Single pass through coverage_set to compute everything
     for i, polytope in enumerate(coverage_set):
         cost = polytope.cost
+        depth = len(polytope.instructions)
         haar_vol = integrals[tuple(polytope.operations)][0]
 
         # Accumulate for expected values
         expected_cost += polytope.cost * haar_vol
-        expected_depth += len(polytope.instructions) * haar_vol
+        expected_depth += depth * haar_vol
         expected_index += i * haar_vol
         total_coverage += haar_vol
 
-        # Group volumes by cost (skip zero-cost)
+        # Track cumulative and add to volume_info (skip zero-cost)
         if cost == 0:
             continue
-
-        if cost not in volume_by_cost:
-            volume_by_cost[cost] = 0.0
-        volume_by_cost[cost] += haar_vol
-
-    # Calculate cumulative volumes
-    volume_info = {}
-    cumulative_sum = 0.0
-    for cost in sorted(volume_by_cost.keys()):
-        unique_vol = volume_by_cost[cost]
-        cumulative_sum += unique_vol
-        volume_info[cost] = (unique_vol, cumulative_sum)
+        cumulative_sum += haar_vol
+        volume_info.append((cost, depth, haar_vol, cumulative_sum))
 
     report = {
         "volume_info": volume_info,
