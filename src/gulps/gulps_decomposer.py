@@ -31,8 +31,10 @@ class ToleranceConfig:
     Attributes:
         lp_feasibility_tol: Linear program primal/dual feasibility tolerance.
             Used in scipy linprog solver. Default: 1e-10
-        segment_conv_tol: Segment synthesis convergence tolerance.
-            Maximum residual (target - achieved invariants) for success. Default: 1e-9
+        makhlin_conv_tol: Stage 1 (Makhlin) convergence tolerance.
+            Maximum residual in Makhlin invariant space. Default: 1e-7
+        weyl_conv_tol: Stage 2 (Weyl) convergence tolerance.
+            Maximum residual in Weyl coordinate space. Default: 1e-12
         segment_solver_tol: Linear solver tolerance for Newton steps.
             Controls numerical precision of internal linear algebra. Default: 1e-10
         equiv_recovery_tol: Local equivalence matching tolerance.
@@ -40,8 +42,9 @@ class ToleranceConfig:
     """
 
     lp_feasibility_tol: float = 1e-10
-    segment_conv_tol: float = 1e-9
-    segment_solver_tol: float = 1e-12
+    makhlin_conv_tol: float = 1e-9
+    weyl_conv_tol: float = 5e-5
+    segment_solver_tol: float = 1e-11
     equiv_recovery_tol: float = 1e-5
 
 
@@ -121,7 +124,8 @@ class GulpsDecomposer:
 
             segment_solver = JaxLMSegmentSolver(
                 config=JaxLMConfig(
-                    conv_tol=self.tolerance_config.segment_conv_tol,
+                    makhlin_conv_tol=self.tolerance_config.makhlin_conv_tol,
+                    weyl_conv_tol=self.tolerance_config.weyl_conv_tol,
                     solver_tol=self.tolerance_config.segment_solver_tol,
                 )
             )

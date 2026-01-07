@@ -1,4 +1,3 @@
-import logging
 import time
 from dataclasses import dataclass
 
@@ -9,43 +8,15 @@ from jax.random import PRNGKey, split, uniform
 from jaxopt import GaussNewton, LevenbergMarquardt
 from jaxopt.linear_solve import solve_lu
 
+from gulps.core.jax_invariants import get_invariant_function
 from gulps.synthesis.segments_abc import SegmentSolution, SegmentSolver
-
-logger = logging.getLogger(__name__)
 
 config.update("jax_enable_x64", True)
 
-# jax setup and definitions
-# NOTE these are highly-tunable parameters
-# I believe two_qubit_local_invariants only has 8 decimal places of precision
 DEFAULT_CONV_TOL = 1e-9
 DEFAULT_SOLVER_TOL = 1e-10
 
-MAGIC = jnp.array(
-    [[1, 0, 0, 1j], [0, 1j, 1, 0], [0, 1j, -1, 0], [1, 0, 0, -1j]],
-    dtype=jnp.complex128,
-) / jnp.sqrt(2)
-MAGIC_DAG = MAGIC.conj().T  # precompute once
-
-
-@jit
-def _two_qubit_local_invariants(U):
-    # from qiskit.synthesis.two_qubit.local_invariance import two_qubit_local_invariants
-    Um = MAGIC_DAG @ (U @ MAGIC)
-    det_um = jnp.linalg.det(Um)
-    det_um = det_um / jnp.abs(det_um)
-    det_um = 1.0  # jnp.linalg.det(Um) #XXX enforce this earlier?
-    M = Um.T @ Um
-    # return sorted eigenvalues of M
-    return jnp.linalg.eigvals(M)
-    # t1 = jnp.trace(M)
-    # t1s = t1 * t1
-    # t2 = jnp.trace(M @ M)
-    # g1 = t1s / (16.0 * det_um)
-    # g2 = (t1s - t2) / (4.0 * det_um)
-    # return jnp.array([jnp.real(g1), jnp.imag(g1), jnp.real(g2)], dtype=jnp.float64)
-
-
+# Pauli matrices
 X = jnp.array([[0, 1], [1, 0]], dtype=jnp.complex128)
 Y = jnp.array([[0, -1j], [1j, 0]], dtype=jnp.complex128)
 Z = jnp.array([[1, 0], [0, -1]], dtype=jnp.complex128)
@@ -54,135 +25,89 @@ I2 = jnp.eye(2, dtype=jnp.complex128)
 
 @jit
 def _rv(v: jnp.ndarray) -> jnp.ndarray:
+    """Rotation vector to SU(2) unitary via Rodriguez formula."""
     a = jnp.linalg.norm(v)
     half = 0.5 * a
-
-    # stable sinc(half) = sin(half)/half
     s = jnp.where(
-        jnp.abs(half) < 1e-6,
+        jnp.abs(half) < 1e-8,
         1.0 - (half * half) / 6.0 + (half**4) / 120.0,
         jnp.sin(half) / half,
     )
     c = jnp.cos(half)
-
     vx, vy, vz = v
     H = vx * X + vy * Y + vz * Z
     return c * I2 - 1j * (0.5 * s) * H
 
 
+@jit
+def kron2(A, B):
+    """Kronecker product for 2x2 matrices."""
+    return jnp.einsum("ab,cd->acbd", A, B).reshape(4, 4)
+
+
+@jit
+def _construct_unitary(params, prefix_op, basis_gate):
+    """Construct U = G · (u1 ⊗ u0) · C from 6D rotation vector params."""
+    return basis_gate @ kron2(_rv(params[3:6]), _rv(params[:3])) @ prefix_op
+
+
 def _params_to_locals(params: jnp.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Helper to turn RV parameters into two 2x2 unitaries."""
+    """Convert 6D rotation vector params to two 2x2 unitaries."""
     u0 = _rv(params[3:6])
     u1 = _rv(params[:3])
     return device_get(u0), device_get(u1)
 
 
-@jit
-def kron2(A, B):
-    # (2,2) ⊗ (2,2) -> (4,4)
-    return jnp.einsum("ab,cd->acbd", A, B).reshape(4, 4)
+def _make_residual_fn(invariant_fn):
+    """Create residual function: target_inv - constructed_inv."""
 
+    @jit
+    def residual(x, prefix_op, basis_gate, target_inv):
+        U = _construct_unitary(x, prefix_op, basis_gate)
+        return target_inv - invariant_fn(U)
 
-@jit
-def _objective_function(
-    x: jnp.ndarray,
-    prefix_op: jnp.ndarray,
-    basis_gate: jnp.ndarray,
-    target_inv: jnp.ndarray,
-):
-    U = basis_gate @ kron2(_rv(x[3:6]), _rv(x[:3])) @ prefix_op
-    construct_inv = _two_qubit_local_invariants(U)
-    return target_inv - construct_inv
+    return residual
 
 
 @dataclass(frozen=True)
 class JaxLMConfig:
-    easy_restarts: int = 16
-    hard_restarts: int = 0
-    conv_tol: float = DEFAULT_CONV_TOL
+    """Configuration for two-stage Makhlin→Weyl segment solver."""
+
+    makhlin_restarts: int = 32
+    makhlin_conv_tol: float = DEFAULT_CONV_TOL
+    makhlin_maxiter: int = 362
+    weyl_restarts: int = 16
+    weyl_conv_tol: float = DEFAULT_CONV_TOL
+    weyl_maxiter: int = 64
+    weyl_perturb_scale: float = 1e-4
     solver_tol: float = DEFAULT_SOLVER_TOL
-    # could add xtol/gtol/etc here later
-
-
-@dataclass
-class _AttemptResult:
-    params: jnp.ndarray | None
-    residual_norm: float
-    converged: bool
-    label: str
-    attempt_index: int  # 1-based within that phase
-    nfev: int
 
 
 class JaxLMSegmentSolver(SegmentSolver):
-    """JAX+LM-backed segment solver with a simple restart policy.
-
-    Policy is controlled entirely by JaxLMConfig and the `phases` list in solve_segment.
-    """
+    """Two-stage Makhlin→Weyl segment solver."""
 
     def __init__(self, config: JaxLMConfig | None = None):
         self.config = config or JaxLMConfig()
 
-        # These are instance attributes instead of module globals.
-        self._easy_lm = GaussNewton(
-            residual_fun=_objective_function,
-            maxiter=128,
+        self._makhlin_fn = get_invariant_function("makhlin")
+        self._weyl_fn = get_invariant_function("weyl")
+
+        self._makhlin_solver = GaussNewton(
+            residual_fun=_make_residual_fn(self._makhlin_fn),
+            maxiter=self.config.makhlin_maxiter,
             tol=self.config.solver_tol,
             implicit_diff=False,
             jit=True,
         )
-        self._hard_lm = LevenbergMarquardt(
-            residual_fun=_objective_function,
-            solver=solve_lu,
-            maxiter=1024,
-            tol=0.0,  # never gives up until maxiter
+
+        self._weyl_solver = LevenbergMarquardt(
+            residual_fun=_make_residual_fn(self._weyl_fn),
+            maxiter=self.config.weyl_maxiter,
+            tol=self.config.solver_tol,
             implicit_diff=False,
-            materialize_jac=True,
             jit=True,
-        )
-
-    def _run_one_attempt(
-        self,
-        lm: LevenbergMarquardt,
-        label: str,
-        attempt_index: int,
-        key: PRNGKey,
-        prefix: jnp.ndarray,
-        gate: jnp.ndarray,
-        target_inv: jnp.ndarray,
-    ) -> _AttemptResult:
-        """Run a single LM attempt with random init from `key`."""
-        j_init = uniform(
-            key,
-            shape=(6,),
-            minval=-jnp.pi / 2,
-            maxval=jnp.pi / 2,
-        )
-
-        j_attempt = lm.run(
-            j_init,
-            prefix_op=prefix,
-            basis_gate=gate,
-            target_inv=target_inv,
-        )
-        # # We need residual_array to test convergence; this blocks anyway.
-        # residual_array = j_attempt.state.residual.block_until_ready()
-        # residual_norm = float(j_attempt.state.value)
-        # conv = bool(jnp.all(jnp.abs(residual_array) <= self.config.conv_tol))
-
-        # No residual array readback; use objective value only.
-        residual = j_attempt.state.residual  # shape (3,)
-        conv = jnp.max(jnp.abs(residual)) <= self.config.conv_tol
-        residual_norm = jnp.linalg.norm(residual)  # this is a real norm for logging
-        nfev = int(j_attempt.state.iter_num)
-
-        return _AttemptResult(
-            params=j_attempt.params,
-            residual_norm=residual_norm,
-            converged=conv,
-            label=label,
-            attempt_index=attempt_index,
-            nfev=nfev,
+            materialize_jac=True,
+            solver=solve_lu,
         )
 
     def solve_segment(
@@ -193,102 +118,125 @@ class JaxLMSegmentSolver(SegmentSolver):
         *,
         rng_seed: int | None = None,
     ) -> SegmentSolution:
-        """Solve for RV parameters for a single segment.
-
-        prefix_op, basis_gate, target are 4x4 unitary matrices.
-        We convert `target` once to invariant coordinates and then optimize.
-        """
-        rng_seed_base = 0 if rng_seed is None else rng_seed
-
-        j_prefix = jnp.array(prefix_op, dtype=jnp.complex128)
-        j_gate = jnp.array(basis_gate, dtype=jnp.complex128)
-        j_target_inv = _two_qubit_local_invariants(
-            jnp.array(target, dtype=jnp.complex128)
-        )
-        phases = [
-            (self._easy_lm, "easy", self.config.easy_restarts),
-            (self._hard_lm, "hard", self.config.hard_restarts),
-        ]
-
-        best_result: _AttemptResult | None = None
-        total_attempts = sum(restarts for _, _, restarts in phases)
-        total_nfev = 0
-        # Pre-split all attempt keys up front.
-        base_key = PRNGKey(rng_seed_base)
-        attempt_keys = split(base_key, total_attempts)
-        key_cursor = 0  # walks through attempt_keys
+        """Solve for local unitaries using two-stage optimization."""
         start_time = time.perf_counter()
 
-        for lm, label, restarts in phases:
-            for local_idx in range(restarts):
-                # Derive a fresh subkey for each attempt
-                subkey = attempt_keys[key_cursor]
-                key_cursor += 1
-                attempt = self._run_one_attempt(
-                    lm=lm,
-                    label=label,
-                    attempt_index=local_idx + 1,
-                    key=subkey,
-                    prefix=j_prefix,
-                    gate=j_gate,
-                    target_inv=j_target_inv,
-                )
-                total_nfev += attempt.nfev
+        j_prefix = jnp.asarray(prefix_op, dtype=jnp.complex128)
+        j_gate = jnp.asarray(basis_gate, dtype=jnp.complex128)
+        j_target = jnp.asarray(target, dtype=jnp.complex128)
 
-                # Update global best (even if not converged)
-                if (
-                    best_result is None
-                    or attempt.residual_norm < best_result.residual_norm
-                ):
-                    best_result = attempt
+        target_makhlin = self._makhlin_fn(j_target)
+        target_weyl = self._weyl_fn(j_target)
 
-                # Early exit on first converged attempt
-                if attempt.converged:
-                    elapsed = time.perf_counter() - start_time
-                    if logger.isEnabledFor(logging.DEBUG):
-                        logger.debug(
-                            f"Segment solver SUCCESS [{attempt.label} attempt {attempt.attempt_index}] "
-                            f"(residual norm={attempt.residual_norm:.2e}, "
-                            f"nfev={total_nfev}) in {elapsed:.3f}s"
-                        )
-                    u0, u1 = _params_to_locals(attempt.params)
-                    return SegmentSolution(
-                        u0=u0,
-                        u1=u1,
-                        residual_norm=attempt.residual_norm,
-                        success=True,
-                        metadata={
-                            "label": attempt.label,
-                            "attempt": attempt.attempt_index,
-                            "nfev": total_nfev,
-                            "elapsed": elapsed,
-                        },
-                    )
+        makhlin_conv_tol = self.config.makhlin_conv_tol
+        weyl_conv_tol = self.config.weyl_conv_tol
 
-        # No converged attempt → return best attempt marked as failure
-        elapsed = time.perf_counter() - start_time
-        assert best_result is not None  # there was at least one attempt
+        key = PRNGKey(rng_seed or 0)
+        keys = split(key, self.config.makhlin_restarts + self.config.weyl_restarts)
 
-        if logger.isEnabledFor(logging.DEBUG):
-            logger.debug(
-                f"Segment solver FAILED after {total_attempts} attempts "
-                f"(best residual norm={best_result.residual_norm:.2e}, "
-                f"nfev={total_nfev}) in {elapsed:.3f}s"
+        # Stage 1: Makhlin exploration
+        best_params = None
+        best_res = jnp.inf
+        total_nfev = 0
+
+        for i in range(self.config.makhlin_restarts):
+            init = uniform(keys[i], shape=(6,), minval=-jnp.pi / 2, maxval=jnp.pi / 2)
+            result = self._makhlin_solver.run(
+                init, prefix_op=j_prefix, basis_gate=j_gate, target_inv=target_makhlin
+            )
+            res = jnp.max(jnp.abs(result.state.residual))
+            total_nfev += result.state.iter_num
+
+            if res < best_res:
+                best_res = res
+                best_params = result.params
+
+            if res <= makhlin_conv_tol:
+                break
+
+        # Single device_get after Stage 1
+        best_res_val = float(device_get(best_res))
+        if best_res_val > makhlin_conv_tol:
+            raise RuntimeError(
+                f"Stage 1 (Makhlin) failed: best residual {best_res_val:.2e}"
             )
 
-        if best_result.params is not None:
-            u0, u1 = _params_to_locals(best_result.params)
-        else:
-            u0 = u1 = None
+        # Determine Weyl branch
+        constructed_weyl = self._weyl_fn(
+            _construct_unitary(best_params, j_prefix, j_gate)
+        )
+
+        # Check both branches
+        direct_res = jnp.max(jnp.abs(constructed_weyl - target_weyl))
+        reflected = jnp.array([1.0 - target_weyl[0], target_weyl[1], -target_weyl[2]])
+        reflect_res = jnp.max(jnp.abs(constructed_weyl - reflected))
+
+        use_reflected = reflect_res < direct_res
+        weyl_target = jnp.where(use_reflected, reflected, target_weyl)
+        weyl_res = jnp.where(use_reflected, reflect_res, direct_res)
+
+        # Early exit if already converged
+        weyl_res_val = float(device_get(weyl_res))
+        if weyl_res_val <= weyl_conv_tol:
+            u0, u1 = _params_to_locals(best_params)
+            return SegmentSolution(
+                u0=u0,
+                u1=u1,
+                max_residual=weyl_res_val,
+                success=True,
+                metadata={
+                    "stage": "makhlin",
+                    "nfev": int(device_get(total_nfev)),
+                    "elapsed": time.perf_counter() - start_time,
+                },
+            )
+
+        # Stage 2: Weyl polishing
+        warm_start = best_params
+        weyl_best_params = None
+        weyl_best_res = jnp.inf
+
+        for i in range(self.config.weyl_restarts):
+            if i == 0:
+                init = warm_start
+            else:
+                perturb = uniform(
+                    keys[self.config.makhlin_restarts + i],
+                    shape=(6,),
+                    minval=-self.config.weyl_perturb_scale,
+                    maxval=self.config.weyl_perturb_scale,
+                )
+                init = warm_start + perturb
+
+            result = self._weyl_solver.run(
+                init, prefix_op=j_prefix, basis_gate=j_gate, target_inv=weyl_target
+            )
+            res = jnp.max(jnp.abs(result.state.residual))
+            total_nfev += result.state.iter_num
+
+            if res < weyl_best_res:
+                weyl_best_res = res
+                weyl_best_params = result.params
+
+            if res <= weyl_conv_tol:
+                break
+
+        # Single device_get after Stage 2
+        weyl_res_val = float(device_get(weyl_best_res))
+        if weyl_res_val > weyl_conv_tol:
+            raise RuntimeError(
+                f"Stage 2 (Weyl) failed: best residual {weyl_res_val:.2e}"
+            )
+
+        u0, u1 = _params_to_locals(weyl_best_params)
         return SegmentSolution(
             u0=u0,
             u1=u1,
-            residual_norm=best_result.residual_norm,
-            success=False,
+            max_residual=weyl_res_val,
+            success=True,
             metadata={
-                "label": best_result.label,
-                "attempt": best_result.attempt_index,
-                "nfev": total_nfev,
-                "elapsed": elapsed,
+                "stage": "weyl",
+                "nfev": int(device_get(total_nfev)),
+                "elapsed": time.perf_counter() - start_time,
             },
         )

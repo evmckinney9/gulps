@@ -111,27 +111,6 @@ class GateInvariants:
         """
         return tqli_rs(Operator(self.unitary).data)
 
-        # U = Operator(self.unitary).data
-        # MAGIC = np.array(
-        #     [[1, 0, 0, 1j], [0, 1j, 1, 0], [0, 1j, -1, 0], [1, 0, 0, -1j]],
-        #     dtype=np.cdouble,
-        # ) / np.sqrt(2)
-        # Um = MAGIC.conj().T.dot(U.dot(MAGIC))
-        # det_um = np.complex128(np.linalg.det(Um))
-        # M = np.dot(Um.T, Um)
-        # t1 = np.trace(M)
-        # t1s = t1 * t1
-        # g1 = t1s / (16.0 * det_um)
-        # g2 = (t1s - np.trace(M.dot(M))) / (4.0 * det_um)
-        # # return jnp.array([G1.real, G1.imag, G2.real], dtype=jnp.double)
-        # # Orientation term --------------------------------------------
-        # t2 = np.trace(M @ M)
-        # t3 = np.trace(M @ M @ M)
-        # delta = t1**3 - 3.0 * t1 * t2 + 2.0 * t3
-        # g4 = np.sign(np.imag(delta)) / 4.0
-
-        # return np.array([g1.real, g1.imag, g2.real, g4], dtype=np.float64)
-
     @property
     def canonical_matrix(self) -> np.ndarray:
         """Canonical gate matrix (lazy computed from Weyl)."""

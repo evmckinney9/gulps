@@ -9,7 +9,7 @@ import numpy as np
 class SegmentSolution:
     u0: Optional[np.ndarray]  # 2x2 or None if failure
     u1: Optional[np.ndarray]  # 2x2 or None if failure
-    residual_norm: float
+    max_residual: float  # worst-case residual component (L∞ norm)
     success: bool
     metadata: dict[str, Any]  # e.g. {"nfev": nfev, "label": "easy", "attempt": 3}
 

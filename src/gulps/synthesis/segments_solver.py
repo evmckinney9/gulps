@@ -92,7 +92,9 @@ class SegmentSynthesizer:
             P = self._synthesize_batch(dag, qreg, gate_list, invariant_list)
 
         # Final recovery to true target
-        k1, k2, k3, k4, gphase = recover_local_equivalence(target.unitary, P, tol=self.equiv_recovery_tol)
+        k1, k2, k3, k4, gphase = recover_local_equivalence(
+            target.unitary, P, tol=self.equiv_recovery_tol
+        )
         dag.global_phase += gphase
         dag.apply_operation_front(UnitaryGate(k1), [qreg[0]])
         dag.apply_operation_front(UnitaryGate(k2), [qreg[1]])
@@ -129,13 +131,13 @@ class SegmentSynthesizer:
             )
             if not seg_sol.success:
                 raise RuntimeError(
-                    f"Segment {i} synthesis failed (residual norm={seg_sol.residual_norm:.2e})."
+                    f"Segment {i} synthesis failed (residual norm={seg_sol.max_residual:.2e})."
                 )
 
-            segment_sols.append((i, Gi, Ci, seg_sol))
+            segment_sols.append((Gi, Ci, seg_sol))
 
         # Phase 2: Stitch solutions together with intermediate recovery
-        for idx, (i, Gi, Ci, seg_sol) in enumerate(segment_sols):
+        for idx, (Gi, Ci, seg_sol) in enumerate(segment_sols):
             dag.apply_operation_back(UnitaryGate(seg_sol.u0), [qreg[0]])
             dag.apply_operation_back(UnitaryGate(seg_sol.u1), [qreg[1]])
             dag.apply_operation_back(UnitaryGate(Gi), qreg[:])
@@ -147,7 +149,9 @@ class SegmentSynthesizer:
                 break
             else:
                 P = Operator(dag_to_circuit(dag)).data  # TODO remove this conversion
-                k1, k2, k3, k4, gphase = recover_local_equivalence(Ci, P, tol=self.equiv_recovery_tol)
+                k1, k2, k3, k4, gphase = recover_local_equivalence(
+                    Ci, P, tol=self.equiv_recovery_tol
+                )
                 dag.global_phase += gphase
                 dag.apply_operation_back(UnitaryGate(k3), [qreg[0]])
                 dag.apply_operation_back(UnitaryGate(k4), [qreg[1]])
@@ -179,7 +183,7 @@ class SegmentSynthesizer:
 
             if not seg_sol.success:
                 raise RuntimeError(
-                    f"Segment {i} synthesis failed (residual norm={seg_sol.residual_norm:.2e})."
+                    f"Segment {i} synthesis failed (residual norm={seg_sol.max_residual:.2e})."
                 )
 
             dag.apply_operation_back(UnitaryGate(seg_sol.u0), [qreg[0]])

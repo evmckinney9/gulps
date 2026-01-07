@@ -1,19 +1,10 @@
 """Gate invariants utilities for two-qubit gates (monodromy, Makhlin, Weyl, etc.)."""
 
 import logging
-
-import numpy as np
-from qiskit.circuit.library import UnitaryGate
-from qiskit.quantum_info import Operator
-from qiskit.synthesis.two_qubit import TwoQubitWeylDecomposition
-
-logger = logging.getLogger(__name__)
-
-
-import logging
 from typing import Tuple
 
 import numpy as np
+from qiskit._accelerate import two_qubit_decompose
 from qiskit.circuit.library import (
     IGate,
     SXdgGate,
@@ -127,4 +118,5 @@ if __name__ == "__main__":
     qc.append(UnitaryGate(k4), [1])
     print(average_gate_fidelity(target_gate, Operator(qc)))
     print(qc.draw())
+    # print("\n.")
     # print("\n.")
