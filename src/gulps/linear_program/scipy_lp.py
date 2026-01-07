@@ -12,7 +12,7 @@ from scipy.optimize import linprog
 from gulps.core.invariants import LEN_GATE_INVARIANTS, GateInvariants
 from gulps.linear_program.qlr import len_qlr, qlr_inequalities
 
-epsilon_lp = 1e-10
+DEFAULT_EPSILON_LP = 1e-10
 
 
 class MinimalOrderedISAConstraints:
@@ -25,12 +25,13 @@ class MinimalOrderedISAConstraints:
 
     _ci_block, _gi_block, _ciplus1_block, _bi = qlr_inequalities
 
-    def __init__(self, isa_sequence: List[GateInvariants]):
+    def __init__(self, isa_sequence: List[GateInvariants], epsilon_lp: float = DEFAULT_EPSILON_LP):
         self.isa_sequence = isa_sequence
         self.n = len(isa_sequence)
         self.num_ineq = len_qlr * (self.n - 1)
         self.num_params = LEN_GATE_INVARIANTS * (self.n - 2)
         self.last_iter_ct = np.zeros(len_qlr)
+        self.epsilon_lp = epsilon_lp
         self._setup_model()
 
     def _setup_model(self):
@@ -79,7 +80,7 @@ class MinimalOrderedISAConstraints:
         # edge case, if there were no free variables in x_vec
         if len(self.A_ub[0]) == 0:
             # NOTE, try eps here but if causes problems maybe need to go to next enumerated sentence
-            if np.all(-10 * epsilon_lp <= self.b_ub):  # 0<=self.b_ub
+            if np.all(-10 * self.epsilon_lp <= self.b_ub):  # 0<=self.b_ub
                 intermediate_invariants = (
                     self.isa_sequence[0],
                     self._target_def,
@@ -96,8 +97,8 @@ class MinimalOrderedISAConstraints:
             options={
                 "disp": log_output,
                 "presolve": True,
-                "primal_feasibility_tolerance": epsilon_lp,
-                "dual_feasibility_tolerance": epsilon_lp,
+                "primal_feasibility_tolerance": self.epsilon_lp,
+                "dual_feasibility_tolerance": self.epsilon_lp,
             },
         )
         if result.success:

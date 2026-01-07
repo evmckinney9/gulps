@@ -2,6 +2,7 @@
 
 import logging
 import time
+from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
 import numpy as np
@@ -21,6 +22,27 @@ from gulps.synthesis.segments_abc import SegmentSolver
 from gulps.synthesis.segments_solver import SegmentSynthesizer
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ToleranceConfig:
+    """Tolerance settings for GULPS decomposition pipeline.
+
+    Attributes:
+        lp_feasibility_tol: Linear program primal/dual feasibility tolerance.
+            Used in scipy linprog solver. Default: 1e-10
+        segment_conv_tol: Segment synthesis convergence tolerance.
+            Maximum residual (target - achieved invariants) for success. Default: 1e-9
+        segment_solver_tol: Linear solver tolerance for Newton steps.
+            Controls numerical precision of internal linear algebra. Default: 1e-10
+        equiv_recovery_tol: Local equivalence matching tolerance.
+            Used when comparing Weyl coordinates in recovery. Default: 1e-5
+    """
+
+    lp_feasibility_tol: float = 1e-10
+    segment_conv_tol: float = 1e-9
+    segment_solver_tol: float = 1e-12
+    equiv_recovery_tol: float = 1e-5
 
 
 class GulpsDecomposer:
@@ -50,6 +72,7 @@ class GulpsDecomposer:
         precompute_polytopes: bool = True,
         isa: Optional[ISAInvariants] = None,
         segment_solver: Optional[SegmentSolver] = None,
+        tolerance_config: Optional[ToleranceConfig] = None,
     ):
         """Initialize the GulpsDecomposer.
 
@@ -67,6 +90,8 @@ class GulpsDecomposer:
                 costs are ignored. Use this to share ISA configuration across decomposers.
             segment_solver: Optional SegmentSolver for numerical synthesis.
                 Defaults to JaxLMSegmentSolver() if None.
+            tolerance_config: Optional ToleranceConfig for pipeline tolerances.
+                If None, uses default tolerances. See ToleranceConfig for details.
 
         Raises:
             ValueError: If neither isa nor (gate_set, costs) are provided.
@@ -88,9 +113,22 @@ class GulpsDecomposer:
                 names=names,
                 precompute_polytopes=precompute_polytopes,
             )
+
+        self.tolerance_config = tolerance_config or ToleranceConfig()
+
         if segment_solver is None:
-            segment_solver = JaxLMSegmentSolver()
-        self._local_synthesis = SegmentSynthesizer(solver=segment_solver)
+            from gulps.synthesis.jax_lm import JaxLMConfig
+
+            segment_solver = JaxLMSegmentSolver(
+                config=JaxLMConfig(
+                    conv_tol=self.tolerance_config.segment_conv_tol,
+                    solver_tol=self.tolerance_config.segment_solver_tol,
+                )
+            )
+        self._local_synthesis = SegmentSynthesizer(
+            solver=segment_solver,
+            equiv_recovery_tol=self.tolerance_config.equiv_recovery_tol,
+        )
 
     def _eval_edge_case(
         self, target: GateInvariants, return_dag: bool
@@ -121,7 +159,9 @@ class GulpsDecomposer:
                 if logger.isEnabledFor(logging.DEBUG):
                     logger.debug("Target is identity, returning empty circuit")
                 k1, k2, k3, k4, gphase = recover_local_equivalence(
-                    target.unitary, self.isa.identity_inv.unitary
+                    target.unitary,
+                    self.isa.identity_inv.unitary,
+                    tol=self.tolerance_config.equiv_recovery_tol,
                 )
                 qc = QuantumCircuit(2, global_phase=gphase)
                 qc.append(UnitaryGate(k1), [0])
@@ -136,7 +176,9 @@ class GulpsDecomposer:
                     if logger.isEnabledFor(logging.DEBUG):
                         logger.debug("Target is local to a gate in the ISA")
                     k1, k2, k3, k4, gphase = recover_local_equivalence(
-                        target.unitary, basis_gate.unitary
+                        target.unitary,
+                        basis_gate.unitary,
+                        tol=self.tolerance_config.equiv_recovery_tol,
                     )
                     qc = QuantumCircuit(2, global_phase=gphase)
                     qc.append(UnitaryGate(k1), [0])
@@ -178,7 +220,9 @@ class GulpsDecomposer:
             The LP determines a path through monodromy space: I → C₁ → C₂ → ... → target,
             where each Cᵢ represents the cumulative action after gate i.
         """
-        constraints = MinimalOrderedISAConstraints(sentence)
+        constraints = MinimalOrderedISAConstraints(
+            sentence, epsilon_lp=self.tolerance_config.lp_feasibility_tol
+        )
         constraints.set_target(target, rho_bool=rho_bool)
         sentence_out, intermediates = constraints.solve(log_output=log_output)
         if sentence_out is not None:

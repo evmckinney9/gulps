@@ -18,8 +18,8 @@ config.update("jax_enable_x64", True)
 # jax setup and definitions
 # NOTE these are highly-tunable parameters
 # I believe two_qubit_local_invariants only has 8 decimal places of precision
-CONV_TOL = 1e-9
-A_TOL = 1e-10
+DEFAULT_CONV_TOL = 1e-9
+DEFAULT_SOLVER_TOL = 1e-10
 
 MAGIC = jnp.array(
     [[1, 0, 0, 1j], [0, 1j, 1, 0], [0, 1j, -1, 0], [1, 0, 0, -1j]],
@@ -36,12 +36,14 @@ def _two_qubit_local_invariants(U):
     det_um = det_um / jnp.abs(det_um)
     det_um = 1.0  # jnp.linalg.det(Um) #XXX enforce this earlier?
     M = Um.T @ Um
-    t1 = jnp.trace(M)
-    t1s = t1 * t1
-    t2 = jnp.trace(M @ M)
-    g1 = t1s / (16.0 * det_um)
-    g2 = (t1s - t2) / (4.0 * det_um)
-    return jnp.array([jnp.real(g1), jnp.imag(g1), jnp.real(g2)], dtype=jnp.float64)
+    # return sorted eigenvalues of M
+    return jnp.linalg.eigvals(M)
+    # t1 = jnp.trace(M)
+    # t1s = t1 * t1
+    # t2 = jnp.trace(M @ M)
+    # g1 = t1s / (16.0 * det_um)
+    # g2 = (t1s - t2) / (4.0 * det_um)
+    # return jnp.array([jnp.real(g1), jnp.imag(g1), jnp.real(g2)], dtype=jnp.float64)
 
 
 X = jnp.array([[0, 1], [1, 0]], dtype=jnp.complex128)
@@ -97,7 +99,8 @@ def _objective_function(
 class JaxLMConfig:
     easy_restarts: int = 16
     hard_restarts: int = 0
-    conv_tol: float = CONV_TOL
+    conv_tol: float = DEFAULT_CONV_TOL
+    solver_tol: float = DEFAULT_SOLVER_TOL
     # could add xtol/gtol/etc here later
 
 
@@ -124,7 +127,7 @@ class JaxLMSegmentSolver(SegmentSolver):
         self._easy_lm = GaussNewton(
             residual_fun=_objective_function,
             maxiter=128,
-            tol=A_TOL,
+            tol=self.config.solver_tol,
             implicit_diff=False,
             jit=True,
         )

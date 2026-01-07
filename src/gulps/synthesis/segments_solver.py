@@ -44,8 +44,9 @@ class SegmentSynthesizer:
       solver is so unsatisfactory.
     """
 
-    def __init__(self, solver: SegmentSolver):
+    def __init__(self, solver: SegmentSolver, equiv_recovery_tol: float | None = None):
         self._solver = solver
+        self.equiv_recovery_tol = equiv_recovery_tol
 
     def synthesize_segments(
         self,
@@ -91,7 +92,7 @@ class SegmentSynthesizer:
             P = self._synthesize_batch(dag, qreg, gate_list, invariant_list)
 
         # Final recovery to true target
-        k1, k2, k3, k4, gphase = recover_local_equivalence(target.unitary, P)
+        k1, k2, k3, k4, gphase = recover_local_equivalence(target.unitary, P, tol=self.equiv_recovery_tol)
         dag.global_phase += gphase
         dag.apply_operation_front(UnitaryGate(k1), [qreg[0]])
         dag.apply_operation_front(UnitaryGate(k2), [qreg[1]])
@@ -146,7 +147,7 @@ class SegmentSynthesizer:
                 break
             else:
                 P = Operator(dag_to_circuit(dag)).data  # TODO remove this conversion
-                k1, k2, k3, k4, gphase = recover_local_equivalence(Ci, P)
+                k1, k2, k3, k4, gphase = recover_local_equivalence(Ci, P, tol=self.equiv_recovery_tol)
                 dag.global_phase += gphase
                 dag.apply_operation_back(UnitaryGate(k3), [qreg[0]])
                 dag.apply_operation_back(UnitaryGate(k4), [qreg[1]])
