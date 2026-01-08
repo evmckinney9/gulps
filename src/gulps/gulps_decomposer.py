@@ -137,10 +137,10 @@ class GulpsDecomposer:
                     config=self.config,
                 )
                 qc = QuantumCircuit(2, global_phase=gphase)
-                qc.append(UnitaryGate(k1), [0])
-                qc.append(UnitaryGate(k2), [1])
-                qc.append(UnitaryGate(k3), [0])
-                qc.append(UnitaryGate(k4), [1])
+                qc.append(UnitaryGate(k1, check_input=False), [0])
+                qc.append(UnitaryGate(k2, check_input=False), [1])
+                qc.append(UnitaryGate(k3, check_input=False), [0])
+                qc.append(UnitaryGate(k4, check_input=False), [1])
                 return circuit_to_dag(qc) if return_dag else qc
 
         for basis_gate in self.isa.gate_set:
@@ -154,11 +154,11 @@ class GulpsDecomposer:
                         config=self.config,
                     )
                     qc = QuantumCircuit(2, global_phase=gphase)
-                    qc.append(UnitaryGate(k1), [0])
-                    qc.append(UnitaryGate(k2), [1])
+                    qc.append(UnitaryGate(k1, check_input=False), [0])
+                    qc.append(UnitaryGate(k2, check_input=False), [1])
                     qc.append(basis_gate.unitary, [0, 1])
-                    qc.append(UnitaryGate(k3), [0])
-                    qc.append(UnitaryGate(k4), [1])
+                    qc.append(UnitaryGate(k3, check_input=False), [0])
+                    qc.append(UnitaryGate(k4, check_input=False), [1])
                     return circuit_to_dag(qc) if return_dag else qc
 
         return None
@@ -193,9 +193,7 @@ class GulpsDecomposer:
             The LP determines a path through monodromy space: I → C₁ → C₂ → ... → target,
             where each Cᵢ represents the cumulative action after gate i.
         """
-        constraints = MinimalOrderedISAConstraints(
-            sentence, config=self.config
-        )
+        constraints = MinimalOrderedISAConstraints(sentence, config=self.config)
         constraints.set_target(target, rho_bool=rho_bool)
         sentence_out, intermediates = constraints.solve(log_output=log_output)
         if sentence_out is not None:

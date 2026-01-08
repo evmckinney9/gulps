@@ -18,6 +18,9 @@ logger = logging.getLogger(__name__)
 # because we already know the Cartan KAK invariants...
 # maybe there is something more efficient if we purely need the exterior locals?
 # especially useful if we need something cleaner when dealing with Symbolic params.
+P0 = YGate().to_matrix()  # pre on qubit 0
+Q0 = XGate().to_matrix()  # post on qubit 0
+Q1 = ZGate().to_matrix()  # post on qubit 1
 
 
 def recover_local_equivalence(
@@ -49,11 +52,7 @@ def recover_local_equivalence(
     diffs = np.abs([a1 - a2, b1 - b2, c1 - c2])
 
     # 1) exact Weyl match?
-    if (
-        np.isclose(a1, a2, atol=tol)
-        and np.isclose(b1, b2, atol=tol)
-        and np.isclose(c1, c2, atol=tol)
-    ):
+    if np.allclose([a1, b1, c1], [a2, b2, c2], atol=tol):
         k4 = T.K1l @ B.K1l.conj().T
         k3 = T.K1r @ B.K1r.conj().T
         k2 = B.K2l.conj().T @ T.K2l
@@ -61,15 +60,8 @@ def recover_local_equivalence(
         return k1, k2, k3, k4, (T.global_phase - B.global_phase)
 
     # 2) rho reflection case: target=(a,b,c), basis=(pi/2-a,b,-c)?
-    if (
-        np.isclose(a1, np.pi / 2 - a2, atol=tol)
-        and np.isclose(b1, b2, atol=tol)
-        and np.isclose(c1, -c2, atol=tol)
-    ):
+    if np.allclose([a1, b1, c1], [np.pi / 2 - a2, b2, -c2], atol=tol):
         logger.debug("Detected rho reflect; inserting Pauli corrections.")
-        P0 = YGate().to_matrix()  # pre on qubit 0
-        Q0 = XGate().to_matrix()  # post on qubit 0
-        Q1 = ZGate().to_matrix()  # post on qubit 1
 
         k4 = T.K1l @ P0 @ B.K1l.conj().T
         k3 = T.K1r @ B.K1r.conj().T

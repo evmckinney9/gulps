@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import jax.numpy as jnp
 import numpy as np
 from jax import config, device_get, jit
-from jax.random import PRNGKey, split, uniform
+from jax.random import PRNGKey, fold_in, uniform
 from jaxopt import GaussNewton, LevenbergMarquardt
 from jaxopt.linear_solve import solve_lu
 
@@ -36,22 +36,20 @@ def _rv(v: jnp.ndarray) -> jnp.ndarray:
 
 
 @jit
-def kron2(A, B):
-    """Kronecker product for 2x2 matrices."""
-    return jnp.einsum("ab,cd->acbd", A, B).reshape(4, 4)
-
-
-@jit
 def _construct_unitary(params, prefix_op, basis_gate):
-    """Construct U = G · (u1 ⊗ u0) · C from 6D rotation vector params."""
-    return basis_gate @ kron2(_rv(params[3:6]), _rv(params[:3])) @ prefix_op
+    """Construct U = basis_gate @ (u0 ⊗ u1) @ prefix_op from 6D rotation-vector params."""
+    u0 = _rv(params[3:6])  # 2x2
+    u1 = _rv(params[:3])  # 2x2
 
+    # Inline 2x2 kron: (u0 ⊗ u1) as a 4x4 block matrix
+    kron = jnp.block(
+        [
+            [u0[0, 0] * u1, u0[0, 1] * u1],
+            [u0[1, 0] * u1, u0[1, 1] * u1],
+        ]
+    )
 
-def _params_to_locals(params: jnp.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Convert 6D rotation vector params to two 2x2 unitaries."""
-    u0 = _rv(params[3:6])
-    u1 = _rv(params[:3])
-    return device_get(u0), device_get(u1)
+    return basis_gate @ kron @ prefix_op
 
 
 def _make_residual_fn(invariant_fn):
@@ -93,6 +91,24 @@ class JaxLMSegmentSolver(SegmentSolver):
             solver=solve_lu,
         )
 
+        self._run_makhlin = jit(
+            lambda init, prefix_op, basis_gate, target_inv: self._makhlin_solver.run(
+                init,
+                prefix_op=prefix_op,
+                basis_gate=basis_gate,
+                target_inv=target_inv,
+            )
+        )
+
+        self._run_weyl = jit(
+            lambda init, prefix_op, basis_gate, target_inv: self._weyl_solver.run(
+                init,
+                prefix_op=prefix_op,
+                basis_gate=basis_gate,
+                target_inv=target_inv,
+            )
+        )
+
     def solve_segment(
         self,
         prefix_op: np.ndarray,
@@ -115,120 +131,100 @@ class JaxLMSegmentSolver(SegmentSolver):
         weyl_conv_tol = self.config.weyl_conv_tol
 
         key = PRNGKey(rng_seed or 0)
-        keys = split(key, self.config.makhlin_restarts + self.config.weyl_restarts)
 
         # Stage 1: Makhlin exploration
-        best_params = None
-        best_res = float("inf")  # Keep as Python float
-        total_nfev = 0
+        # total_nfev = 0 # NOTE useful for debugging config iteration and attempt values
 
         for i in range(self.config.makhlin_restarts):
-            init = uniform(keys[i], shape=(6,), minval=-jnp.pi / 2, maxval=jnp.pi / 2)
-            result = self._makhlin_solver.run(
+            key_i = fold_in(key, i)
+            init = uniform(key_i, shape=(6,), minval=-jnp.pi / 2, maxval=jnp.pi / 2)
+            result = self._run_makhlin(
                 init, prefix_op=j_prefix, basis_gate=j_gate, target_inv=target_makhlin
             )
+
             res_jax = jnp.max(jnp.abs(result.state.residual))
-            total_nfev += result.state.iter_num
+            # total_nfev += result.state.iter_num
 
-            # Single device transfer per iteration
-            res = float(device_get(res_jax))
-
-            if res < best_res:
-                best_res = res
-                best_params = result.params
-
-            if res <= makhlin_conv_tol:
+            if res_jax <= makhlin_conv_tol:
                 break
 
         # Check convergence (best_res already on CPU)
-        if best_res > makhlin_conv_tol:
-            raise RuntimeError(
-                f"Stage 1 (Makhlin) failed: best residual {best_res:.2e}"
-            )
+        if res_jax > makhlin_conv_tol:
+            raise RuntimeError(f"Stage 1 (Makhlin) failed: best residual {res_jax:.2e}")
 
         # Determine Weyl branch
         constructed_weyl = self._weyl_fn(
-            _construct_unitary(best_params, j_prefix, j_gate)
+            _construct_unitary(result.params, j_prefix, j_gate)
         )
 
+        # FIXME messy device transfers here
         # Check both branches (single device transfer for comparison)
         direct_res = jnp.max(jnp.abs(constructed_weyl - target_weyl))
         reflected = jnp.array([1.0 - target_weyl[0], target_weyl[1], -target_weyl[2]])
         reflect_res = jnp.max(jnp.abs(constructed_weyl - reflected))
 
         # Transfer both to CPU, decide, then keep target on device
-        direct_val, reflect_val = (
-            float(device_get(direct_res)),
-            float(device_get(reflect_res)),
-        )
-        use_reflected = reflect_val < direct_val
+        use_reflected = bool(device_get(reflect_res < direct_res))
         weyl_target = reflected if use_reflected else target_weyl
-        weyl_res_val = reflect_val if use_reflected else direct_val
+
+        # If you need weyl_res_val for metadata, transfer just the chosen one:
+        weyl_res_val = float(
+            device_get(jnp.where(use_reflected, reflect_res, direct_res))
+        )
 
         # Early exit if already converged
         if weyl_res_val <= weyl_conv_tol:
-            u0, u1 = _params_to_locals(best_params)
             return SegmentSolution(
-                u0=u0,
-                u1=u1,
+                u0=_rv(result.params[3:6]),
+                u1=_rv(result.params[:3]),
                 max_residual=weyl_res_val,
                 success=True,
                 metadata={
                     "stage": "makhlin",
-                    "nfev": int(device_get(total_nfev)),
+                    # "nfev": int(device_get(total_nfev)),
                     "elapsed": time.perf_counter() - start_time,
                     "use_reflected": use_reflected,
                 },
             )
 
         # Stage 2: Weyl polishing
-        warm_start = best_params
-        weyl_best_params = None
-        weyl_best_res = float("inf")  # Keep as Python float
+        warm_start = result.params
 
         for i in range(self.config.weyl_restarts):
             if i == 0:
                 init = warm_start
             else:
+                key_i = fold_in(key, self.config.makhlin_restarts + i)
                 perturb = uniform(
-                    keys[self.config.makhlin_restarts + i],
+                    key_i,
                     shape=(6,),
                     minval=-self.config.weyl_perturb_scale,
                     maxval=self.config.weyl_perturb_scale,
                 )
                 init = warm_start + perturb
 
-            result = self._weyl_solver.run(
+            result = self._run_weyl(
                 init, prefix_op=j_prefix, basis_gate=j_gate, target_inv=weyl_target
             )
+
             res_jax = jnp.max(jnp.abs(result.state.residual))
-            total_nfev += result.state.iter_num
+            # total_nfev += result.state.iter_num
 
-            # Single device transfer per iteration
-            res = float(device_get(res_jax))
-
-            if res < weyl_best_res:
-                weyl_best_res = res
-                weyl_best_params = result.params
-
-            if res <= weyl_conv_tol:
+            if res_jax <= weyl_conv_tol:
                 break
 
         # Check convergence (weyl_best_res already on CPU)
-        if weyl_best_res > weyl_conv_tol:
-            raise RuntimeError(
-                f"Stage 2 (Weyl) failed: best residual {weyl_best_res:.2e}"
-            )
+        if res_jax > weyl_conv_tol:
+            raise RuntimeError(f"Stage 2 (Weyl) failed: best residual {res_jax:.2e}")
 
-        u0, u1 = _params_to_locals(weyl_best_params)
         return SegmentSolution(
-            u0=u0,
-            u1=u1,
-            max_residual=weyl_best_res,
+            u0=_rv(result.params[3:6]),
+            u1=_rv(result.params[:3]),
+            max_residual=res_jax,
             success=True,
             metadata={
                 "stage": "weyl",
-                "nfev": int(device_get(total_nfev)),
+                # "nfev": int(device_get(total_nfev)),
                 "elapsed": time.perf_counter() - start_time,
                 "use_reflected": use_reflected,
             },

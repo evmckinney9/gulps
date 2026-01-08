@@ -20,53 +20,19 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class SegmentCacheEntry:
-    """Cache entry for a single segment solution.
+    """Cache entry storing keys and solution with hit count for LFU eviction."""
 
-    Stores the inputs as GateInvariants, the solution, and hit count for LFU eviction.
-    Matching uses GateInvariants.__eq__ (monodromy-based) with rho-reflection support.
-    """
-
-    prefix_inv: GateInvariants
-    basis_inv: GateInvariants
-    target_inv: GateInvariants
+    prefix_key: tuple
+    basis_key: tuple
+    target_key: tuple
     solution: SegmentSolution
     hit_count: int = 0
-
-    def matches(
-        self, prefix_inv: GateInvariants, basis_inv: GateInvariants, target_inv: GateInvariants
-    ) -> bool:
-        """Check if the cache entry matches the given inputs.
-
-        Checks in order: target (with rho), prefix, basis - for fastest fail-early.
-
-        Args:
-            prefix_inv: The prefix invariants to match.
-            basis_inv: The basis gate invariants to match.
-            target_inv: The target invariants to match (checked against both
-                        original and rho-reflected).
-
-        Returns:
-            True if all inputs match.
-        """
-        # Check target first (most likely to differ) - allow rho-reflection match
-        if self.target_inv != target_inv and self.target_inv != target_inv.rho_reflect:
-            return False
-        if self.prefix_inv != prefix_inv:
-            return False
-        if self.basis_inv != basis_inv:
-            return False
-        return True
 
 
 class SegmentCache:
     """Per-step cache for segment solutions with LFU eviction.
 
-    Maintains up to k cache entries per discrete step index, where k is
-    configured by segment_cache_size. When a step's cache is full, the
-    least frequently used entry is evicted.
-
-    Early steps in decomposition often compute similar solutions across
-    different targets, making this cache effective for iterative workflows.
+    Uses list-based storage with fast tuple key comparison.
     """
 
     def __init__(self, max_entries_per_step: int = 2):
@@ -82,23 +48,19 @@ class SegmentCache:
         basis_inv: GateInvariants,
         target_inv: GateInvariants,
     ) -> Optional[SegmentSolution]:
-        """Look up a cached solution for the given step and inputs.
+        """Lookup cached solution using fast _key comparison."""
+        entries = self._entries.get(step)
+        if entries is None:
+            self.misses += 1
+            return None
 
-        Args:
-            step: The discrete step index (0-indexed segment number).
-            prefix_inv: The prefix invariants for this segment.
-            basis_inv: The basis gate invariants for this segment.
-            target_inv: The target invariants.
-
-        Returns:
-            Cached SegmentSolution if found and matching, None otherwise.
-        """
-        entries = self._entries.get(step, [])
+        pk, bk, tk = prefix_inv._key, basis_inv._key, target_inv._key
         for entry in entries:
-            if entry.matches(prefix_inv, basis_inv, target_inv):
+            if entry.target_key == tk and entry.prefix_key == pk and entry.basis_key == bk:
                 entry.hit_count += 1
                 self.hits += 1
                 return entry.solution
+
         self.misses += 1
         return None
 
@@ -110,40 +72,25 @@ class SegmentCache:
         target_inv: GateInvariants,
         solution: SegmentSolution,
     ) -> None:
-        """Store a solution in the cache for the given step.
-
-        Uses LFU eviction: if the step has max_entries, evicts the entry
-        with the lowest hit_count.
-
-        Args:
-            step: The discrete step index.
-            prefix_inv: The prefix invariants used.
-            basis_inv: The basis gate invariants used.
-            target_inv: The target invariants.
-            solution: The computed solution to cache.
-        """
+        """Store solution with LFU eviction when at capacity."""
         if step not in self._entries:
             self._entries[step] = []
 
         entries = self._entries[step]
+        pk, bk, tk = prefix_inv._key, basis_inv._key, target_inv._key
 
-        # Check if already cached (shouldn't happen if called after get miss, but be safe)
+        # Check if already cached
         for entry in entries:
-            if entry.matches(prefix_inv, basis_inv, target_inv):
+            if entry.target_key == tk and entry.prefix_key == pk and entry.basis_key == bk:
                 return
 
         new_entry = SegmentCacheEntry(
-            prefix_inv=prefix_inv,
-            basis_inv=basis_inv,
-            target_inv=target_inv,
-            solution=solution,
-            hit_count=0,
+            prefix_key=pk, basis_key=bk, target_key=tk, solution=solution, hit_count=0
         )
 
         if len(entries) < self._max_entries:
             entries.append(new_entry)
         else:
-            # LFU eviction: find and replace entry with lowest hit_count
             min_idx = min(range(len(entries)), key=lambda i: entries[i].hit_count)
             entries[min_idx] = new_entry
 
@@ -237,7 +184,9 @@ class SegmentSynthesizer:
         qreg = dag.qregs["q"]
 
         # Initialize with first gate
-        dag.apply_operation_back(UnitaryGate(gate_list[0].unitary), qreg[:])
+        dag.apply_operation_back(
+            UnitaryGate(gate_list[0].unitary, check_input=False), qreg[:]
+        )
 
         if method == "sequential":
             raise NotImplementedError(
@@ -252,10 +201,10 @@ class SegmentSynthesizer:
             target.unitary, P, config=self.config
         )
         dag.global_phase += gphase
-        dag.apply_operation_front(UnitaryGate(k1), [qreg[0]])
-        dag.apply_operation_front(UnitaryGate(k2), [qreg[1]])
-        dag.apply_operation_back(UnitaryGate(k3), [qreg[0]])
-        dag.apply_operation_back(UnitaryGate(k4), [qreg[1]])
+        dag.apply_operation_front(UnitaryGate(k1, check_input=False), [qreg[0]])
+        dag.apply_operation_front(UnitaryGate(k2, check_input=False), [qreg[1]])
+        dag.apply_operation_back(UnitaryGate(k3, check_input=False), [qreg[0]])
+        dag.apply_operation_back(UnitaryGate(k4, check_input=False), [qreg[1]])
 
         return dag if return_dag else dag_to_circuit(dag)
 
@@ -312,9 +261,13 @@ class SegmentSynthesizer:
         # Phase 2: Stitch solutions together with intermediate recovery
         P = gate_list[0].unitary.to_matrix()
         for idx, (Gi, Ci, seg_sol) in enumerate(segment_sols):
-            dag.apply_operation_back(UnitaryGate(seg_sol.u0), [qreg[0]])
-            dag.apply_operation_back(UnitaryGate(seg_sol.u1), [qreg[1]])
-            dag.apply_operation_back(UnitaryGate(Gi), qreg[:])
+            dag.apply_operation_back(
+                UnitaryGate(seg_sol.u0, check_input=False), [qreg[0]]
+            )
+            dag.apply_operation_back(
+                UnitaryGate(seg_sol.u1, check_input=False), [qreg[1]]
+            )
+            dag.apply_operation_back(UnitaryGate(Gi, check_input=False), qreg[:])
             # track P manually instead of recomputing from DAG
             # P = Operator(dag_to_circuit(dag)).data
             P = Gi @ np.kron(seg_sol.u1, seg_sol.u0) @ P
@@ -329,8 +282,8 @@ class SegmentSynthesizer:
                     Ci, P, config=self.config
                 )
                 dag.global_phase += gphase
-                dag.apply_operation_back(UnitaryGate(k3), [qreg[0]])
-                dag.apply_operation_back(UnitaryGate(k4), [qreg[1]])
+                dag.apply_operation_back(UnitaryGate(k3, check_input=False), [qreg[0]])
+                dag.apply_operation_back(UnitaryGate(k4, check_input=False), [qreg[1]])
                 # Update accumulated unitary (and global phase)
                 P = np.kron(k4, k3) @ P
 

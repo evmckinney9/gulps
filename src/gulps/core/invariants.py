@@ -37,10 +37,15 @@ class GateInvariants:
         if len(logspec) == LEN_GATE_INVARIANTS:
             logspec = logspec + (-1.0 * sum(logspec),)
         self.logspec = logspec
-        self._monodromy = logspec[:LEN_GATE_INVARIANTS]  # Monodromy
+        self._monodromy = np.array(
+            logspec[:LEN_GATE_INVARIANTS], dtype=np.float64
+        )  # Monodromy
         self.name = name or "2QGate"
         self._unitary = unitary  # Optional reference to original unitary
         self._rho_reflect = rho_reflect
+
+        # Quantize ONCE
+        self._key = tuple(np.rint(self.monodromy * 1e12).astype(np.int64))
 
         self._weyl = None
         self._makhlin = None
@@ -150,12 +155,11 @@ class GateInvariants:
     def __eq__(self, other) -> bool:
         if not isinstance(other, GateInvariants):
             return NotImplemented
-        return np.allclose(self.monodromy, other.monodromy, rtol=1e-12, atol=1e-15)
+        return self._key == other._key
 
     def __hash__(self) -> int:
         # Round to 15-digit precision and convert to integers for stable hashing
-        scaled = tuple(np.round(np.array(self.monodromy) / 1e-15).astype(int))
-        return hash(scaled)
+        return hash(self._key)
 
     def plot(self):
         from gulps.viz.invariant_viz import scatter_plot
