@@ -286,9 +286,8 @@ class JaxLMSegmentSolver(SegmentSolver):
         weyl_res = jnp.minimum(direct_res, reflect_res)
 
         # Stage 2: Weyl polishing with warm start
-        weyl_key = fold_in(self._key, self.config.makhlin_restarts)
         weyl_params, weyl_res = self._solve_weyl(
-            weyl_key,
+            self._key,
             j_prefix,
             j_gate,
             weyl_target,
