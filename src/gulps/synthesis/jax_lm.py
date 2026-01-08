@@ -8,7 +8,7 @@ from jaxopt import GaussNewton, LevenbergMarquardt
 from jaxopt.linear_solve import solve_lu
 
 from gulps.config import GulpsConfig
-from gulps.core.jax_invariants import get_invariant_function
+from gulps.core.jax_invariants import makhlin_invariants, weyl_coordinates
 from gulps.synthesis.segments_abc import SegmentSolution, SegmentSolver
 
 # Pauli matrices
@@ -67,6 +67,11 @@ def _make_residual_fn(invariant_fn):
         return target_inv - invariant_fn(U)
 
     return residual
+
+
+# Pre-built residual functions
+_makhlin_residual = _make_residual_fn(makhlin_invariants)
+_weyl_residual = _make_residual_fn(weyl_coordinates)
 
 
 def _make_restart_loop(run_solver, max_restarts: int):
@@ -200,11 +205,8 @@ class JaxLMSegmentSolver(SegmentSolver):
         self.config = config or GulpsConfig()
         self._key = PRNGKey(rng_seed or 0)
 
-        self._makhlin_fn = get_invariant_function("makhlin")
-        self._weyl_fn = get_invariant_function("weyl")
-
         makhlin_solver = GaussNewton(
-            residual_fun=_make_residual_fn(self._makhlin_fn),
+            residual_fun=_makhlin_residual,
             maxiter=self.config.makhlin_maxiter,
             tol=self.config.segment_solver_tol,
             implicit_diff=False,
@@ -213,7 +215,7 @@ class JaxLMSegmentSolver(SegmentSolver):
         )
 
         weyl_solver = LevenbergMarquardt(
-            residual_fun=_make_residual_fn(self._weyl_fn),
+            residual_fun=_weyl_residual,
             maxiter=self.config.weyl_maxiter,
             tol=self.config.segment_solver_tol,
             implicit_diff=False,
@@ -229,7 +231,7 @@ class JaxLMSegmentSolver(SegmentSolver):
 
         self._solve_weyl = _make_warmstart_loop(
             weyl_solver.run,
-            _make_residual_fn(self._weyl_fn),
+            _weyl_residual,
             self.config.weyl_restarts,
             self.config.weyl_perturb_scale,
         )
@@ -247,8 +249,8 @@ class JaxLMSegmentSolver(SegmentSolver):
         j_gate = jnp.asarray(basis_gate, dtype=jnp.complex128)
         j_target = jnp.asarray(target, dtype=jnp.complex128)
 
-        target_makhlin = self._makhlin_fn(j_target)
-        target_weyl = self._weyl_fn(j_target)
+        target_makhlin = makhlin_invariants(j_target)
+        target_weyl = weyl_coordinates(j_target)
 
         # Stage 1: Makhlin exploration
         makhlin_params, makhlin_res = self._solve_makhlin(
@@ -270,10 +272,7 @@ class JaxLMSegmentSolver(SegmentSolver):
 
         # Determine Weyl branch (direct vs reflected)
         U = _construct_unitary(makhlin_params, j_prefix, j_gate)
-        constructed_weyl = self._weyl_fn(U)
-        # reflected_weyl = jnp.array(
-        #     [1.0 - target_weyl[0], target_weyl[1], -target_weyl[2]]
-        # )
+        constructed_weyl = weyl_coordinates(U)
         reflected_weyl = target_weyl * jnp.array([-1.0, 1.0, -1.0]) + jnp.array(
             [1.0, 0.0, 0.0]
         )
@@ -283,7 +282,6 @@ class JaxLMSegmentSolver(SegmentSolver):
         use_reflected = reflect_res < direct_res
 
         weyl_target = jnp.where(use_reflected, reflected_weyl, target_weyl)
-        weyl_res = jnp.minimum(direct_res, reflect_res)
 
         # Stage 2: Weyl polishing with warm start
         weyl_params, weyl_res = self._solve_weyl(
@@ -295,10 +293,9 @@ class JaxLMSegmentSolver(SegmentSolver):
             makhlin_params,
         )
 
-        # Check residual directly (need this value for return anyway)
+        # Check residual (need this value for return anyway)
         weyl_res_py = float(weyl_res)
         if weyl_res_py > self.config.weyl_conv_tol:
-            # Include Stage 1 info in error for debugging
             makhlin_res_py = float(makhlin_res)
             raise RuntimeError(
                 f"Optimization failed: Stage 1 residual {makhlin_res_py:.2e}, "

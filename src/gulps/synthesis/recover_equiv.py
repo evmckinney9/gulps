@@ -34,7 +34,7 @@ def recover_local_equivalence(
 
     Cases:
       1) exact Weyl match         -> identity corrections
-      2) target=(a,b,b) & basis=(a,b,-b)
+      2) target=(a,b,c) & basis=(pi/2 - a,b,-c)
                                   -> insert X,Z before and I,Y after
       3) otherwise                -> ValueError
     """
