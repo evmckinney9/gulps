@@ -119,8 +119,14 @@ def _make_restart_loop(run_solver, max_restarts: int):
     return run_until_success
 
 
-def _make_warmstart_loop(run_solver, max_restarts: int, perturb_scale: float):
-    """Factory that creates a jitted warm-start restart loop."""
+def _make_warmstart_loop(
+    run_solver, residual_fn, max_restarts: int, perturb_scale: float
+):
+    """Factory that creates a jitted warm-start restart loop.
+
+    Iteration 0 evaluates the warm start directly (no solver call).
+    Subsequent iterations run the solver with perturbations.
+    """
 
     @jit
     def run_until_success(
@@ -142,19 +148,30 @@ def _make_warmstart_loop(run_solver, max_restarts: int, perturb_scale: float):
             perturb = uniform(
                 key_i, shape=(6,), minval=-perturb_scale, maxval=perturb_scale
             )
-            init = jnp.where(i == 0, warm_start, warm_start + perturb)
 
-            result = run_solver(
-                init, prefix_op=prefix_op, basis_gate=basis_gate, target_inv=target_inv
-            )
+            # Iteration 0: just evaluate warm_start, no solver
+            # Iteration 1+: run solver with perturbed warm_start
+            def iter_zero(_):
+                res_vec = residual_fn(warm_start, prefix_op, basis_gate, target_inv)
+                return warm_start, jnp.max(jnp.abs(res_vec))
 
-            res = jnp.max(jnp.abs(result.state.residual))
+            def iter_nonzero(_):
+                init = warm_start + perturb
+                result = run_solver(
+                    init,
+                    prefix_op=prefix_op,
+                    basis_gate=basis_gate,
+                    target_inv=target_inv,
+                )
+                return result.params, jnp.max(jnp.abs(result.state.residual))
+
+            params, res = lax.cond(i == 0, iter_zero, iter_nonzero, None)
             improved = res < best_res
 
             return (
                 i + 1,
                 key,
-                jnp.where(improved, result.params, best_params),
+                jnp.where(improved, params, best_params),
                 jnp.where(improved, res, best_res),
                 done | (res <= tol),
             )
@@ -212,6 +229,7 @@ class JaxLMSegmentSolver(SegmentSolver):
 
         self._solve_weyl = _make_warmstart_loop(
             weyl_solver.run,
+            _make_residual_fn(self._weyl_fn),
             self.config.weyl_restarts,
             self.config.weyl_perturb_scale,
         )
@@ -253,8 +271,11 @@ class JaxLMSegmentSolver(SegmentSolver):
         # Determine Weyl branch (direct vs reflected)
         U = _construct_unitary(makhlin_params, j_prefix, j_gate)
         constructed_weyl = self._weyl_fn(U)
-        reflected_weyl = jnp.array(
-            [1.0 - target_weyl[0], target_weyl[1], -target_weyl[2]]
+        # reflected_weyl = jnp.array(
+        #     [1.0 - target_weyl[0], target_weyl[1], -target_weyl[2]]
+        # )
+        reflected_weyl = target_weyl * jnp.array([-1.0, 1.0, -1.0]) + jnp.array(
+            [1.0, 0.0, 0.0]
         )
 
         direct_res = jnp.max(jnp.abs(constructed_weyl - target_weyl))
@@ -263,21 +284,6 @@ class JaxLMSegmentSolver(SegmentSolver):
 
         weyl_target = jnp.where(use_reflected, reflected_weyl, target_weyl)
         weyl_res = jnp.minimum(direct_res, reflect_res)
-
-        # Early exit if already converged (worth the sync to skip Stage 2)
-        weyl_res_py = float(weyl_res)
-        if weyl_res_py <= self.config.weyl_conv_tol:
-            u0, u1 = _params_to_unitaries(makhlin_params)
-            return SegmentSolution(
-                u0=u0,
-                u1=u1,
-                max_residual=weyl_res_py,
-                success=True,
-                metadata={
-                    "stage": "makhlin",
-                    "elapsed": time.perf_counter() - start_time,
-                },
-            )
 
         # Stage 2: Weyl polishing with warm start
         weyl_key = fold_in(self._key, self.config.makhlin_restarts)
