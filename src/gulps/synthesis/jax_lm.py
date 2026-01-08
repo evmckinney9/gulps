@@ -1,9 +1,8 @@
 import time
-from dataclasses import dataclass
 
 import jax.numpy as jnp
 import numpy as np
-from jax import config, device_get, jit
+from jax import device_get, jit
 from jax.random import PRNGKey, fold_in, uniform
 from jaxopt import GaussNewton, LevenbergMarquardt
 from jaxopt.linear_solve import solve_lu
@@ -66,7 +65,11 @@ def _make_residual_fn(invariant_fn):
 class JaxLMSegmentSolver(SegmentSolver):
     """Two-stage Makhlin→Weyl segment solver."""
 
-    def __init__(self, config: GulpsConfig | None = None):
+    def __init__(
+        self,
+        config: GulpsConfig | None = None,
+        rng_seed: int | None = None,
+    ):
         self.config = config or GulpsConfig()
 
         self._makhlin_fn = get_invariant_function("makhlin")
@@ -108,14 +111,13 @@ class JaxLMSegmentSolver(SegmentSolver):
                 target_inv=target_inv,
             )
         )
+        self._key = PRNGKey(rng_seed or 0)
 
     def solve_segment(
         self,
         prefix_op: np.ndarray,
         basis_gate: np.ndarray,
         target: np.ndarray,
-        *,
-        rng_seed: int | None = None,
     ) -> SegmentSolution:
         """Solve for local unitaries using two-stage optimization."""
         start_time = time.perf_counter()
@@ -130,47 +132,35 @@ class JaxLMSegmentSolver(SegmentSolver):
         makhlin_conv_tol = self.config.makhlin_conv_tol
         weyl_conv_tol = self.config.weyl_conv_tol
 
-        key = PRNGKey(rng_seed or 0)
-
         # Stage 1: Makhlin exploration
-        # total_nfev = 0 # NOTE useful for debugging config iteration and attempt values
-
         for i in range(self.config.makhlin_restarts):
-            key_i = fold_in(key, i)
+            key_i = fold_in(self._key, i)
             init = uniform(key_i, shape=(6,), minval=-jnp.pi / 2, maxval=jnp.pi / 2)
             result = self._run_makhlin(
                 init, prefix_op=j_prefix, basis_gate=j_gate, target_inv=target_makhlin
             )
 
             res_jax = jnp.max(jnp.abs(result.state.residual))
-            # total_nfev += result.state.iter_num
+            res_val = float(device_get(res_jax))
 
-            if res_jax <= makhlin_conv_tol:
+            if res_val <= makhlin_conv_tol:
                 break
 
-        # Check convergence (best_res already on CPU)
-        if res_jax > makhlin_conv_tol:
-            raise RuntimeError(f"Stage 1 (Makhlin) failed: best residual {res_jax:.2e}")
+        # Check convergence
+        if res_val > makhlin_conv_tol:
+            raise RuntimeError(f"Stage 1 (Makhlin) failed: best residual {res_val:.2e}")
 
         # Determine Weyl branch
         constructed_weyl = self._weyl_fn(
             _construct_unitary(result.params, j_prefix, j_gate)
         )
-
-        # FIXME messy device transfers here
-        # Check both branches (single device transfer for comparison)
+        # Check both branches on-device, single transfer for decision
         direct_res = jnp.max(jnp.abs(constructed_weyl - target_weyl))
         reflected = jnp.array([1.0 - target_weyl[0], target_weyl[1], -target_weyl[2]])
         reflect_res = jnp.max(jnp.abs(constructed_weyl - reflected))
-
-        # Transfer both to CPU, decide, then keep target on device
-        use_reflected = bool(device_get(reflect_res < direct_res))
+        use_reflected = reflect_res < direct_res
         weyl_target = reflected if use_reflected else target_weyl
-
-        # If you need weyl_res_val for metadata, transfer just the chosen one:
-        weyl_res_val = float(
-            device_get(jnp.where(use_reflected, reflect_res, direct_res))
-        )
+        weyl_res_val = jnp.where(use_reflected, reflect_res, direct_res)
 
         # Early exit if already converged
         if weyl_res_val <= weyl_conv_tol:
@@ -181,9 +171,8 @@ class JaxLMSegmentSolver(SegmentSolver):
                 success=True,
                 metadata={
                     "stage": "makhlin",
-                    # "nfev": int(device_get(total_nfev)),
                     "elapsed": time.perf_counter() - start_time,
-                    "use_reflected": use_reflected,
+                    # "use_reflected": use_reflected,
                 },
             )
 
@@ -194,7 +183,7 @@ class JaxLMSegmentSolver(SegmentSolver):
             if i == 0:
                 init = warm_start
             else:
-                key_i = fold_in(key, self.config.makhlin_restarts + i)
+                key_i = fold_in(self._key, self.config.makhlin_restarts + i)
                 perturb = uniform(
                     key_i,
                     shape=(6,),
@@ -208,14 +197,14 @@ class JaxLMSegmentSolver(SegmentSolver):
             )
 
             res_jax = jnp.max(jnp.abs(result.state.residual))
-            # total_nfev += result.state.iter_num
+            res_val = float(device_get(res_jax))
 
-            if res_jax <= weyl_conv_tol:
+            if res_val <= weyl_conv_tol:
                 break
 
-        # Check convergence (weyl_best_res already on CPU)
-        if res_jax > weyl_conv_tol:
-            raise RuntimeError(f"Stage 2 (Weyl) failed: best residual {res_jax:.2e}")
+        # Check convergence
+        if res_val > weyl_conv_tol:
+            raise RuntimeError(f"Stage 2 (Weyl) failed: best residual {res_val:.2e}")
 
         return SegmentSolution(
             u0=_rv(result.params[3:6]),
@@ -224,8 +213,7 @@ class JaxLMSegmentSolver(SegmentSolver):
             success=True,
             metadata={
                 "stage": "weyl",
-                # "nfev": int(device_get(total_nfev)),
                 "elapsed": time.perf_counter() - start_time,
-                "use_reflected": use_reflected,
+                # "use_reflected": use_reflected,
             },
         )
