@@ -39,9 +39,9 @@ def makhlin_invariants(U: jnp.ndarray) -> jnp.ndarray:
     Um = MAGIC_DAG @ U @ MAGIC
 
     # Skipping det normalization - risky but faster
-    # det_um = jnp.linalg.det(Um)
-    # det_um /= jnp.abs(det_um)
-    det_um = 1.0
+    det_um = jnp.linalg.det(Um)
+    det_um /= jnp.abs(det_um)
+    # det_um = 1.0
 
     M = Um.T @ Um
     t1 = jnp.trace(M)
@@ -52,6 +52,14 @@ def makhlin_invariants(U: jnp.ndarray) -> jnp.ndarray:
     g2 = (t1s - t2) / (4.0 * det_um)
 
     return jnp.array([jnp.real(g1), jnp.imag(g1), jnp.real(g2)], dtype=jnp.float64)
+
+
+@jit
+def _su4_normalize(U: jnp.ndarray) -> jnp.ndarray:
+    """Project global phase so det(U)=1 using principal log."""
+    detU = jnp.linalg.det(U)
+    phase = jnp.exp(-0.25 * jnp.log(detU))
+    return U * phase
 
 
 @jit
@@ -71,6 +79,7 @@ def weyl_coordinates(U: jnp.ndarray) -> jnp.ndarray:
     Global phase cancels in U @ U_tilde, but if issues arise, restore:
         U = _su4_normalize(U)
     """
+    U = _su4_normalize(U)
     U_tilde = _SYSY @ U.T @ _SYSY
     gamma = U @ U_tilde
 
