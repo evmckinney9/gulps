@@ -34,6 +34,9 @@ class GulpsConfig:
             Stage 2 usually converges faster than Stage 1. Default: 64
         weyl_perturb_scale: Perturbation magnitude for Stage 2 restarts.
             Controls how far to perturb from Stage 1 solution. Default: 1e-4
+
+    Cache Attributes:
+        segment_cache_size: Size of the LFU cache for each step index. Default: 3
     """
 
     # Tolerances
@@ -49,3 +52,6 @@ class GulpsConfig:
     weyl_restarts: int = 128
     weyl_maxiter: int = 64
     weyl_perturb_scale: float = 1e-4
+
+    # Cache parameters
+    segment_cache_size: int = 3

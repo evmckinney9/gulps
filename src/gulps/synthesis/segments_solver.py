@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 class SegmentCacheEntry:
     """Cache entry for a single segment solution.
 
-    Stores the inputs as GateInvariants and the solution.
+    Stores the inputs as GateInvariants, the solution, and hit count for LFU eviction.
     Matching uses GateInvariants.__eq__ (monodromy-based) with rho-reflection support.
     """
 
@@ -30,6 +30,7 @@ class SegmentCacheEntry:
     basis_inv: GateInvariants
     target_inv: GateInvariants
     solution: SegmentSolution
+    hit_count: int = 0
 
     def matches(
         self, prefix_inv: GateInvariants, basis_inv: GateInvariants, target_inv: GateInvariants
@@ -58,15 +59,19 @@ class SegmentCacheEntry:
 
 
 class SegmentCache:
-    """Per-step cache for segment solutions.
+    """Per-step cache for segment solutions with LFU eviction.
 
-    Maintains one cache entry per discrete step index (k=1 policy).
+    Maintains up to k cache entries per discrete step index, where k is
+    configured by segment_cache_size. When a step's cache is full, the
+    least frequently used entry is evicted.
+
     Early steps in decomposition often compute similar solutions across
     different targets, making this cache effective for iterative workflows.
     """
 
-    def __init__(self):
-        self._entries: dict[int, SegmentCacheEntry] = {}
+    def __init__(self, max_entries_per_step: int = 2):
+        self._entries: dict[int, list[SegmentCacheEntry]] = {}
+        self._max_entries = max_entries_per_step
         self.hits = 0
         self.misses = 0
 
@@ -88,10 +93,12 @@ class SegmentCache:
         Returns:
             Cached SegmentSolution if found and matching, None otherwise.
         """
-        entry = self._entries.get(step)
-        if entry is not None and entry.matches(prefix_inv, basis_inv, target_inv):
-            self.hits += 1
-            return entry.solution
+        entries = self._entries.get(step, [])
+        for entry in entries:
+            if entry.matches(prefix_inv, basis_inv, target_inv):
+                entry.hit_count += 1
+                self.hits += 1
+                return entry.solution
         self.misses += 1
         return None
 
@@ -105,7 +112,8 @@ class SegmentCache:
     ) -> None:
         """Store a solution in the cache for the given step.
 
-        Overwrites any existing entry for this step (k=1 policy).
+        Uses LFU eviction: if the step has max_entries, evicts the entry
+        with the lowest hit_count.
 
         Args:
             step: The discrete step index.
@@ -114,12 +122,30 @@ class SegmentCache:
             target_inv: The target invariants.
             solution: The computed solution to cache.
         """
-        self._entries[step] = SegmentCacheEntry(
+        if step not in self._entries:
+            self._entries[step] = []
+
+        entries = self._entries[step]
+
+        # Check if already cached (shouldn't happen if called after get miss, but be safe)
+        for entry in entries:
+            if entry.matches(prefix_inv, basis_inv, target_inv):
+                return
+
+        new_entry = SegmentCacheEntry(
             prefix_inv=prefix_inv,
             basis_inv=basis_inv,
             target_inv=target_inv,
             solution=solution,
+            hit_count=0,
         )
+
+        if len(entries) < self._max_entries:
+            entries.append(new_entry)
+        else:
+            # LFU eviction: find and replace entry with lowest hit_count
+            min_idx = min(range(len(entries)), key=lambda i: entries[i].hit_count)
+            entries[min_idx] = new_entry
 
     def clear(self) -> None:
         """Clear all cached entries and reset statistics."""
@@ -131,11 +157,13 @@ class SegmentCache:
     def stats(self) -> dict:
         """Return cache hit/miss statistics."""
         total = self.hits + self.misses
+        total_entries = sum(len(e) for e in self._entries.values())
         return {
             "hits": self.hits,
             "misses": self.misses,
             "hit_rate": self.hits / total if total > 0 else 0.0,
-            "entries": len(self._entries),
+            "entries": total_entries,
+            "steps": len(self._entries),
         }
 
 
@@ -171,7 +199,7 @@ class SegmentSynthesizer:
     def __init__(self, solver: SegmentSolver, config: GulpsConfig | None = None):
         self._solver = solver
         self.config = config or GulpsConfig()
-        self._cache = SegmentCache()
+        self._cache = SegmentCache(max_entries_per_step=self.config.segment_cache_size)
 
     def synthesize_segments(
         self,
