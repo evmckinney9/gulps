@@ -2,7 +2,7 @@ import time
 
 import jax.numpy as jnp
 import numpy as np
-from jax import device_get, jit
+from jax import jit, lax
 from jax.random import PRNGKey, fold_in, uniform
 from jaxopt import GaussNewton, LevenbergMarquardt
 from jaxopt.linear_solve import solve_lu
@@ -35,20 +35,27 @@ def _rv(v: jnp.ndarray) -> jnp.ndarray:
 
 
 @jit
-def _construct_unitary(params, prefix_op, basis_gate):
-    """Construct U = basis_gate @ (u0 ⊗ u1) @ prefix_op from 6D rotation-vector params."""
-    u0 = _rv(params[3:6])  # 2x2
-    u1 = _rv(params[:3])  # 2x2
+def _params_to_unitaries(params: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray]:
+    """Extract u0, u1 from 6D params."""
+    return _rv(params[:3]), _rv(params[3:])
 
-    # Inline 2x2 kron: (u0 ⊗ u1) as a 4x4 block matrix
-    kron = jnp.block(
+
+@jit
+def _kron_2x2(u0: jnp.ndarray, u1: jnp.ndarray) -> jnp.ndarray:
+    """Kronecker product of two 2x2 matrices."""
+    return jnp.block(
         [
             [u0[0, 0] * u1, u0[0, 1] * u1],
             [u0[1, 0] * u1, u0[1, 1] * u1],
         ]
     )
 
-    return basis_gate @ kron @ prefix_op
+
+@jit
+def _construct_unitary(params, prefix_op, basis_gate):
+    """Construct U = basis_gate @ (u1 ⊗ u0) @ prefix_op from 6D rotation-vector params."""
+    u0, u1 = _params_to_unitaries(params)
+    return basis_gate @ _kron_2x2(u1, u0) @ prefix_op
 
 
 def _make_residual_fn(invariant_fn):
@@ -62,6 +69,109 @@ def _make_residual_fn(invariant_fn):
     return residual
 
 
+def _make_restart_loop(run_solver, max_restarts: int):
+    """Factory that creates a jitted restart loop for a specific solver."""
+
+    @jit
+    def run_until_success(
+        key: PRNGKey,
+        prefix_op: jnp.ndarray,
+        basis_gate: jnp.ndarray,
+        target_inv: jnp.ndarray,
+        tol: float,
+        init_min: float = -jnp.pi / 2,
+        init_max: float = jnp.pi / 2,
+    ):
+        def cond_fn(carry):
+            i, _, _, best_res, done = carry
+            return (i < max_restarts) & (~done)
+
+        def body_fn(carry):
+            i, key, best_params, best_res, done = carry
+
+            key_i = fold_in(key, i)
+            init = uniform(key_i, shape=(6,), minval=init_min, maxval=init_max)
+            result = run_solver(
+                init, prefix_op=prefix_op, basis_gate=basis_gate, target_inv=target_inv
+            )
+
+            res = jnp.max(jnp.abs(result.state.residual))
+            improved = res < best_res
+
+            return (
+                i + 1,
+                key,
+                jnp.where(improved, result.params, best_params),
+                jnp.where(improved, res, best_res),
+                done | (res <= tol),
+            )
+
+        init_state = (
+            jnp.int32(0),
+            key,
+            jnp.zeros((6,), dtype=jnp.float64),
+            jnp.array(jnp.inf, dtype=jnp.float64),
+            jnp.array(False),
+        )
+        _, _, best_params, best_res, _ = lax.while_loop(cond_fn, body_fn, init_state)
+        return best_params, best_res
+
+    return run_until_success
+
+
+def _make_warmstart_loop(run_solver, max_restarts: int, perturb_scale: float):
+    """Factory that creates a jitted warm-start restart loop."""
+
+    @jit
+    def run_until_success(
+        key: PRNGKey,
+        prefix_op: jnp.ndarray,
+        basis_gate: jnp.ndarray,
+        target_inv: jnp.ndarray,
+        tol: float,
+        warm_start: jnp.ndarray,
+    ):
+        def cond_fn(carry):
+            i, _, _, best_res, done = carry
+            return (i < max_restarts) & (~done)
+
+        def body_fn(carry):
+            i, key, best_params, best_res, done = carry
+
+            key_i = fold_in(key, i)
+            perturb = uniform(
+                key_i, shape=(6,), minval=-perturb_scale, maxval=perturb_scale
+            )
+            init = jnp.where(i == 0, warm_start, warm_start + perturb)
+
+            result = run_solver(
+                init, prefix_op=prefix_op, basis_gate=basis_gate, target_inv=target_inv
+            )
+
+            res = jnp.max(jnp.abs(result.state.residual))
+            improved = res < best_res
+
+            return (
+                i + 1,
+                key,
+                jnp.where(improved, result.params, best_params),
+                jnp.where(improved, res, best_res),
+                done | (res <= tol),
+            )
+
+        init_state = (
+            jnp.int32(0),
+            key,
+            warm_start,
+            jnp.array(jnp.inf, dtype=jnp.float64),
+            jnp.array(False),
+        )
+        _, _, best_params, best_res, _ = lax.while_loop(cond_fn, body_fn, init_state)
+        return best_params, best_res
+
+    return run_until_success
+
+
 class JaxLMSegmentSolver(SegmentSolver):
     """Two-stage Makhlin→Weyl segment solver."""
 
@@ -71,11 +181,12 @@ class JaxLMSegmentSolver(SegmentSolver):
         rng_seed: int | None = None,
     ):
         self.config = config or GulpsConfig()
+        self._key = PRNGKey(rng_seed or 0)
 
         self._makhlin_fn = get_invariant_function("makhlin")
         self._weyl_fn = get_invariant_function("weyl")
 
-        self._makhlin_solver = GaussNewton(
+        makhlin_solver = GaussNewton(
             residual_fun=_make_residual_fn(self._makhlin_fn),
             maxiter=self.config.makhlin_maxiter,
             tol=self.config.segment_solver_tol,
@@ -84,7 +195,7 @@ class JaxLMSegmentSolver(SegmentSolver):
             jit=True,
         )
 
-        self._weyl_solver = LevenbergMarquardt(
+        weyl_solver = LevenbergMarquardt(
             residual_fun=_make_residual_fn(self._weyl_fn),
             maxiter=self.config.weyl_maxiter,
             tol=self.config.segment_solver_tol,
@@ -94,24 +205,16 @@ class JaxLMSegmentSolver(SegmentSolver):
             solver=solve_lu,
         )
 
-        self._run_makhlin = jit(
-            lambda init, prefix_op, basis_gate, target_inv: self._makhlin_solver.run(
-                init,
-                prefix_op=prefix_op,
-                basis_gate=basis_gate,
-                target_inv=target_inv,
-            )
+        self._solve_makhlin = _make_restart_loop(
+            makhlin_solver.run,
+            self.config.makhlin_restarts,
         )
 
-        self._run_weyl = jit(
-            lambda init, prefix_op, basis_gate, target_inv: self._weyl_solver.run(
-                init,
-                prefix_op=prefix_op,
-                basis_gate=basis_gate,
-                target_inv=target_inv,
-            )
+        self._solve_weyl = _make_warmstart_loop(
+            weyl_solver.run,
+            self.config.weyl_restarts,
+            self.config.weyl_perturb_scale,
         )
-        self._key = PRNGKey(rng_seed or 0)
 
     def solve_segment(
         self,
@@ -129,91 +232,82 @@ class JaxLMSegmentSolver(SegmentSolver):
         target_makhlin = self._makhlin_fn(j_target)
         target_weyl = self._weyl_fn(j_target)
 
-        makhlin_conv_tol = self.config.makhlin_conv_tol
-        weyl_conv_tol = self.config.weyl_conv_tol
-
         # Stage 1: Makhlin exploration
-        for i in range(self.config.makhlin_restarts):
-            key_i = fold_in(self._key, i)
-            init = uniform(key_i, shape=(6,), minval=-jnp.pi / 2, maxval=jnp.pi / 2)
-            result = self._run_makhlin(
-                init, prefix_op=j_prefix, basis_gate=j_gate, target_inv=target_makhlin
+        makhlin_params, makhlin_res = self._solve_makhlin(
+            self._key,
+            j_prefix,
+            j_gate,
+            target_makhlin,
+            self.config.makhlin_conv_tol,
+        )
+
+        # Optional early check (skipped by default to avoid device sync)
+        if (
+            self.config.strict_convergence_checks
+            and float(makhlin_res) > self.config.makhlin_conv_tol
+        ):
+            raise RuntimeError(
+                f"Stage 1 (Makhlin) failed: best residual {float(makhlin_res):.2e}"
             )
 
-            res_jax = jnp.max(jnp.abs(result.state.residual))
-            res_val = float(device_get(res_jax))
-
-            if res_val <= makhlin_conv_tol:
-                break
-
-        # Check convergence
-        if res_val > makhlin_conv_tol:
-            raise RuntimeError(f"Stage 1 (Makhlin) failed: best residual {res_val:.2e}")
-
-        # Determine Weyl branch
-        constructed_weyl = self._weyl_fn(
-            _construct_unitary(result.params, j_prefix, j_gate)
+        # Determine Weyl branch (direct vs reflected)
+        U = _construct_unitary(makhlin_params, j_prefix, j_gate)
+        constructed_weyl = self._weyl_fn(U)
+        reflected_weyl = jnp.array(
+            [1.0 - target_weyl[0], target_weyl[1], -target_weyl[2]]
         )
-        # Check both branches on-device, single transfer for decision
-        direct_res = jnp.max(jnp.abs(constructed_weyl - target_weyl))
-        reflected = jnp.array([1.0 - target_weyl[0], target_weyl[1], -target_weyl[2]])
-        reflect_res = jnp.max(jnp.abs(constructed_weyl - reflected))
-        use_reflected = reflect_res < direct_res
-        weyl_target = reflected if use_reflected else target_weyl
-        weyl_res_val = jnp.where(use_reflected, reflect_res, direct_res)
 
-        # Early exit if already converged
-        if weyl_res_val <= weyl_conv_tol:
+        direct_res = jnp.max(jnp.abs(constructed_weyl - target_weyl))
+        reflect_res = jnp.max(jnp.abs(constructed_weyl - reflected_weyl))
+        use_reflected = reflect_res < direct_res
+
+        weyl_target = jnp.where(use_reflected, reflected_weyl, target_weyl)
+        weyl_res = jnp.minimum(direct_res, reflect_res)
+
+        # Early exit if already converged (worth the sync to skip Stage 2)
+        weyl_res_py = float(weyl_res)
+        if weyl_res_py <= self.config.weyl_conv_tol:
+            u0, u1 = _params_to_unitaries(makhlin_params)
             return SegmentSolution(
-                u0=_rv(result.params[3:6]),
-                u1=_rv(result.params[:3]),
-                max_residual=weyl_res_val,
+                u0=u0,
+                u1=u1,
+                max_residual=weyl_res_py,
                 success=True,
                 metadata={
                     "stage": "makhlin",
                     "elapsed": time.perf_counter() - start_time,
-                    # "use_reflected": use_reflected,
                 },
             )
 
-        # Stage 2: Weyl polishing
-        warm_start = result.params
+        # Stage 2: Weyl polishing with warm start
+        weyl_key = fold_in(self._key, self.config.makhlin_restarts)
+        weyl_params, weyl_res = self._solve_weyl(
+            weyl_key,
+            j_prefix,
+            j_gate,
+            weyl_target,
+            self.config.weyl_conv_tol,
+            makhlin_params,
+        )
 
-        for i in range(self.config.weyl_restarts):
-            if i == 0:
-                init = warm_start
-            else:
-                key_i = fold_in(self._key, self.config.makhlin_restarts + i)
-                perturb = uniform(
-                    key_i,
-                    shape=(6,),
-                    minval=-self.config.weyl_perturb_scale,
-                    maxval=self.config.weyl_perturb_scale,
-                )
-                init = warm_start + perturb
-
-            result = self._run_weyl(
-                init, prefix_op=j_prefix, basis_gate=j_gate, target_inv=weyl_target
+        # Check residual directly (need this value for return anyway)
+        weyl_res_py = float(weyl_res)
+        if weyl_res_py > self.config.weyl_conv_tol:
+            # Include Stage 1 info in error for debugging
+            makhlin_res_py = float(makhlin_res)
+            raise RuntimeError(
+                f"Optimization failed: Stage 1 residual {makhlin_res_py:.2e}, "
+                f"Stage 2 residual {weyl_res_py:.2e}"
             )
 
-            res_jax = jnp.max(jnp.abs(result.state.residual))
-            res_val = float(device_get(res_jax))
-
-            if res_val <= weyl_conv_tol:
-                break
-
-        # Check convergence
-        if res_val > weyl_conv_tol:
-            raise RuntimeError(f"Stage 2 (Weyl) failed: best residual {res_val:.2e}")
-
+        u0, u1 = _params_to_unitaries(weyl_params)
         return SegmentSolution(
-            u0=_rv(result.params[3:6]),
-            u1=_rv(result.params[:3]),
-            max_residual=res_jax,
+            u0=u0,
+            u1=u1,
+            max_residual=weyl_res_py,
             success=True,
             metadata={
                 "stage": "weyl",
                 "elapsed": time.perf_counter() - start_time,
-                # "use_reflected": use_reflected,
             },
         )

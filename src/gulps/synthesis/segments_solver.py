@@ -56,7 +56,11 @@ class SegmentCache:
 
         pk, bk, tk = prefix_inv._key, basis_inv._key, target_inv._key
         for entry in entries:
-            if entry.target_key == tk and entry.prefix_key == pk and entry.basis_key == bk:
+            if (
+                entry.target_key == tk
+                and entry.prefix_key == pk
+                and entry.basis_key == bk
+            ):
                 entry.hit_count += 1
                 self.hits += 1
                 return entry.solution
@@ -81,7 +85,11 @@ class SegmentCache:
 
         # Check if already cached
         for entry in entries:
-            if entry.target_key == tk and entry.prefix_key == pk and entry.basis_key == bk:
+            if (
+                entry.target_key == tk
+                and entry.prefix_key == pk
+                and entry.basis_key == bk
+            ):
                 return
 
         new_entry = SegmentCacheEntry(
@@ -269,7 +277,6 @@ class SegmentSynthesizer:
             )
             dag.apply_operation_back(UnitaryGate(Gi, check_input=False), qreg[:])
             # track P manually instead of recomputing from DAG
-            # P = Operator(dag_to_circuit(dag)).data
             P = Gi @ np.kron(seg_sol.u1, seg_sol.u0) @ P
 
             is_final = idx == len(segment_sols) - 1
@@ -286,7 +293,6 @@ class SegmentSynthesizer:
                 dag.apply_operation_back(UnitaryGate(k4, check_input=False), [qreg[1]])
                 # Update accumulated unitary (and global phase)
                 P = np.kron(k4, k3) @ P
-
         return P
 
     # def _synthesize_sequential(self, dag, qreg, gate_list, invariant_list):

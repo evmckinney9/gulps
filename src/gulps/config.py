@@ -47,11 +47,12 @@ class GulpsConfig:
     equiv_recovery_tol: float = 1e-5
 
     # Solver parameters
-    makhlin_restarts: int = 128
+    makhlin_restarts: int = 256
     makhlin_maxiter: int = 256
     weyl_restarts: int = 128
     weyl_maxiter: int = 64
     weyl_perturb_scale: float = 1e-4
+    strict_convergence_checks: bool = False
 
     # Cache parameters
     segment_cache_size: int = 3
