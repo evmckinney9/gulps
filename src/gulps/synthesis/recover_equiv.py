@@ -5,15 +5,7 @@ from typing import Tuple
 
 import numpy as np
 from qiskit._accelerate import two_qubit_decompose
-from qiskit.circuit.library import (
-    IGate,
-    SXdgGate,
-    SXGate,
-    UnitaryGate,
-    XGate,
-    YGate,
-    ZGate,
-)
+from qiskit.circuit.library import UnitaryGate, XGate, YGate, ZGate
 from qiskit.quantum_info import Operator
 from qiskit.synthesis.two_qubit import TwoQubitWeylDecomposition
 
@@ -54,6 +46,7 @@ def recover_local_equivalence(
 
     a1, b1, c1 = T.a, T.b, T.c
     a2, b2, c2 = B.a, B.b, B.c
+    diffs = np.abs([a1 - a2, b1 - b2, c1 - c2])
 
     # 1) exact Weyl match?
     if (
@@ -68,11 +61,8 @@ def recover_local_equivalence(
         return k1, k2, k3, k4, (T.global_phase - B.global_phase)
 
     # 2) rho reflection case: target=(a,b,c), basis=(pi/2-a,b,-c)?
-    # if a1==a2 or a1 == pi/2 - a2
-    # and b==b
-    # and c1=-c2
     if (
-        (np.isclose(a1, a2, atol=tol) or np.isclose(a1, np.pi / 2 - a2, atol=tol))
+        np.isclose(a1, np.pi / 2 - a2, atol=tol)
         and np.isclose(b1, b2, atol=tol)
         and np.isclose(c1, -c2, atol=tol)
     ):
@@ -88,17 +78,7 @@ def recover_local_equivalence(
         return k1, k2, k3, k4, (T.global_phase - B.global_phase)
 
     # 3) cannot recover
-    diffs = np.abs([a1 - a2, b1 - b2, c1 - c2])
     raise ValueError(f"Cannot recover local equivalence; Weyl differences {diffs}")
-    # proceed like normal
-    logger.warning(
-        f"Cannot recover local equivalence; Weyl differences {diffs}. Proceeding with best effort."
-    )
-    k4 = T.K1l @ B.K1l.conj().T
-    k3 = T.K1r @ B.K1r.conj().T
-    k2 = B.K2l.conj().T @ T.K2l
-    k1 = B.K2r.conj().T @ T.K2r
-    return k1, k2, k3, k4, (T.global_phase - B.global_phase)
 
 
 if __name__ == "__main__":
@@ -119,5 +99,3 @@ if __name__ == "__main__":
     qc.append(UnitaryGate(k4), [1])
     print(average_gate_fidelity(target_gate, Operator(qc)))
     print(qc.draw())
-    # print("\n.")
-    # print("\n.")

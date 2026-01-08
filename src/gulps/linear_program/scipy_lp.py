@@ -24,7 +24,9 @@ class MinimalOrderedISAConstraints:
 
     _ci_block, _gi_block, _ciplus1_block, _bi = qlr_inequalities
 
-    def __init__(self, isa_sequence: List[GateInvariants], config: GulpsConfig | None = None):
+    def __init__(
+        self, isa_sequence: List[GateInvariants], config: GulpsConfig | None = None
+    ):
         self.isa_sequence = isa_sequence
         self.n = len(isa_sequence)
         self.num_ineq = len_qlr * (self.n - 1)
@@ -34,7 +36,12 @@ class MinimalOrderedISAConstraints:
         self._setup_model()
 
     def _setup_model(self):
-        self.c = np.zeros(self.num_params)  # objective: minimize zero
+        # Objective: maximize total "strength" of intermediates (sum of monodromy coords)
+        # This pushes intermediates toward polytope facets, producing more predictable
+        # waypoints that improve segment cache hit rates across decompositions.
+        # Use -1 coefficients since linprog minimizes.
+        # self.c = np.zeros(self.num_params)
+        self.c = -np.ones(self.num_params)
         self.A_ub, self.b_ub = self._setup_inequalities()
         self.A_eq, self.b_eq = None, None  # no equalities
 
@@ -79,7 +86,9 @@ class MinimalOrderedISAConstraints:
         # edge case, if there were no free variables in x_vec
         if len(self.A_ub[0]) == 0:
             # NOTE, try eps here but if causes problems maybe need to go to next enumerated sentence
-            if np.all(-10 * self.config.lp_feasibility_tol <= self.b_ub):  # 0<=self.b_ub
+            if np.all(
+                -10 * self.config.lp_feasibility_tol <= self.b_ub
+            ):  # 0<=self.b_ub
                 intermediate_invariants = (
                     self.isa_sequence[0],
                     self._target_def,

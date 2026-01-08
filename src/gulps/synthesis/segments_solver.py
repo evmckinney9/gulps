@@ -1,5 +1,6 @@
 import logging
-from typing import List, Literal
+from dataclasses import dataclass
+from typing import List, Literal, Optional
 
 import numpy as np
 from qiskit import QuantumCircuit
@@ -10,10 +11,132 @@ from qiskit.quantum_info import Operator
 
 from gulps.config import GulpsConfig
 from gulps.core.invariants import GateInvariants
+from gulps.synthesis.jax_lm import JaxLMSegmentSolver
 from gulps.synthesis.recover_equiv import recover_local_equivalence
 from gulps.synthesis.segments_abc import SegmentSolution, SegmentSolver
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class SegmentCacheEntry:
+    """Cache entry for a single segment solution.
+
+    Stores the inputs as GateInvariants and the solution.
+    Matching uses GateInvariants.__eq__ (monodromy-based) with rho-reflection support.
+    """
+
+    prefix_inv: GateInvariants
+    basis_inv: GateInvariants
+    target_inv: GateInvariants
+    solution: SegmentSolution
+
+    def matches(
+        self, prefix_inv: GateInvariants, basis_inv: GateInvariants, target_inv: GateInvariants
+    ) -> bool:
+        """Check if the cache entry matches the given inputs.
+
+        Checks in order: target (with rho), prefix, basis - for fastest fail-early.
+
+        Args:
+            prefix_inv: The prefix invariants to match.
+            basis_inv: The basis gate invariants to match.
+            target_inv: The target invariants to match (checked against both
+                        original and rho-reflected).
+
+        Returns:
+            True if all inputs match.
+        """
+        # Check target first (most likely to differ) - allow rho-reflection match
+        if self.target_inv != target_inv and self.target_inv != target_inv.rho_reflect:
+            return False
+        if self.prefix_inv != prefix_inv:
+            return False
+        if self.basis_inv != basis_inv:
+            return False
+        return True
+
+
+class SegmentCache:
+    """Per-step cache for segment solutions.
+
+    Maintains one cache entry per discrete step index (k=1 policy).
+    Early steps in decomposition often compute similar solutions across
+    different targets, making this cache effective for iterative workflows.
+    """
+
+    def __init__(self):
+        self._entries: dict[int, SegmentCacheEntry] = {}
+        self.hits = 0
+        self.misses = 0
+
+    def get(
+        self,
+        step: int,
+        prefix_inv: GateInvariants,
+        basis_inv: GateInvariants,
+        target_inv: GateInvariants,
+    ) -> Optional[SegmentSolution]:
+        """Look up a cached solution for the given step and inputs.
+
+        Args:
+            step: The discrete step index (0-indexed segment number).
+            prefix_inv: The prefix invariants for this segment.
+            basis_inv: The basis gate invariants for this segment.
+            target_inv: The target invariants.
+
+        Returns:
+            Cached SegmentSolution if found and matching, None otherwise.
+        """
+        entry = self._entries.get(step)
+        if entry is not None and entry.matches(prefix_inv, basis_inv, target_inv):
+            self.hits += 1
+            return entry.solution
+        self.misses += 1
+        return None
+
+    def put(
+        self,
+        step: int,
+        prefix_inv: GateInvariants,
+        basis_inv: GateInvariants,
+        target_inv: GateInvariants,
+        solution: SegmentSolution,
+    ) -> None:
+        """Store a solution in the cache for the given step.
+
+        Overwrites any existing entry for this step (k=1 policy).
+
+        Args:
+            step: The discrete step index.
+            prefix_inv: The prefix invariants used.
+            basis_inv: The basis gate invariants used.
+            target_inv: The target invariants.
+            solution: The computed solution to cache.
+        """
+        self._entries[step] = SegmentCacheEntry(
+            prefix_inv=prefix_inv,
+            basis_inv=basis_inv,
+            target_inv=target_inv,
+            solution=solution,
+        )
+
+    def clear(self) -> None:
+        """Clear all cached entries and reset statistics."""
+        self._entries.clear()
+        self.hits = 0
+        self.misses = 0
+
+    @property
+    def stats(self) -> dict:
+        """Return cache hit/miss statistics."""
+        total = self.hits + self.misses
+        return {
+            "hits": self.hits,
+            "misses": self.misses,
+            "hit_rate": self.hits / total if total > 0 else 0.0,
+            "entries": len(self._entries),
+        }
 
 
 class SegmentSynthesizer:
@@ -48,6 +171,7 @@ class SegmentSynthesizer:
     def __init__(self, solver: SegmentSolver, config: GulpsConfig | None = None):
         self._solver = solver
         self.config = config or GulpsConfig()
+        self._cache = SegmentCache()
 
     def synthesize_segments(
         self,
@@ -88,7 +212,10 @@ class SegmentSynthesizer:
         dag.apply_operation_back(UnitaryGate(gate_list[0].unitary), qreg[:])
 
         if method == "sequential":
-            P = self._synthesize_sequential(dag, qreg, gate_list, invariant_list)
+            raise NotImplementedError(
+                "Sequential segment synthesis is currently disabled."
+            )
+            # P = self._synthesize_sequential(dag, qreg, gate_list, invariant_list)
         else:
             P = self._synthesize_batch(dag, qreg, gate_list, invariant_list)
 
@@ -111,10 +238,14 @@ class SegmentSynthesizer:
         previous segment as the prefix. This keeps the solver's inputs clean and
         well-conditioned. During stitching, intermediate recovery (k3, k4 only)
         snaps the accumulated unitary back toward canonical.
+
+        Uses per-step caching (k=1) to avoid recomputing identical segments across
+        decompositions. Cache matches on (target, prefix, basis) invariants with
+        rho-reflection support.
         """
         segment_sols = []
 
-        # Phase 1: Solve all segments independently
+        # Phase 1: Solve all segments with cache lookup
         for i in range(1, len(invariant_list)):
             Gi = np.array(gate_list[i].unitary, dtype=np.complex128)
             Ci = np.array(invariant_list[i].canonical_matrix, dtype=np.complex128)
@@ -122,77 +253,102 @@ class SegmentSynthesizer:
             # Use canonical of previous segment (or first gate's unitary for i=1)
             if i == 1:
                 Cim1 = np.array(gate_list[0].unitary, dtype=np.complex128)
+                prefix_inv = gate_list[0]
             else:
                 Cim1 = np.array(
                     invariant_list[i - 1].canonical_matrix, dtype=np.complex128
                 )
+                prefix_inv = invariant_list[i - 1]
 
-            seg_sol = self._solver.solve_segment(
-                prefix_op=Cim1, basis_gate=Gi, target=Ci
-            )
+            step = i - 1  # 0-indexed step number
+            basis_inv = gate_list[i]
+            target_inv = invariant_list[i]
+
+            # Try cache lookup first
+            seg_sol = self._cache.get(step, prefix_inv, basis_inv, target_inv)
+
+            if seg_sol is None:
+                # Cache miss - solve and store
+                seg_sol = self._solver.solve_segment(
+                    prefix_op=Cim1, basis_gate=Gi, target=Ci
+                )
+                if seg_sol.success:
+                    self._cache.put(step, prefix_inv, basis_inv, target_inv, seg_sol)
+
             if not seg_sol.success:
                 raise RuntimeError(
                     f"Segment {i} synthesis failed (residual norm={seg_sol.max_residual:.2e})."
                 )
-
             segment_sols.append((Gi, Ci, seg_sol))
 
         # Phase 2: Stitch solutions together with intermediate recovery
+        P = gate_list[0].unitary.to_matrix()
         for idx, (Gi, Ci, seg_sol) in enumerate(segment_sols):
             dag.apply_operation_back(UnitaryGate(seg_sol.u0), [qreg[0]])
             dag.apply_operation_back(UnitaryGate(seg_sol.u1), [qreg[1]])
             dag.apply_operation_back(UnitaryGate(Gi), qreg[:])
+            # track P manually instead of recomputing from DAG
+            # P = Operator(dag_to_circuit(dag)).data
+            P = Gi @ np.kron(seg_sol.u1, seg_sol.u0) @ P
 
-            # Intermediate recovery: only back gates (k3, k4)
-            # Front gates (k1, k2) are deferred to final recovery
             is_final = idx == len(segment_sols) - 1
             if is_final:
                 break
             else:
-                P = Operator(dag_to_circuit(dag)).data  # TODO remove this conversion
-                k1, k2, k3, k4, gphase = recover_local_equivalence(
+                # Intermediate recovery: only back gates (k3, k4)
+                # Front gates (k1, k2) are deferred to final recovery
+                _, _, k3, k4, gphase = recover_local_equivalence(
                     Ci, P, config=self.config
                 )
                 dag.global_phase += gphase
                 dag.apply_operation_back(UnitaryGate(k3), [qreg[0]])
                 dag.apply_operation_back(UnitaryGate(k4), [qreg[1]])
-
-        return Operator(dag_to_circuit(dag)).data
-
-    def _synthesize_sequential(self, dag, qreg, gate_list, invariant_list):
-        """Interleave solving and stitching using accumulated prefix.
-
-        WARNING: This method is experimental.
-
-        Each segment is solved using the actual accumulated unitary as the prefix,
-        avoiding intermediate recovery calls. However, numerical error from imperfect
-        solver solutions compounds across segments, causing the prefix to drift from
-        ideal. This makes later segments harder to solve, resulting in ~4x higher
-        failure rates compared to batch mode in testing.
-
-        However, (a) this method avoids intermediate recovery calls, which may be
-        desirable in some contexts, and (b) more robust to drift, provided stil in solution space
-        (i.e., the solver can still converge and removes drift from the prefix).
-        """
-        P = Operator(dag_to_circuit(dag)).data
-
-        for i in range(1, len(invariant_list)):
-            Gi = np.array(gate_list[i].unitary, dtype=np.complex128)
-            Ci = np.array(invariant_list[i].canonical_matrix, dtype=np.complex128)
-
-            seg_sol = self._solver.solve_segment(prefix_op=P, basis_gate=Gi, target=Ci)
-
-            if not seg_sol.success:
-                raise RuntimeError(
-                    f"Segment {i} synthesis failed (residual norm={seg_sol.max_residual:.2e})."
-                )
-
-            dag.apply_operation_back(UnitaryGate(seg_sol.u0), [qreg[0]])
-            dag.apply_operation_back(UnitaryGate(seg_sol.u1), [qreg[1]])
-            dag.apply_operation_back(UnitaryGate(Gi), qreg[:])
-
-            # Update accumulated unitary from DAG (avoids additional drift from
-            # manual matrix multiplication)
-            P = Operator(dag_to_circuit(dag)).data
+                # Update accumulated unitary (and global phase)
+                P = np.kron(k4, k3) @ P
 
         return P
+
+    # def _synthesize_sequential(self, dag, qreg, gate_list, invariant_list):
+    #     """Interleave solving and stitching using accumulated prefix.
+
+    #     WARNING: This method is experimental.
+
+    #     Each segment is solved using the actual accumulated unitary as the prefix,
+    #     avoiding intermediate recovery calls. However, numerical error from imperfect
+    #     solver solutions compounds across segments, causing the prefix to drift from
+    #     ideal. This makes later segments harder to solve, resulting in ~4x higher
+    #     failure rates compared to batch mode in testing.
+
+    #     However, (a) this method avoids intermediate recovery calls, which may be
+    #     desirable in some contexts, and (b) more robust to drift, provided stil in solution space
+    #     (i.e., the solver can still converge and removes drift from the prefix).
+    #     """
+    #     P = Operator(dag_to_circuit(dag)).data
+
+    #     for i in range(1, len(invariant_list)):
+    #         Gi = np.array(gate_list[i].unitary, dtype=np.complex128)
+    #         Ci = np.array(invariant_list[i].canonical_matrix, dtype=np.complex128)
+
+    #         seg_sol = self._solver.solve_segment(prefix_op=P, basis_gate=Gi, target=Ci)
+
+    #         if not seg_sol.success:
+    #             raise RuntimeError(
+    #                 f"Segment {i} synthesis failed (residual norm={seg_sol.max_residual:.2e})."
+    #             )
+
+    #         dag.apply_operation_back(UnitaryGate(seg_sol.u0), [qreg[0]])
+    #         dag.apply_operation_back(UnitaryGate(seg_sol.u1), [qreg[1]])
+    #         dag.apply_operation_back(UnitaryGate(Gi), qreg[:])
+
+    #         # Update accumulated unitary from DAG (avoids additional drift from
+    #         # manual matrix multiplication)
+    #         P = Operator(dag_to_circuit(dag)).data
+    #         k1, k2, k3, k4, gphase = recover_local_equivalence(
+    #             Ci, P, config=self.config
+    #         )
+    #         dag.global_phase += gphase
+    #         dag.apply_operation_back(UnitaryGate(k3), [qreg[0]])
+    #         dag.apply_operation_back(UnitaryGate(k4), [qreg[1]])
+    #         P = Operator(dag_to_circuit(dag)).data
+
+    #     return P
