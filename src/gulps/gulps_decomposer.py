@@ -2,7 +2,7 @@
 
 import logging
 import time
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Union
 
 import numpy as np
 from qiskit import QuantumCircuit
@@ -14,7 +14,8 @@ from qiskit.dagcircuit import DAGCircuit
 from gulps import GateInvariants
 from gulps._internal.logging_config import logger
 from gulps.config import GulpsConfig
-from gulps.core.isa import ISAInvariants
+from gulps.core.isa import ContinuousISA, DiscreteISA, ISAInvariants
+from gulps.linear_program.base import ConstraintSolution
 from gulps.linear_program.scipy_lp import MinimalOrderedISAConstraints
 from gulps.synthesis.jax_lm import JaxLMSegmentSolver
 from gulps.synthesis.recover_equiv import recover_local_equivalence
@@ -49,7 +50,7 @@ class GulpsDecomposer:
         costs: Optional[List[float]] = None,
         names: Optional[List[str]] = None,
         precompute_polytopes: bool = True,
-        isa: Optional[ISAInvariants] = None,
+        isa: Optional[Union[DiscreteISA, ContinuousISA]] = None,
         segment_solver: Optional[SegmentSolver] = None,
         tolerance_config: Optional[GulpsConfig] = None,
     ):
@@ -58,15 +59,17 @@ class GulpsDecomposer:
         Args:
             gate_set: List of two-qubit Gate objects comprising the ISA.
                 Required if isa not provided. All gates must be two-qubit.
+                Creates a DiscreteISA internally. For ContinuousISA, use isa parameter.
             costs: List of costs corresponding to gate_set. Required if isa not provided.
                 Costs are typically normalized gate durations or error rates.
             names: Optional list of names for the gates in gate_set.
                 Used for debugging logs. Defaults to generic labels if None.
             precompute_polytopes: Whether to precompute monodromy polytope coverage.
                 When True, enables O(1) sentence lookup. When False, enumerates sentences
-                on-demand. Recommended True for repeated decompositions.
-            isa: Optional pre-built ISAInvariants instance. If provided, gate_set and
-                costs are ignored. Use this to share ISA configuration across decomposers.
+                on-demand. Recommended True for repeated decompositions. Only applies
+                when constructing DiscreteISA via gate_set/costs.
+            isa: Optional pre-built ISA instance (DiscreteISA or ContinuousISA).
+                If provided, gate_set, costs, names, and precompute_polytopes are ignored.
             segment_solver: Optional SegmentSolver for numerical synthesis.
                 Defaults to JaxLMSegmentSolver() if None.
             tolerance_config: Optional GulpsConfig for all pipeline settings.
@@ -86,13 +89,14 @@ class GulpsDecomposer:
             if not gate_set:
                 raise ValueError("gate_set can't be empty.")
 
-            self.isa = ISAInvariants(
+            self.isa = DiscreteISA(
                 gate_set=gate_set,
                 costs=costs,
                 names=names,
                 precompute_polytopes=precompute_polytopes,
             )
 
+        self._is_continuous = isinstance(self.isa, ContinuousISA)
         self.config = tolerance_config or GulpsConfig()
 
         if segment_solver is None:
@@ -163,115 +167,111 @@ class GulpsDecomposer:
 
         return None
 
-    def _try_lp(
-        self,
-        sentence: List[GateInvariants],
-        target: GateInvariants,
-        rho_bool: bool = False,
-        log_output: bool = False,
-    ) -> Tuple[
-        Optional[List[GateInvariants]], Optional[List[GateInvariants]], Optional[bool]
-    ]:
-        """Solve linear program to find intermediate invariants for a gate sentence.
+    def _try_discrete_lp(
+        self, target: GateInvariants, log_output: bool = False
+    ) -> ConstraintSolution:
+        """Find optimal decomposition using discrete ISA.
 
-        Attempts to solve the LP with the given rho-reflection orientation. If that fails,
-        automatically retries with the opposite orientation.
+        Uses polytope lookup if precomputed, otherwise enumerates sentences.
+        Tries both rho orientations via solve_auto_rho.
 
         Args:
-            sentence: Ordered list of basis gates forming a candidate decomposition.
-            target: Target gate invariants to reach.
-            rho_bool: Initial rho-reflection orientation. If True, uses target.rho_reflect.
+            target: Alcove-normalized target gate invariants.
             log_output: If True, enable verbose LP solver output.
 
         Returns:
-            Tuple of (sentence_out, intermediates, final_rho_bool):
-                - sentence_out: The input sentence if successful, None if LP infeasible
-                - intermediates: List of intermediate GateInvariants if successful, None otherwise
-                - final_rho_bool: The rho orientation that succeeded, None if both failed
-
-        Note:
-            The LP determines a path through monodromy space: I → C₁ → C₂ → ... → target,
-            where each Cᵢ represents the cumulative action after gate i.
+            ConstraintSolution with success=True if a valid decomposition is found.
         """
-        constraints = MinimalOrderedISAConstraints(sentence, config=self.config)
-        constraints.set_target(target, rho_bool=rho_bool)
-        sentence_out, intermediates = constraints.solve(log_output=log_output)
-        if sentence_out is not None:
-            return sentence_out, intermediates, rho_bool
+        if self.isa._precompute_polytopes:
+            sentence = self.isa.polytope_lookup(target)
+            if sentence is None:
+                raise RuntimeError(
+                    f"No precomputed ISA sentence found for target with monodromy {target.monodromy}. "
+                    f"The target may lie outside all polytope coverage. "
+                    f"Try disabling precompute_polytopes or expanding the gate set."
+                )
+            # TODO: optimize by caching constraint objects for previously seen sentences
+            constraints = MinimalOrderedISAConstraints(sentence, config=self.config)
+            return constraints.solve_auto_rho(target)
 
-        # if LP fails, try opposite rho-reflection
-        # constraints = MinimalOrderedISAConstraints(sentence)
-        constraints.set_target(target, rho_bool=not rho_bool)
-        sentence_out, intermediates = constraints.solve(log_output=log_output)
-        if sentence_out is not None:
-            if logger.isEnabledFor(logging.DEBUG):
-                logger.debug("LP succeeded on opposite rho_reflect")
-            return sentence_out, intermediates, not rho_bool
+        # Priority queue enumeration
+        for sentence in self.isa.enumerate():
+            # Heuristic filter to skip obvious non-starters
+            if sum(gate.strength for gate in sentence) < target.strength:
+                continue
+            # TODO: optimize by caching constraint objects for previously seen sentences
+            constraints = MinimalOrderedISAConstraints(sentence, config=self.config)
+            result = constraints.solve_auto_rho(target)
+            if result.success:
+                return result
 
-        return None, None, None
+        return ConstraintSolution(success=False)
+
+    def _try_continuous_lp(
+        self, target: GateInvariants, log_output: bool = False
+    ) -> ConstraintSolution:
+        """Find optimal decomposition using continuous ISA.
+
+        Single LP solve with continuous gate parameters.
+        Tries both rho orientations via solve_auto_rho.
+
+        Args:
+            target: Alcove-normalized target gate invariants.
+            log_output: If True, enable verbose LP solver output.
+
+        Returns:
+            ConstraintSolution with success=True if a valid decomposition is found.
+        """
+        if not self.isa.is_single_family:
+            raise NotImplementedError(
+                "Heterogeneous continuous ISA (multiple gate families) is not yet supported."
+            )
+
+        # Import here to avoid requiring CPLEX for discrete-only usage
+        from gulps.linear_program.cplex_lp import ContinuousISAConstraints
+
+        # TODO: optimize by caching constraint object (construct once in __init__ or ISA)
+        constraints = ContinuousISAConstraints(
+            base=self.isa.gate_set[0],
+            max_sequence_length=self.isa.max_depth,
+            k_lb=self.isa.k_lb,
+        )
+        return constraints.solve_auto_rho(target)
 
     def _best_decomposition(
         self, target_inv: GateInvariants, log_output: bool = False
-    ) -> Tuple[List[GateInvariants], List[GateInvariants]]:
+    ) -> ConstraintSolution:
         """Find the optimal gate sentence and intermediate invariants for the target.
 
-        Uses either polytope lookup (if precomputed) or sentence enumeration to find
-        the cheapest valid decomposition. The LP determines intermediate targets.
+        Dispatches to discrete or continuous LP solver based on ISA type.
 
         Args:
             target_inv: Target gate invariants to decompose.
             log_output: If True, enable verbose LP solver output.
 
         Returns:
-            Tuple of (sentence_out, intermediates):
-                - sentence_out: Ordered list of basis gates forming the optimal sentence
-                - intermediates: Corresponding intermediate invariants for each gate
+            ConstraintSolution with sentence and intermediates.
 
         Raises:
-            RuntimeError: If no valid sentence found (polytope mode) or LP fails for all
-                enumerated sentences.
-
-        Note:
-            In polytope mode, the lookup is against the alcove-normalized target.
-            The LP then solves against the true target to handle orientations correctly.
+            RuntimeError: If no valid decomposition found.
         """
-        rho_bool = False  # assume this is False by default
         alcove_target = GateInvariants.from_unitary(
             target_inv.unitary, enforce_alcove=True
         )
 
-        if self.isa._precompute_polytopes:
-            sentence, rho_bool = self.isa.polytope_lookup(alcove_target)
-
-            if sentence is None:
-                raise RuntimeError(
-                    f"No precomputed ISA sentence found for target with monodromy {alcove_target.monodromy}. "
-                    f"The target may lie outside all polytope coverage. "
-                    f"Try disabling precompute_polytopes or expanding the gate set."
-                )
-            sentence_out, intermediates, _ = self._try_lp(
-                sentence, target_inv, rho_bool=rho_bool, log_output=log_output
-            )
+        if self._is_continuous:
+            result = self._try_continuous_lp(alcove_target, log_output=log_output)
         else:
-            for sentence in self.isa.enumerate():
-                # heuristic filter to skip a full LP for obvious non-starters
-                if sum(gate.strength for gate in sentence) < target_inv.strength:
-                    continue
+            result = self._try_discrete_lp(alcove_target, log_output=log_output)
 
-                sentence_out, intermediates, _ = self._try_lp(
-                    sentence, alcove_target, log_output=log_output
-                )
-                if sentence_out is not None:
-                    break
-
-        if sentence_out is None:
+        if not result.success:
             raise RuntimeError(
                 f"No valid ISA sentence found for target with monodromy {alcove_target.monodromy}. "
-                f"All enumerated sentences failed the LP feasibility check. "
+                f"All candidates failed the LP feasibility check. "
                 f"This may indicate insufficient gate set strength or numerical issues."
             )
 
-        return sentence_out, intermediates
+        return result
 
     def _run(
         self,
@@ -305,23 +305,21 @@ class GulpsDecomposer:
 
         # --- A) LP ---
         t0 = time.perf_counter()  # TIMING
-        sentence_out, intermediates = self._best_decomposition(
-            true_target, log_output=log_output
-        )
+        result = self._best_decomposition(true_target, log_output=log_output)
+        sentence = result.sentence
+        intermediates = result.intermediates
 
         if logger.isEnabledFor(logging.DEBUG):
-            logger.debug(f"Sentence: {[g.name for g in sentence_out]}")
+            logger.debug(f"Sentence: {[g.name for g in sentence]}")
             logger.debug(f"Intermediates: {[g.logspec for g in intermediates]}")
 
         # --- B1) Segment synthesis ---
         t1 = time.perf_counter()  # TIMING
-        if len(sentence_out) != len(intermediates):
-            raise ValueError("Gate list and invariant list must have the same length.")
-        if len(sentence_out) < 2:
+        if len(sentence) < 2:
             raise ValueError("At least two gates are required for segment synthesis.")
 
         stitched_circuit = self._local_synthesis.synthesize_segments(
-            gate_list=sentence_out,
+            gate_list=sentence,
             invariant_list=intermediates,
             target=true_target,
             return_dag=return_dag,

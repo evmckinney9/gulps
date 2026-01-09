@@ -1,7 +1,9 @@
 import heapq
 import itertools
 import logging
-from typing import Generator, List
+from abc import ABC
+from dataclasses import dataclass, field
+from typing import Dict, Generator, List, Optional
 
 import numpy as np
 from qiskit.circuit import Gate
@@ -12,8 +14,49 @@ from gulps.core.coverage import isa_to_coverage
 logger = logging.getLogger(__name__)
 
 
-class ISAInvariants:
-    """Base class for ISA invariants."""
+class ISABase(ABC):
+    """Abstract base class for instruction set architectures.
+
+    Attributes:
+        gate_set: List of basis gate invariants.
+        cost_dict: Mapping from gate invariants to their costs.
+    """
+
+    gate_set: List[GateInvariants]
+    cost_dict: Dict[GateInvariants, float]
+
+
+@dataclass
+class ContinuousISA(ISABase):
+    """ISA with continuous gate families G(k) = k * base, k ∈ [k_lb, 1].
+
+    For single-family ISA, gate_set contains one base gate.
+    For heterogeneous ISA (future), gate_set contains multiple base gates.
+
+    Attributes:
+        gate_set: List of base gate invariants (one per family).
+        cost_dict: Mapping from base gates to cost rates (cost = k * rate).
+        max_depth: Maximum number of gates in the sentence.
+        k_lb: Minimum nonzero k value (gates with k < k_lb are pruned).
+    """
+
+    gate_set: List[GateInvariants]
+    cost_dict: Dict[GateInvariants, float] = field(default_factory=dict)
+    max_depth: int = 3
+    k_lb: float = 0.01
+
+    @property
+    def is_single_family(self) -> bool:
+        return len(self.gate_set) == 1
+
+
+class DiscreteISA(ISABase):
+    """Discrete ISA with fixed gate set and cost-ordered enumeration.
+
+    Attributes:
+        gate_set: List of discrete gate invariants.
+        cost_dict: Mapping from gate invariants to their costs.
+    """
 
     identity_inv = GateInvariants(logspec=(0.0, 0.0, 0.0, 0.0))
     # NOTE this is useful for tiebreakers between fractional parts
@@ -86,25 +129,29 @@ class ISAInvariants:
 
     def polytope_lookup(
         self, target: GateInvariants
-    ) -> tuple[List[GateInvariants], bool]:
-        """Return a gate sentence that spans the target via convex polytope lookup."""
+    ) -> Optional[List[GateInvariants]]:
+        """Return a gate sentence that spans the target via convex polytope lookup.
+
+        Args:
+            target: Alcove-normalized target gate invariants. The caller is responsible
+                for ensuring the target is in the alcove (enforce_alcove=True), which
+                eliminates the need to check rho-reflected variants here.
+
+        Returns:
+            Sorted list of gate invariants forming a valid sentence, or None if
+            no polytope contains the target.
+        """
         if not hasattr(self, "coverage_set"):
             raise ValueError("Polytope coverage set not precomputed.")
 
         for convex_polytope in self.coverage_set:
             if convex_polytope.has_element(target.monodromy):
                 # Sort instructions by cost for consistency with enumerate()
-                sorted_instructions = sorted(
+                return sorted(
                     convex_polytope.instructions, key=lambda g: self.cost_dict[g]
                 )
-                return sorted_instructions, False
-            elif convex_polytope.has_element(target.rho_reflect.monodromy):
-                logger.debug(
-                    "lookup falls back to rho-reflect, check did you not enforce alcove_c2 on the target gate?"
-                )
-                # Sort instructions by cost for consistency with enumerate()
-                sorted_instructions = sorted(
-                    convex_polytope.instructions, key=lambda g: self.cost_dict[g]
-                )
-                return sorted_instructions, True
-        return None, None
+        return None
+
+
+# Backward compatibility alias
+ISAInvariants = DiscreteISA

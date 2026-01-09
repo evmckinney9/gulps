@@ -6,13 +6,13 @@ except ModuleNotFoundError as exc:
         "Install with `pip install gulps[cplex]`."
     ) from exc
 
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
 import numpy as np
-from docplex.mp.dvar import Var
 from docplex.mp.model import Model
 
 from gulps import GateInvariants
+from gulps.linear_program.base import ConstraintSolution
 from gulps.linear_program.qlr import len_qlr, qlr_inequalities
 
 
@@ -79,11 +79,9 @@ class ContinuousISAConstraints:
         self._target_def: Optional[np.ndarray] = None
         self._target_cts: List = []  # holds the 3 equality constraints for c_N
 
-    def set_target(self, target_gate: GateInvariants, rho_bool: bool = False):
-        if rho_bool:
-            self._target_def = target_gate.rho_reflect.monodromy
-        else:
-            self._target_def = target_gate.monodromy
+    def set_target(self, target: GateInvariants) -> None:
+        """Set the target gate invariants for the constraint RHS."""
+        self._target_def = target.monodromy
 
         # remove previous target constraints (if any), then add new ones
         if self._target_cts:
@@ -98,12 +96,12 @@ class ContinuousISAConstraints:
             for j in range(3)
         ]
 
-    def solve(self, log_output: bool = False):
+    def solve(self, log_output: bool = False) -> ConstraintSolution:
         sol = self.model.solve(log_output=log_output)
         if not sol:
-            return None, None, None
+            return ConstraintSolution(success=False)
 
-        # Extract k, g, c
+        # Extract k, g, c values from solution
         ks = [float(sol.get_value(self.k_vars[i])) for i in range(self.N)]
         gis = [
             np.array(
@@ -123,15 +121,34 @@ class ContinuousISAConstraints:
             GateInvariants(tuple(c)) for c in cis
         )
 
-        # ---- prune trailing zeros ----
+        # Prune trailing zeros (unused gate slots)
         tol = max(self.offset, 1e-12)
         nz = [i for i, k in enumerate(ks) if k > tol]
         zero_index = (max(nz) + 1) if nz else 0
 
-        gi_list = gi_list[:zero_index]
-        intermediate_invariants = intermediate_invariants[:zero_index]
+        return ConstraintSolution(
+            success=True,
+            sentence=tuple(gi_list[:zero_index]),
+            intermediates=intermediate_invariants[:zero_index],
+            parameters=tuple(ks[:zero_index]),
+            cost=sum(ks[:zero_index]),
+        )
 
-        return gi_list, intermediate_invariants, ks[:zero_index]
+    def solve_auto_rho(self, target: GateInvariants) -> ConstraintSolution:
+        """Solve LP, automatically trying both rho orientations.
+
+        Args:
+            target: Alcove-normalized target gate invariants.
+
+        Returns:
+            ConstraintSolution with success=True if either orientation works.
+        """
+        for t in [target, target.rho_reflect]:
+            self.set_target(t)
+            result = self.solve()
+            if result.success:
+                return result
+        return ConstraintSolution(success=False)
 
     def _create_model(self):
         m = Model("ContinuousISAConstraints", ignore_names=True)

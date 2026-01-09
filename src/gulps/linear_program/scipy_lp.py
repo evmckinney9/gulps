@@ -4,13 +4,14 @@
 # adapted from lp_constraints/lp_constraints.py
 #              lp_constraints/qlr.py
 #              lp_constraints/scipy_constraints.py
-from typing import List, Tuple
+from typing import List
 
 import numpy as np
 from scipy.optimize import linprog
 
 from gulps.config import GulpsConfig
 from gulps.core.invariants import LEN_GATE_INVARIANTS, GateInvariants
+from gulps.linear_program.base import ConstraintSolution
 from gulps.linear_program.qlr import len_qlr, qlr_inequalities
 
 
@@ -71,37 +72,33 @@ class MinimalOrderedISAConstraints:
 
         return A_ub, b_ub
 
-    def set_target(self, target_gate: GateInvariants, rho_bool=False):
+    def set_target(self, target: GateInvariants) -> None:
+        """Set the target gate invariants for the constraint RHS."""
         # NOTE avoid reconstructing all of b_ub by tracking the last set target gate
         # when setting a new target, remove the contribution of the previous target
-        if rho_bool:
-            self._target_def = target_gate.rho_reflect
-        else:
-            self._target_def = target_gate
+        self._target_def = target
         ct = np.dot(self._ciplus1_block, self._target_def.monodromy)
         self.b_ub[-len_qlr:] += self.last_iter_ct - ct
         self.last_iter_ct = ct
 
-    def solve(self, log_output=False):
-        # edge case, if there were no free variables in x_vec
+    def solve(self, log_output=False) -> ConstraintSolution:
+        # Edge case: no free variables (2-gate sentence)
         if len(self.A_ub[0]) == 0:
-            # NOTE, try eps here but if causes problems maybe need to go to next enumerated sentence
-            if np.all(
-                -10 * self.config.lp_feasibility_tol <= self.b_ub
-            ):  # 0<=self.b_ub
-                intermediate_invariants = (
-                    self.isa_sequence[0],
-                    self._target_def,
+            # NOTE: try eps here but if causes problems maybe need to go to next enumerated sentence
+            if np.all(-10 * self.config.lp_feasibility_tol <= self.b_ub):
+                return ConstraintSolution(
+                    success=True,
+                    sentence=tuple(self.isa_sequence),
+                    intermediates=(self.isa_sequence[0], self._target_def),
                 )
-                return self.isa_sequence, intermediate_invariants
-            else:
-                return None, None
+            return ConstraintSolution(success=False)
+
         result = linprog(
             c=self.c,
             A_ub=self.A_ub,
             b_ub=self.b_ub,
             method="highs",
-            bounds=(None, None),  # no bounds on variables
+            bounds=(None, None),
             options={
                 "disp": log_output,
                 "presolve": True,
@@ -109,21 +106,34 @@ class MinimalOrderedISAConstraints:
                 "dual_feasibility_tolerance": self.config.lp_feasibility_tol,
             },
         )
-        if result.success:
-            return self._extract_from_blocks(result.x)
-        return None, None
+        if not result.success:
+            return ConstraintSolution(success=False)
 
-    def _extract_from_blocks(self, lp_vec):
+        # Extract intermediate invariants from LP solution vector
         lp_invariants = [
-            GateInvariants(tuple(lp_vec[i : i + LEN_GATE_INVARIANTS]))
-            for i in range(0, len(lp_vec), LEN_GATE_INVARIANTS)
+            GateInvariants(tuple(result.x[i : i + LEN_GATE_INVARIANTS]))
+            for i in range(0, len(result.x), LEN_GATE_INVARIANTS)
         ]
+        intermediates = (self.isa_sequence[0], *lp_invariants, self._target_def)
 
-        # Build full intermediate sequence
-        intermediate_invariants = (
-            self.isa_sequence[0],
-            *lp_invariants,
-            self._target_def,
+        return ConstraintSolution(
+            success=True,
+            sentence=tuple(self.isa_sequence),
+            intermediates=intermediates,
         )
 
-        return self.isa_sequence, intermediate_invariants
+    def solve_auto_rho(self, target: GateInvariants) -> ConstraintSolution:
+        """Solve LP, automatically trying both rho orientations.
+
+        Args:
+            target: Alcove-normalized target gate invariants.
+
+        Returns:
+            ConstraintSolution with success=True if either orientation works.
+        """
+        for t in [target, target.rho_reflect]:
+            self.set_target(t)
+            result = self.solve()
+            if result.success:
+                return result
+        return ConstraintSolution(success=False)
