@@ -11,11 +11,11 @@ from scipy.optimize import linprog
 
 from gulps.config import GulpsConfig
 from gulps.core.invariants import LEN_GATE_INVARIANTS, GateInvariants
-from gulps.linear_program.base import ConstraintSolution
+from gulps.linear_program.base import ConstraintSolution, ISAConstraints
 from gulps.linear_program.qlr import len_qlr, qlr_inequalities
 
 
-class MinimalOrderedISAConstraints:
+class MinimalOrderedISAConstraints(ISAConstraints):
     """Minimal LP constraints for ordered, defined ISA sequences.
 
     This is specialized assuming a fixed sentence of constant Gs.
@@ -81,7 +81,7 @@ class MinimalOrderedISAConstraints:
         self.b_ub[-len_qlr:] += self.last_iter_ct - ct
         self.last_iter_ct = ct
 
-    def solve(self, log_output=False) -> ConstraintSolution:
+    def solve_single(self, log_output=False) -> ConstraintSolution:
         # Edge case: no free variables (2-gate sentence)
         if len(self.A_ub[0]) == 0:
             # NOTE: try eps here but if causes problems maybe need to go to next enumerated sentence
@@ -121,19 +121,3 @@ class MinimalOrderedISAConstraints:
             sentence=tuple(self.isa_sequence),
             intermediates=intermediates,
         )
-
-    def solve_auto_rho(self, target: GateInvariants) -> ConstraintSolution:
-        """Solve LP, automatically trying both rho orientations.
-
-        Args:
-            target: Alcove-normalized target gate invariants.
-
-        Returns:
-            ConstraintSolution with success=True if either orientation works.
-        """
-        for t in [target, target.rho_reflect]:
-            self.set_target(t)
-            result = self.solve()
-            if result.success:
-                return result
-        return ConstraintSolution(success=False)

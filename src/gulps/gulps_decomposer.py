@@ -173,7 +173,6 @@ class GulpsDecomposer:
         """Find optimal decomposition using discrete ISA.
 
         Uses polytope lookup if precomputed, otherwise enumerates sentences.
-        Tries both rho orientations via solve_auto_rho.
 
         Args:
             target: Alcove-normalized target gate invariants.
@@ -192,7 +191,7 @@ class GulpsDecomposer:
                 )
             # TODO: optimize by caching constraint objects for previously seen sentences
             constraints = MinimalOrderedISAConstraints(sentence, config=self.config)
-            return constraints.solve_auto_rho(target)
+            return constraints.solve(target)
 
         # Priority queue enumeration
         for sentence in self.isa.enumerate():
@@ -201,7 +200,7 @@ class GulpsDecomposer:
                 continue
             # TODO: optimize by caching constraint objects for previously seen sentences
             constraints = MinimalOrderedISAConstraints(sentence, config=self.config)
-            result = constraints.solve_auto_rho(target)
+            result = constraints.solve(target)
             if result.success:
                 return result
 
@@ -213,7 +212,6 @@ class GulpsDecomposer:
         """Find optimal decomposition using continuous ISA.
 
         Single LP solve with continuous gate parameters.
-        Tries both rho orientations via solve_auto_rho.
 
         Args:
             target: Alcove-normalized target gate invariants.
@@ -236,7 +234,7 @@ class GulpsDecomposer:
             max_sequence_length=self.isa.max_depth,
             k_lb=self.isa.k_lb,
         )
-        return constraints.solve_auto_rho(target)
+        return constraints.solve(target)
 
     def _best_decomposition(
         self, target_inv: GateInvariants, log_output: bool = False

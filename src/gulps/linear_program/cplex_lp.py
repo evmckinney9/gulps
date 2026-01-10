@@ -12,11 +12,11 @@ import numpy as np
 from docplex.mp.model import Model
 
 from gulps import GateInvariants
-from gulps.linear_program.base import ConstraintSolution
+from gulps.linear_program.base import ConstraintSolution, ISAConstraints
 from gulps.linear_program.qlr import len_qlr, qlr_inequalities
 
 
-class ContinuousISAConstraints:
+class ContinuousISAConstraints(ISAConstraints):
     """LP constraints for a single yet continuous ISA sequence.
 
     Continuous ordered-ISA constraints with a single base gate:
@@ -96,7 +96,7 @@ class ContinuousISAConstraints:
             for j in range(3)
         ]
 
-    def solve(self, log_output: bool = False) -> ConstraintSolution:
+    def solve_single(self, log_output: bool = False) -> ConstraintSolution:
         sol = self.model.solve(log_output=log_output)
         if not sol:
             return ConstraintSolution(success=False)
@@ -133,22 +133,6 @@ class ContinuousISAConstraints:
             parameters=tuple(ks[:zero_index]),
             cost=sum(ks[:zero_index]),
         )
-
-    def solve_auto_rho(self, target: GateInvariants) -> ConstraintSolution:
-        """Solve LP, automatically trying both rho orientations.
-
-        Args:
-            target: Alcove-normalized target gate invariants.
-
-        Returns:
-            ConstraintSolution with success=True if either orientation works.
-        """
-        for t in [target, target.rho_reflect]:
-            self.set_target(t)
-            result = self.solve()
-            if result.success:
-                return result
-        return ConstraintSolution(success=False)
 
     def _create_model(self):
         m = Model("ContinuousISAConstraints", ignore_names=True)
