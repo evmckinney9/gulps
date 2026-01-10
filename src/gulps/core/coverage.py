@@ -15,6 +15,7 @@ from monodromy.haar import distance_polynomial_integrals
 from monodromy.static.examples import everything_polytope, exactly, identity_polytope
 from numpy import ndarray
 
+from gulps.core.isa import ISAInvariants
 from gulps.viz.polytope_viz import plot_coverage_set
 
 

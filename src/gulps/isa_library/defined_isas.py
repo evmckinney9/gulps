@@ -15,7 +15,7 @@ from qiskit.circuit.library import (
 from qutip import sigmax, sigmay, tensor
 
 from gulps.core.coverage import expected_costs
-from gulps.core.isa import ISAInvariants
+from gulps.core.isa import DiscreteISA
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,7 @@ def build_isa(name, gate_set):
     start_time = perf_counter()
 
     gates, costs, labels = zip(*gate_set)
-    isa = ISAInvariants(
+    isa = DiscreteISA(
         gate_set=gates,
         costs=costs,
         names=labels,

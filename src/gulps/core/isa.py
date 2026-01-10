@@ -14,7 +14,7 @@ from gulps.core.coverage import isa_to_coverage
 logger = logging.getLogger(__name__)
 
 
-class ISABase(ABC):
+class ISAInvariants(ABC):
     """Abstract base class for instruction set architectures.
 
     Attributes:
@@ -27,7 +27,7 @@ class ISABase(ABC):
 
 
 @dataclass
-class ContinuousISA(ISABase):
+class ContinuousISA(ISAInvariants):
     """ISA with continuous gate families G(k) = k * base, k ∈ [k_lb, 1].
 
     For single-family ISA, gate_set contains one base gate.
@@ -50,7 +50,7 @@ class ContinuousISA(ISABase):
         return len(self.gate_set) == 1
 
 
-class DiscreteISA(ISABase):
+class DiscreteISA(ISAInvariants):
     """Discrete ISA with fixed gate set and cost-ordered enumeration.
 
     Attributes:
@@ -127,9 +127,7 @@ class DiscreteISA(ISABase):
             if len(sequence) >= 2:
                 yield sequence
 
-    def polytope_lookup(
-        self, target: GateInvariants
-    ) -> Optional[List[GateInvariants]]:
+    def polytope_lookup(self, target: GateInvariants) -> Optional[List[GateInvariants]]:
         """Return a gate sentence that spans the target via convex polytope lookup.
 
         Args:
@@ -151,7 +149,3 @@ class DiscreteISA(ISABase):
                     convex_polytope.instructions, key=lambda g: self.cost_dict[g]
                 )
         return None
-
-
-# Backward compatibility alias
-ISAInvariants = DiscreteISA

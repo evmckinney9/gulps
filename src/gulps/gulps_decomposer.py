@@ -50,7 +50,7 @@ class GulpsDecomposer:
         costs: Optional[List[float]] = None,
         names: Optional[List[str]] = None,
         precompute_polytopes: bool = True,
-        isa: Optional[Union[DiscreteISA, ContinuousISA]] = None,
+        isa: Optional[ISAInvariants] = None,
         segment_solver: Optional[SegmentSolver] = None,
         tolerance_config: Optional[GulpsConfig] = None,
     ):
