@@ -80,10 +80,10 @@ class GateInvariants:
         return (a, b, c, -1.0 * (a + b + c))
 
     @property
-    def unitary(self) -> np.ndarray:
+    def unitary(self) -> UnitaryGate:
         """Return the unitary matrix of this gate."""
         if self._unitary is None:
-            return self.canonical_matrix
+            return UnitaryGate(self.canonical_matrix, check_input=False)
         return self._unitary
 
     @property
@@ -147,7 +147,12 @@ class GateInvariants:
             name=f"*{self.name}",
             rho_reflect=self,
         )
+        self._rho_reflect._rho_reflect = self
         return self._rho_reflect
+
+    @property
+    def is_identity(self) -> bool:
+        return all(np.isclose(x, 0.0) for x in self.monodromy)
 
     def __str__(self) -> str:
         return self.name

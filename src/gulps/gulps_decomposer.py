@@ -15,7 +15,7 @@ from gulps import GateInvariants
 from gulps._internal.logging_config import logger
 from gulps.config import GulpsConfig
 from gulps.core.isa import ContinuousISA, DiscreteISA, ISAInvariants
-from gulps.linear_program.base import ConstraintSolution
+from gulps.linear_program.lp_abc import ConstraintSolution
 from gulps.linear_program.scipy_lp import MinimalOrderedISAConstraints
 from gulps.synthesis.jax_lm import JaxLMSegmentSolver
 from gulps.synthesis.recover_equiv import recover_local_equivalence
@@ -131,7 +131,7 @@ class GulpsDecomposer:
         # Check both the target and its rho-reflection against the ISA
         target_variants = [target, target.rho_reflect]
         for variant in target_variants:
-            if variant == self.isa.identity_inv:  # use GateInvariants __eq__
+            if variant.is_identity:
                 # NOTE: Target is locally equivalent to identity - return 1Q corrections only
                 if logger.isEnabledFor(logging.DEBUG):
                     logger.debug("Target is identity, returning empty circuit")

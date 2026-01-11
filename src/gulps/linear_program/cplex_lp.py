@@ -12,7 +12,7 @@ import numpy as np
 from docplex.mp.model import Model
 
 from gulps import GateInvariants
-from gulps.linear_program.base import ConstraintSolution, ISAConstraints
+from gulps.linear_program.lp_abc import ConstraintSolution, ISAConstraints
 from gulps.linear_program.qlr import len_qlr, qlr_inequalities
 
 
@@ -72,6 +72,7 @@ class ContinuousISAConstraints(ISAConstraints):
         self.N = max_sequence_length
         if self.N < 2:
             raise ValueError("sequence_length must be at least 2")
+        self.base = base
         self.B = base.monodromy
         self.offset = offset
         self.k_lb = 0.05 if k_lb < 0.0 else k_lb
@@ -116,7 +117,10 @@ class ContinuousISAConstraints(ISAConstraints):
             for i in range(self.N - 1)
         ]
 
-        gi_list = [GateInvariants(tuple(g)) for g in gis]
+        gi_list = [
+            GateInvariants.from_unitary(self.base.unitary.power(k))
+            for k in ks
+        ]
         intermediate_invariants = (gi_list[0],) + tuple(
             GateInvariants(tuple(c)) for c in cis
         )

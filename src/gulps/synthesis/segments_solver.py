@@ -1,125 +1,19 @@
 import logging
-from dataclasses import dataclass
-from typing import List, Literal, Optional
+from typing import List, Literal
 
 import numpy as np
 from qiskit import QuantumCircuit
 from qiskit.circuit.library import UnitaryGate
 from qiskit.converters import circuit_to_dag, dag_to_circuit
 from qiskit.dagcircuit import DAGCircuit
-from qiskit.quantum_info import Operator
 
 from gulps.config import GulpsConfig
 from gulps.core.invariants import GateInvariants
-from gulps.synthesis.jax_lm import JaxLMSegmentSolver
 from gulps.synthesis.recover_equiv import recover_local_equivalence
 from gulps.synthesis.segments_abc import SegmentSolution, SegmentSolver
+from gulps.synthesis.segments_cache import SegmentCache
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class SegmentCacheEntry:
-    """Cache entry storing keys and solution with hit count for LFU eviction."""
-
-    prefix_key: tuple
-    basis_key: tuple
-    target_key: tuple
-    solution: SegmentSolution
-    hit_count: int = 0
-
-
-class SegmentCache:
-    """Per-step cache for segment solutions with LFU eviction.
-
-    Uses list-based storage with fast tuple key comparison.
-    """
-
-    def __init__(self, max_entries_per_step: int = 2):
-        self._entries: dict[int, list[SegmentCacheEntry]] = {}
-        self._max_entries = max_entries_per_step
-        self.hits = 0
-        self.misses = 0
-
-    def get(
-        self,
-        step: int,
-        prefix_inv: GateInvariants,
-        basis_inv: GateInvariants,
-        target_inv: GateInvariants,
-    ) -> Optional[SegmentSolution]:
-        """Lookup cached solution using fast _key comparison."""
-        entries = self._entries.get(step)
-        if entries is None:
-            self.misses += 1
-            return None
-
-        pk, bk, tk = prefix_inv._key, basis_inv._key, target_inv._key
-        for entry in entries:
-            if (
-                entry.target_key == tk
-                and entry.prefix_key == pk
-                and entry.basis_key == bk
-            ):
-                entry.hit_count += 1
-                self.hits += 1
-                return entry.solution
-
-        self.misses += 1
-        return None
-
-    def put(
-        self,
-        step: int,
-        prefix_inv: GateInvariants,
-        basis_inv: GateInvariants,
-        target_inv: GateInvariants,
-        solution: SegmentSolution,
-    ) -> None:
-        """Store solution with LFU eviction when at capacity."""
-        if step not in self._entries:
-            self._entries[step] = []
-
-        entries = self._entries[step]
-        pk, bk, tk = prefix_inv._key, basis_inv._key, target_inv._key
-
-        # Check if already cached
-        for entry in entries:
-            if (
-                entry.target_key == tk
-                and entry.prefix_key == pk
-                and entry.basis_key == bk
-            ):
-                return
-
-        new_entry = SegmentCacheEntry(
-            prefix_key=pk, basis_key=bk, target_key=tk, solution=solution, hit_count=0
-        )
-
-        if len(entries) < self._max_entries:
-            entries.append(new_entry)
-        else:
-            min_idx = min(range(len(entries)), key=lambda i: entries[i].hit_count)
-            entries[min_idx] = new_entry
-
-    def clear(self) -> None:
-        """Clear all cached entries and reset statistics."""
-        self._entries.clear()
-        self.hits = 0
-        self.misses = 0
-
-    @property
-    def stats(self) -> dict:
-        """Return cache hit/miss statistics."""
-        total = self.hits + self.misses
-        total_entries = sum(len(e) for e in self._entries.values())
-        return {
-            "hits": self.hits,
-            "misses": self.misses,
-            "hit_rate": self.hits / total if total > 0 else 0.0,
-            "entries": total_entries,
-            "steps": len(self._entries),
-        }
 
 
 class SegmentSynthesizer:
@@ -192,9 +86,7 @@ class SegmentSynthesizer:
         qreg = dag.qregs["q"]
 
         # Initialize with first gate
-        dag.apply_operation_back(
-            UnitaryGate(gate_list[0].unitary, check_input=False), qreg[:]
-        )
+        dag.apply_operation_back(gate_list[0].unitary, qreg[:])
 
         if method == "sequential":
             raise NotImplementedError(
@@ -275,7 +167,7 @@ class SegmentSynthesizer:
             dag.apply_operation_back(
                 UnitaryGate(seg_sol.u1, check_input=False), [qreg[1]]
             )
-            dag.apply_operation_back(UnitaryGate(Gi, check_input=False), qreg[:])
+            dag.apply_operation_back(gate_list[idx].unitary, qreg[:])
             # track P manually instead of recomputing from DAG
             P = Gi @ np.kron(seg_sol.u1, seg_sol.u0) @ P
 

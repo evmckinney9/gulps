@@ -11,7 +11,7 @@ from scipy.optimize import linprog
 
 from gulps.config import GulpsConfig
 from gulps.core.invariants import LEN_GATE_INVARIANTS, GateInvariants
-from gulps.linear_program.base import ConstraintSolution, ISAConstraints
+from gulps.linear_program.lp_abc import ConstraintSolution, ISAConstraints
 from gulps.linear_program.qlr import len_qlr, qlr_inequalities
 
 

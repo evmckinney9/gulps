@@ -49,6 +49,34 @@ class ContinuousISA(ISAInvariants):
     def is_single_family(self) -> bool:
         return len(self.gate_set) == 1
 
+    @classmethod
+    def from_base_gate(
+        cls,
+        base_gate: Gate | np.ndarray,
+        name: Optional[str] = None,
+        max_depth: int = 8,
+        k_lb: float = 0.01,
+    ) -> "ContinuousISA":
+        """Create ContinuousISA from a single base gate.
+
+        Args:
+            base_gate: Base gate unitary or Qiskit Gate.
+            max_depth: Maximum number of gates in the sentence.
+            k_lb: Minimum nonzero k value (gates with k < k_lb are pruned).
+            name: Optional name for the base gate.
+
+        Returns:
+            ContinuousISA instance.
+        """
+        base_inv = GateInvariants.from_unitary(base_gate, name=name)
+        cost_dict = {base_inv: 1.0}  # cost rate per unit k
+        return cls(
+            gate_set=[base_inv],
+            cost_dict=cost_dict,
+            max_depth=max_depth,
+            k_lb=k_lb,
+        )
+
 
 class DiscreteISA(ISAInvariants):
     """Discrete ISA with fixed gate set and cost-ordered enumeration.
@@ -58,7 +86,6 @@ class DiscreteISA(ISAInvariants):
         cost_dict: Mapping from gate invariants to their costs.
     """
 
-    identity_inv = GateInvariants(logspec=(0.0, 0.0, 0.0, 0.0))
     # NOTE this is useful for tiebreakers between fractional parts
     # example 2 iswaps versus 4 sqrtiswaps both cost 4
     # with adjustment it is 2+2eps versus 2+4eps
