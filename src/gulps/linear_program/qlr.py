@@ -1,6 +1,10 @@
 """Contains hardcoded QLR inequalities from monodromy.
 
-L(ci, gi, ci+1) <= bi (for all rows i)
+L(c_{i-1}, g_i, c_i) <= b (for each row)
+
+Convention: g_1, ..., g_n are gates.
+c_i is the intermediate invariant after applying g_1, ..., g_i.
+c_1 = g_1 (first gate's invariant). c_n = target.
 
 Import using qlr_inequalities (tuple).
 """

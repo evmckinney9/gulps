@@ -65,7 +65,7 @@ class ContinuousISAConstraints(ISAConstraints):
     def __init__(
         self,
         base: GateInvariants,
-        max_sequence_length: int = 8,
+        max_sequence_length: int = 6,
         offset=1e-8,
         k_lb: float = 0.01,
     ):
@@ -117,25 +117,22 @@ class ContinuousISAConstraints(ISAConstraints):
             for i in range(self.N - 1)
         ]
 
+        # Count active gates using y binary variables
+        depth = sum(int(sol.get_value(self.y[i])) for i in range(self.N))
+
         gi_list = [
-            GateInvariants.from_unitary(self.base.unitary.power(k))
-            for k in ks
+            GateInvariants.from_unitary(self.base.unitary.power(k)) for k in ks[:depth]
         ]
         intermediate_invariants = (gi_list[0],) + tuple(
-            GateInvariants(tuple(c)) for c in cis
+            GateInvariants(tuple(c)) for c in cis[: depth - 1]
         )
-
-        # Prune trailing zeros (unused gate slots)
-        tol = max(self.offset, 1e-12)
-        nz = [i for i, k in enumerate(ks) if k > tol]
-        zero_index = (max(nz) + 1) if nz else 0
 
         return ConstraintSolution(
             success=True,
-            sentence=tuple(gi_list[:zero_index]),
-            intermediates=intermediate_invariants[:zero_index],
-            parameters=tuple(ks[:zero_index]),
-            cost=sum(ks[:zero_index]),
+            sentence=tuple(gi_list),
+            intermediates=intermediate_invariants,
+            parameters=tuple(ks[:depth]),
+            cost=sum(ks[:depth]),
         )
 
     def _create_model(self):
@@ -187,22 +184,16 @@ class ContinuousISAConstraints(ISAConstraints):
         return m
 
     def _qlr_constraints(self, m: Model):
-        # First block: L(g2, g1, c2)
-        for r in range(len_qlr):
-            m.add_constraint(
-                m.scal_prod(self.gi_nested[1], self._ci_block[r])
-                + m.scal_prod(self.gi_nested[0], self._gi_block[r])
-                + m.scal_prod(self.ci_nested[0], self._ciplus1_block[r])
-                <= float(self._bi[r])
-            )
-
-        # Interior blocks: L(c_j, g_{j+1}, c_{j+1})
-        # ci_nested indexes: 0..N-2  -> (c2..cN)
-        for j in range(1, self.N - 1):
+        # For each gate g_i (i=2..N), build L(c_{i-1}, g_i, c_i)
+        # Array mappings: g_i = gi_nested[i-1], c_i = gi_nested[0] if i==1 else ci_nested[i-2]
+        for i in range(2, self.N + 1):
+            c_im1 = self.gi_nested[0] if i == 2 else self.ci_nested[i - 3]  # c_{i-1}
+            g_i = self.gi_nested[i - 1]  # g_i
+            c_i = self.ci_nested[i - 2]  # c_i
             for r in range(len_qlr):
                 m.add_constraint(
-                    m.scal_prod(self.ci_nested[j - 1], self._ci_block[r])
-                    + m.scal_prod(self.gi_nested[j + 1], self._gi_block[r])
-                    + m.scal_prod(self.ci_nested[j], self._ciplus1_block[r])
+                    m.scal_prod(c_im1, self._ci_block[r])
+                    + m.scal_prod(g_i, self._gi_block[r])
+                    + m.scal_prod(c_i, self._ciplus1_block[r])
                     <= float(self._bi[r])
                 )

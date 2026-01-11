@@ -123,18 +123,20 @@ class SegmentSynthesizer:
         segment_sols = []
 
         # Phase 1: Solve all segments with cache lookup
+        # Segment i (1-indexed): append g_i to c_{i-1} to reach c_i
+        # gate_list[i] = g_{i+1}, invariant_list[i] = c_{i+1}
         for i in range(1, len(invariant_list)):
-            Gi = np.array(gate_list[i].unitary, dtype=np.complex128)
-            Ci = np.array(invariant_list[i].canonical_matrix, dtype=np.complex128)
+            Gi = np.array(gate_list[i].unitary, dtype=np.complex128)  # g_{i+1}
+            Ci = np.array(invariant_list[i].canonical_matrix, dtype=np.complex128)  # c_{i+1}
 
-            # Use canonical of previous segment (or first gate's unitary for i=1)
+            # c_i = prefix for this segment (c_1 = g_1 for first segment)
             if i == 1:
-                Cim1 = np.array(gate_list[0].unitary, dtype=np.complex128)
+                Cim1 = np.array(gate_list[0].unitary, dtype=np.complex128)  # c_1 = g_1
                 prefix_inv = gate_list[0]
             else:
                 Cim1 = np.array(
                     invariant_list[i - 1].canonical_matrix, dtype=np.complex128
-                )
+                )  # c_i
                 prefix_inv = invariant_list[i - 1]
 
             step = i - 1  # 0-indexed step number
@@ -167,7 +169,7 @@ class SegmentSynthesizer:
             dag.apply_operation_back(
                 UnitaryGate(seg_sol.u1, check_input=False), [qreg[1]]
             )
-            dag.apply_operation_back(gate_list[idx].unitary, qreg[:])
+            dag.apply_operation_back(gate_list[idx + 1].unitary, qreg[:])
             # track P manually instead of recomputing from DAG
             P = Gi @ np.kron(seg_sol.u1, seg_sol.u0) @ P
 

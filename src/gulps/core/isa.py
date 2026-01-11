@@ -42,8 +42,8 @@ class ContinuousISA(ISAInvariants):
 
     gate_set: List[GateInvariants]
     cost_dict: Dict[GateInvariants, float] = field(default_factory=dict)
-    max_depth: int = 3
-    k_lb: float = 0.01
+    max_depth: int = 6
+    k_lb: float = 0.1
 
     @property
     def is_single_family(self) -> bool:
@@ -54,8 +54,6 @@ class ContinuousISA(ISAInvariants):
         cls,
         base_gate: Gate | np.ndarray,
         name: Optional[str] = None,
-        max_depth: int = 8,
-        k_lb: float = 0.01,
     ) -> "ContinuousISA":
         """Create ContinuousISA from a single base gate.
 
@@ -73,8 +71,6 @@ class ContinuousISA(ISAInvariants):
         return cls(
             gate_set=[base_inv],
             cost_dict=cost_dict,
-            max_depth=max_depth,
-            k_lb=k_lb,
         )
 
 

@@ -51,21 +51,25 @@ class MinimalOrderedISAConstraints(ISAConstraints):
         A_ub = np.zeros((self.num_ineq, self.num_params))
         b_ub = np.zeros(self.num_ineq)
 
+        # Build segment constraints L(c_{i+1}, g_{i+2}, c_{i+2}) for i=0..n-2
+        # i=0: L(c_1, g_2, c_2) where c_1 = g_1 = isa_sequence[0]
+        # i=k: L(c_{k+1}, g_{k+2}, c_{k+2})
         for i in range(self.n - 1):
             rows = slice(len_qlr * i, len_qlr * (i + 1))
 
-            # c_i block
+            # c_{i+1} prefix block (LHS variable for i>0, RHS constant for i=0)
             if i > 0:
                 offset = LEN_GATE_INVARIANTS * (i - 1)
                 A_ub[rows, offset : offset + LEN_GATE_INVARIANTS] += self._ci_block
 
-            # g_i contribution
+            # g_{i+2} gate contribution (always moved to RHS)
             gi_contrib = np.dot(self._gi_block, self.isa_sequence[i + 1].monodromy)
             if i == 0:
+                # c_1 = g_1, move to RHS
                 gi_contrib += np.dot(self._ci_block, self.isa_sequence[i].monodromy)
             b_ub[rows] += self._bi - gi_contrib
 
-            # c_{i+1} block
+            # c_{i+2} result block (LHS variable, except last segment uses target)
             if i < self.n - 2:
                 offset = LEN_GATE_INVARIANTS * i
                 A_ub[rows, offset : offset + LEN_GATE_INVARIANTS] += self._ciplus1_block
