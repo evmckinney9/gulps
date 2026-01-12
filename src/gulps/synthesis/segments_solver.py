@@ -79,8 +79,8 @@ class SegmentSynthesizer:
         if len(gate_list) != len(invariant_list):
             raise ValueError("Gate list and invariant list must have the same length.")
 
-        if len(gate_list) < 2:
-            raise ValueError("At least two gates are required for segment synthesis.")
+        if len(gate_list) < 1:
+            raise ValueError("At least one gate is required for segment synthesis.")
 
         dag = circuit_to_dag(QuantumCircuit(2, global_phase=0))
         qreg = dag.qregs["q"]

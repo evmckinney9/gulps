@@ -12,6 +12,7 @@ import numpy as np
 from docplex.mp.model import Model
 
 from gulps import GateInvariants
+from gulps.config import GulpsConfig
 from gulps.linear_program.lp_abc import ConstraintSolution, ISAConstraints
 from gulps.linear_program.qlr import len_qlr, qlr_inequalities
 
@@ -66,8 +67,9 @@ class ContinuousISAConstraints(ISAConstraints):
         self,
         base: GateInvariants,
         max_sequence_length: int = 6,
-        offset=1e-8,
+        offset: float = 1e-8,
         k_lb: float = 0.01,
+        config: GulpsConfig | None = None,
     ):
         self.N = max_sequence_length
         if self.N < 2:
@@ -76,6 +78,7 @@ class ContinuousISAConstraints(ISAConstraints):
         self.B = base.monodromy
         self.offset = offset
         self.k_lb = 0.05 if k_lb < 0.0 else k_lb
+        self.config = config or GulpsConfig()
         self.model = self._create_model()
         self._target_def: Optional[np.ndarray] = None
         self._target_cts: List = []  # holds the 3 equality constraints for c_N

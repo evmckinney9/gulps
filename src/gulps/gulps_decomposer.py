@@ -8,7 +8,7 @@ import numpy as np
 from qiskit import QuantumCircuit
 from qiskit.circuit import Gate
 from qiskit.circuit.library import UnitaryGate
-from qiskit.converters import circuit_to_dag
+from qiskit.converters import circuit_to_dag, dag_to_circuit
 from qiskit.dagcircuit import DAGCircuit
 
 from gulps import GateInvariants
@@ -110,60 +110,34 @@ class GulpsDecomposer:
     def _eval_edge_case(
         self, target: GateInvariants, return_dag: bool
     ) -> Optional[Union[QuantumCircuit, DAGCircuit]]:
-        """Check if target is locally equivalent to identity or any basis gate.
+        """Check if target is locally equivalent to identity.
 
-        This fast path handles edge cases where the target can be synthesized exactly
-        using only single-qubit gates or a single basis gate plus single-qubit corrections.
-        Checks both the target and its rho-reflection.
+        This fast path handles the edge case where the target can be synthesized
+        using only single-qubit gates (no two-qubit gate needed).
 
         Args:
             target: GateInvariants representation of the target unitary.
             return_dag: If True, return DAGCircuit instead of QuantumCircuit.
 
         Returns:
-            Synthesized circuit if an edge case is detected, None otherwise.
-            The circuit has structure: k1⊗k2 · G · k3⊗k4 where G is identity or a basis gate.
-
-        Note:
-            Works even when polytope precomputation is disabled, providing a reliable
-            fallback for trivial cases.
+            Synthesized circuit if target is identity, None otherwise.
         """
-        # Check both the target and its rho-reflection against the ISA
-        target_variants = [target, target.rho_reflect]
-        for variant in target_variants:
-            if variant.is_identity:
-                # NOTE: Target is locally equivalent to identity - return 1Q corrections only
-                if logger.isEnabledFor(logging.DEBUG):
-                    logger.debug("Target is identity, returning empty circuit")
-                k1, k2, k3, k4, gphase = recover_local_equivalence(
-                    target.unitary,
-                    self.isa.identity_inv.unitary,
-                    config=self.config,
-                )
-                qc = QuantumCircuit(2, global_phase=gphase)
-                qc.append(UnitaryGate(k1, check_input=False), [0])
-                qc.append(UnitaryGate(k2, check_input=False), [1])
-                qc.append(UnitaryGate(k3, check_input=False), [0])
-                qc.append(UnitaryGate(k4, check_input=False), [1])
-                return circuit_to_dag(qc) if return_dag else qc
-
-        for basis_gate in self.isa.gate_set:
-            for variant in target_variants:
-                if variant == basis_gate:  # use GateInvariants __eq__
-                    if logger.isEnabledFor(logging.DEBUG):
-                        logger.debug("Target is local to a gate in the ISA")
-                    k1, k2, k3, k4, gphase = recover_local_equivalence(
-                        target.unitary,
-                        basis_gate.unitary,
-                        config=self.config,
-                    )
-                    qc = QuantumCircuit(2, global_phase=gphase)
-                    qc.append(UnitaryGate(k1, check_input=False), [0])
-                    qc.append(UnitaryGate(k2, check_input=False), [1])
-                    qc.append(basis_gate.unitary, [0, 1])
-                    qc.append(UnitaryGate(k3, check_input=False), [0])
-                    qc.append(UnitaryGate(k4, check_input=False), [1])
-                    return circuit_to_dag(qc) if return_dag else qc
+        # Check if target is locally equivalent to identity
+        if target.is_identity or target.rho_reflect.is_identity:
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug("Target is identity, returning empty circuit")
+            k1, k2, k3, k4, gphase = recover_local_equivalence(
+                target.unitary,
+                np.eye(4),
+                config=self.config,
+            )
+            dag = circuit_to_dag(QuantumCircuit(2, global_phase=gphase))
+            qreg = dag.qregs["q"]
+            dag.apply_operation_back(UnitaryGate(k1, check_input=False), [qreg[0]])
+            dag.apply_operation_back(UnitaryGate(k2, check_input=False), [qreg[1]])
+            dag.apply_operation_back(UnitaryGate(k3, check_input=False), [qreg[0]])
+            dag.apply_operation_back(UnitaryGate(k4, check_input=False), [qreg[1]])
+            return dag if return_dag else dag_to_circuit(dag)
 
         return None
 
@@ -196,7 +170,10 @@ class GulpsDecomposer:
         # Priority queue enumeration
         for sentence in self.isa.enumerate():
             # Heuristic filter to skip obvious non-starters
-            if sum(gate.strength for gate in sentence) < target.strength:
+            if (
+                sum(gate.strength for gate in sentence)
+                < target.strength - self.config.lp_feasibility_tol
+            ):
                 continue
             # TODO: optimize by caching constraint objects for previously seen sentences
             constraints = MinimalOrderedISAConstraints(sentence, config=self.config)
@@ -233,6 +210,7 @@ class GulpsDecomposer:
             base=self.isa.gate_set[0],
             max_sequence_length=self.isa.max_depth,
             k_lb=self.isa.k_lb,
+            config=self.config,
         )
         return constraints.solve(target)
 
@@ -313,9 +291,6 @@ class GulpsDecomposer:
 
         # --- B1) Segment synthesis ---
         t1 = time.perf_counter()  # TIMING
-        if len(sentence) < 2:
-            raise ValueError("At least two gates are required for segment synthesis.")
-
         stitched_circuit = self._local_synthesis.synthesize_segments(
             gate_list=sentence,
             invariant_list=intermediates,

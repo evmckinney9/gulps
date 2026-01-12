@@ -28,6 +28,11 @@ class MinimalOrderedISAConstraints(ISAConstraints):
     def __init__(
         self, isa_sequence: List[GateInvariants], config: GulpsConfig | None = None
     ):
+        self._orig_len = len(isa_sequence)
+        # Pad 1-gate sentences with identity for LP constraint construction
+        if len(isa_sequence) == 1:
+            identity = GateInvariants((0.0, 0.0, 0.0, 0.0), name="I")
+            isa_sequence = isa_sequence + [identity]
         self.isa_sequence = isa_sequence
         self.n = len(isa_sequence)
         self.num_ineq = len_qlr * (self.n - 1)
@@ -86,7 +91,17 @@ class MinimalOrderedISAConstraints(ISAConstraints):
         self.last_iter_ct = ct
 
     def solve_single(self, log_output=False) -> ConstraintSolution:
-        # Edge case: no free variables (2-gate sentence)
+        # Edge case: 1-gate sentence (padded to 2 for LP math)
+        if self._orig_len == 1:
+            if np.all(-10 * self.config.lp_feasibility_tol <= self.b_ub):
+                return ConstraintSolution(
+                    success=True,
+                    sentence=(self.isa_sequence[0],),
+                    intermediates=(self.isa_sequence[0],),
+                )
+            return ConstraintSolution(success=False)
+
+        # Edge case: 2-gate sentence (no free variables)
         if len(self.A_ub[0]) == 0:
             # NOTE: try eps here but if causes problems maybe need to go to next enumerated sentence
             if np.all(-10 * self.config.lp_feasibility_tol <= self.b_ub):

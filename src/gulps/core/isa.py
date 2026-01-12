@@ -122,7 +122,7 @@ class DiscreteISA(ISAInvariants):
             self.coverage_set = isa_to_coverage(self)
 
     def enumerate(
-        self, max_depth: int = 32
+        self, max_depth: int = 10
     ) -> Generator[List[GateInvariants], None, None]:
         """Generate all ordered gate sequences up to max_depth."""
         counter = itertools.count()  # acts as cost tie-breaker
@@ -147,7 +147,7 @@ class DiscreteISA(ISAInvariants):
                 new_cost = cost + self.cost_dict[gate] + self.single_qubit_cost
                 heapq.heappush(priority_queue, (new_cost, next(counter), new_sequence))
 
-            if len(sequence) >= 2:
+            if len(sequence) >= 1:
                 yield sequence
 
     def polytope_lookup(self, target: GateInvariants) -> Optional[List[GateInvariants]]:
