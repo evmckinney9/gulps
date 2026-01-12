@@ -100,6 +100,28 @@ class ContinuousISAConstraints(ISAConstraints):
             for j in range(3)
         ]
 
+    def solve(
+        self, target: GateInvariants, log_output: bool = False
+    ) -> ConstraintSolution:
+        """Solve LP, trying both rho orientations and returning the cheaper solution.
+
+        Unlike discrete ISAs where cost is fixed by the sentence, continuous ISAs
+        can have very different costs for target vs rho(target). We must try both
+        and return the cheaper one.
+        """
+        self.set_target(target)
+        result = self.solve_single(log_output=log_output)
+
+        self.set_target(target.rho_reflect)
+        rho_result = self.solve_single(log_output=log_output)
+
+        if not result.success:
+            return rho_result
+        if not rho_result.success:
+            return result
+
+        return result if result.cost <= rho_result.cost else rho_result
+
     def solve_single(self, log_output: bool = False) -> ConstraintSolution:
         sol = self.model.solve(log_output=log_output)
         if not sol:

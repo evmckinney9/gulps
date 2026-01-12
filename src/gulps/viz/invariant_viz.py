@@ -124,4 +124,4 @@ def render_path(
 
     # ax.legend(custom_lines, legend_labels, ncol=2, title="Basis gate")
     # plt.savefig("trajn.svg", bbox_inches="tight")
-    return ax
+    return fig

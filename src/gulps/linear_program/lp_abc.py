@@ -40,18 +40,18 @@ class ISAConstraints(Protocol):
         """Solve the LP/MILP with the current target."""
         ...
 
-    def solve(self, target: GateInvariants) -> ConstraintSolution:
-        """Solve LP, automatically trying both rho orientations.
+    def solve(
+        self, target: GateInvariants, log_output: bool = False
+    ) -> ConstraintSolution:
+        """Solve LP, trying both rho orientations and returning first success.
 
-        Args:
-            target: Alcove-normalized target gate invariants.
-
-        Returns:
-            ConstraintSolution with success=True if either orientation works.
+        For discrete ISAs, cost is fixed by the sentence, so we return the first
+        feasible orientation. Continuous ISAs override this to compare costs.
         """
-        for t in [target, target.rho_reflect]:
-            self.set_target(t)
-            result = self.solve_single()
-            if result.success:
-                return result
-        return ConstraintSolution(success=False)
+        self.set_target(target)
+        result = self.solve_single(log_output=log_output)
+        if result.success:
+            return result
+
+        self.set_target(target.rho_reflect)
+        return self.solve_single(log_output=log_output)
