@@ -52,7 +52,7 @@ class GulpsDecomposer:
         precompute_polytopes: bool = True,
         isa: Optional[ISAInvariants] = None,
         segment_solver: Optional[SegmentSolver] = None,
-        tolerance_config: Optional[GulpsConfig] = None,
+        config_options: Optional[GulpsConfig] = None,
     ):
         """Initialize the GulpsDecomposer.
 
@@ -97,7 +97,7 @@ class GulpsDecomposer:
             )
 
         self._is_continuous = isinstance(self.isa, ContinuousISA)
-        self.config = tolerance_config or GulpsConfig()
+        self.config = config_options or GulpsConfig()
 
         if segment_solver is None:
             segment_solver = JaxLMSegmentSolver(config=self.config)
