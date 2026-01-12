@@ -107,12 +107,6 @@ class ContinuousISAConstraints(ISAConstraints):
 
         # Extract k, g, c values from solution
         ks = [float(sol.get_value(self.k_vars[i])) for i in range(self.N)]
-        gis = [
-            np.array(
-                [sol.get_value(self.gi_nested[i][j]) for j in range(3)], dtype=float
-            )
-            for i in range(self.N)
-        ]
         cis = [
             np.array(
                 [sol.get_value(self.ci_nested[i][j]) for j in range(3)], dtype=float
@@ -144,8 +138,7 @@ class ContinuousISAConstraints(ISAConstraints):
         # STEP 1. CREATE ALL VARIABLES
         # Variables
         self.y = m.binary_var_list(self.N)
-        # self.k_vars = m.continuous_var_list(self.N, lb=0.0, ub=1.0)
-        self.k_vars = m.semicontinuous_var_list(self.N, lb=self.k_lb, ub=1.0)
+        self.k_vars = m.semicontinuous_var_list(self.N, lb=self.k_lb)
 
         self.gi_nested = [
             m.continuous_var_list(3, lb=-1.0, ub=1.0) for _ in range(self.N)
@@ -156,7 +149,7 @@ class ContinuousISAConstraints(ISAConstraints):
         # used for depth/nz counting
         for i in range(self.N):
             m.add_constraint(self.k_vars[i] >= self.k_lb * self.y[i])
-            m.add_constraint(self.k_vars[i] <= 1.0 * self.y[i])
+            m.add_constraint(self.k_vars[i] <= self.y[i])
 
         # STEP 2. GATE PARAMETERIZATION + MONOTONIC
         for i in range(self.N):

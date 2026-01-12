@@ -17,7 +17,6 @@ logger = logging.getLogger(__name__)
 # but might be over-calculating some parts by reusing TwoQubitWeylDecomposition
 # because we already know the Cartan KAK invariants...
 # maybe there is something more efficient if we purely need the exterior locals?
-# especially useful if we need something cleaner when dealing with Symbolic params.
 P0 = YGate().to_matrix()  # pre on qubit 0
 Q0 = XGate().to_matrix()  # post on qubit 0
 Q1 = ZGate().to_matrix()  # post on qubit 1
