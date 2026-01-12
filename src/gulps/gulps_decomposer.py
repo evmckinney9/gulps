@@ -165,7 +165,7 @@ class GulpsDecomposer:
                 )
             # TODO: optimize by caching constraint objects for previously seen sentences
             constraints = MinimalOrderedISAConstraints(sentence, config=self.config)
-            return constraints.solve(target)
+            return constraints.solve(target, log_output=log_output)
 
         # Priority queue enumeration
         for sentence in self.isa.enumerate():
@@ -177,7 +177,7 @@ class GulpsDecomposer:
                 continue
             # TODO: optimize by caching constraint objects for previously seen sentences
             constraints = MinimalOrderedISAConstraints(sentence, config=self.config)
-            result = constraints.solve(target)
+            result = constraints.solve(target, log_output=log_output)
             if result.success:
                 return result
 
@@ -188,7 +188,9 @@ class GulpsDecomposer:
     ) -> ConstraintSolution:
         """Find optimal decomposition using continuous ISA.
 
-        Single LP solve with continuous gate parameters.
+        Single LP/MILP solve with continuous gate parameters.
+        For single-family ISA: uses LP (ContinuousISAConstraints)
+        For multi-family ISA: uses MILP (HeterogeneousContinuousISAConstraints)
 
         Args:
             target: Alcove-normalized target gate invariants.
@@ -197,22 +199,32 @@ class GulpsDecomposer:
         Returns:
             ConstraintSolution with success=True if a valid decomposition is found.
         """
-        if not self.isa.is_single_family:
-            raise NotImplementedError(
-                "Heterogeneous continuous ISA (multiple gate families) is not yet supported."
+        # Import here to avoid requiring CPLEX for discrete-only usage
+        if self.isa.is_single_family:
+            from gulps.linear_program.cplex_lp import ContinuousISAConstraints
+
+            # TODO: optimize by caching constraint object (construct once in __init__ or ISA)
+            constraints = ContinuousISAConstraints(
+                base=self.isa.gate_set[0],
+                max_sequence_length=self.isa.max_depth,
+                k_lb=self.isa.k_lb,
+                single_qubit_cost=self.isa.single_qubit_cost,
+                config=self.config,
+            )
+        else:
+            from gulps.linear_program.cplex_lp import (
+                HeterogeneousContinuousISAConstraints,
             )
 
-        # Import here to avoid requiring CPLEX for discrete-only usage
-        from gulps.linear_program.cplex_lp import ContinuousISAConstraints
+            # Heterogeneous continuous ISA with multiple gate families
+            # single_qubit_cost is pulled from isa.single_qubit_cost inside the constructor
+            constraints = HeterogeneousContinuousISAConstraints(
+                isa=self.isa,
+                max_sequence_length=self.isa.max_depth,
+                config=self.config,
+            )
 
-        # TODO: optimize by caching constraint object (construct once in __init__ or ISA)
-        constraints = ContinuousISAConstraints(
-            base=self.isa.gate_set[0],
-            max_sequence_length=self.isa.max_depth,
-            k_lb=self.isa.k_lb,
-            config=self.config,
-        )
-        return constraints.solve(target)
+        return constraints.solve(target, log_output=log_output)
 
     def _best_decomposition(
         self, target_inv: GateInvariants, log_output: bool = False

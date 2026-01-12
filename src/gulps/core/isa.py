@@ -20,10 +20,16 @@ class ISAInvariants(ABC):
     Attributes:
         gate_set: List of basis gate invariants.
         cost_dict: Mapping from gate invariants to their costs.
+        single_qubit_cost: Cost offset per gate to prioritize shorter depth sequences.
     """
 
     gate_set: List[GateInvariants]
     cost_dict: Dict[GateInvariants, float]
+    single_qubit_cost: float
+    # NOTE this is useful for tiebreakers between fractional parts
+    # example 2 iswaps versus 4 sqrtiswaps both cost 4
+    # with adjustment it is 2+2eps versus 2+4eps
+    MIN_COST_1Q = 1e-8
 
 
 @dataclass
@@ -38,12 +44,14 @@ class ContinuousISA(ISAInvariants):
         cost_dict: Mapping from base gates to cost rates (cost = k * rate).
         max_depth: Maximum number of gates in the sentence.
         k_lb: Minimum nonzero k value (gates with k < k_lb are pruned).
+        single_qubit_cost: Cost offset per gate to prioritize shorter depth sequences.
     """
 
     gate_set: List[GateInvariants]
     cost_dict: Dict[GateInvariants, float] = field(default_factory=dict)
-    max_depth: int = 6
+    max_depth: int = 4
     k_lb: float = 0.1
+    single_qubit_cost: float = ISAInvariants.MIN_COST_1Q
 
     @property
     def is_single_family(self) -> bool:
@@ -82,18 +90,13 @@ class DiscreteISA(ISAInvariants):
         cost_dict: Mapping from gate invariants to their costs.
     """
 
-    # NOTE this is useful for tiebreakers between fractional parts
-    # example 2 iswaps versus 4 sqrtiswaps both cost 4
-    # with adjustment it is 2+2eps versus 2+4eps
-    MIN_COST_1Q = 1e-8
-
     def __init__(
         self,
         gate_set: List[Gate] | List[np.ndarray],
         costs: List[float],
         names: List[str] | None = None,
         precompute_polytopes: bool = False,
-        single_qubit_cost: float = MIN_COST_1Q,
+        single_qubit_cost: float = ISAInvariants.MIN_COST_1Q,
     ):
         if not gate_set:
             raise ValueError("gate_set can't be empty.")
@@ -109,13 +112,12 @@ class DiscreteISA(ISAInvariants):
 
         self.cost_dict = {g: c for g, c in zip(self.gate_set, costs)}
         self.single_qubit_cost = single_qubit_cost
-        if self.single_qubit_cost == 0.0:
+        if self.single_qubit_cost <= 0.0:
             logger.warning(
                 "Setting single_qubit_cost to zero may lead to unexpected behavior. "
                 "This offset is used to prioritize otherwise cost-equivalent gate sequences with fewer total segments. "
                 "For example, to prioritize 2 iswaps over 4 sqrtiswaps."
             )
-        elif self.single_qubit_cost < 0.0:
             self.single_qubit_cost = self.MIN_COST_1Q
         self._precompute_polytopes = precompute_polytopes
         if precompute_polytopes:
