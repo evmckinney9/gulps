@@ -53,7 +53,7 @@ class ContinuousISAConstraints(ISAConstraints):
         self.base = base
         self.B = base.monodromy
         self.offset = offset
-        self.k_lb = 0.05 if k_lb < 0.0 else k_lb
+        self.k_lb = 0.001 if k_lb < 0.0 else k_lb
         self.single_qubit_cost = single_qubit_cost
         self.config = config or GulpsConfig()
         self.model = self._create_model()
