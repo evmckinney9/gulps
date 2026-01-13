@@ -1,9 +1,3 @@
-# given a CircuitSentence, returns the LP problem constraints
-# resembles lp_constraints/scipy_constraints.py/OrderedDefinedISAConstraints
-# write a less generic version of the LP formalism for GULPS
-# adapted from lp_constraints/lp_constraints.py
-#              lp_constraints/qlr.py
-#              lp_constraints/scipy_constraints.py
 from typing import List
 
 import numpy as np

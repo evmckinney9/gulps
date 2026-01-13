@@ -23,6 +23,7 @@ COLORS = [
 ]
 
 
+# TODO fixme not detecting vertices versus 1d lines
 def _plot_polytope(circuit_polytope, ax, w, color="red"):
     """Plot a single circuit polytope on the given axes.
 
@@ -37,10 +38,17 @@ def _plot_polytope(circuit_polytope, ax, w, color="red"):
     )
     polytope_vertices = np.array([[float(b) for b in a] for a in polytope_vertices[0]])
 
-    left_vertices = polytope_vertices
-    right_vertices = np.array([[1 - a[0], a[1], a[2]] for a in polytope_vertices])
+    # TODO FIXME I think this symmetry might not be correct for all polytopes
+    # left_vertices = polytope_vertices
+    # right_vertices = np.array([[1 - a[0], a[1], a[2]] for a in polytope_vertices])
+    # extend polytope_vertices
+    extended_vertices = []
+    for v in polytope_vertices:
+        extended_vertices.append(v)
+        if v[2] == 0.0:
+            extended_vertices.append([1 - v[0], v[1], v[2]])
 
-    for vertices in [left_vertices, right_vertices]:
+    for vertices in [extended_vertices]:
         # delete duplicates that might exist
         vertices = np.unique(vertices, axis=0)
 

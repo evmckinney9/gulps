@@ -89,6 +89,9 @@ def coverage_report(coverage_set, chatty=False):
         dict: Coverage analysis containing volume_info, expected_cost,
             expected_depth, expected_index, and total_coverage.
     """
+    # prune coverage_set with empty operations
+    coverage_set = [p for p in coverage_set if p.operations]
+
     # Calculate integrals once (expensive operation)
     integrals = distance_polynomial_integrals(coverage_set, chatty=chatty)
 

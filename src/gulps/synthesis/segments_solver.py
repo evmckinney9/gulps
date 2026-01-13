@@ -127,7 +127,9 @@ class SegmentSynthesizer:
         # gate_list[i] = g_{i+1}, invariant_list[i] = c_{i+1}
         for i in range(1, len(invariant_list)):
             Gi = np.array(gate_list[i].unitary, dtype=np.complex128)  # g_{i+1}
-            Ci = np.array(invariant_list[i].canonical_matrix, dtype=np.complex128)  # c_{i+1}
+            Ci = np.array(
+                invariant_list[i].canonical_matrix, dtype=np.complex128
+            )  # c_{i+1}
 
             # c_i = prefix for this segment (c_1 = g_1 for first segment)
             if i == 1:
@@ -154,6 +156,7 @@ class SegmentSynthesizer:
                 if seg_sol.success:
                     self._cache.put(step, prefix_inv, basis_inv, target_inv, seg_sol)
 
+            # TODO FIXME, raise a failure here or inside the solver?
             if not seg_sol.success:
                 raise RuntimeError(
                     f"Segment {i} synthesis failed (residual norm={seg_sol.max_residual:.2e})."

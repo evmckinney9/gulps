@@ -29,39 +29,11 @@ class ContinuousISAConstraints(ISAConstraints):
     This is a variation of the original CPLEX implementation
     https://github.com/ajavadia/hetero_isas/blob/main/src/hetero_isas/monodromy_lp/lp_constraints/docplex_constraints.py
 
-    But this used more indicator variables to select gates out of the ISA. In other words,
-    this was used to bypass the enumeration of sentences.
-
-    MinimalOrderedISAConstraints is fairly slimmed down to just the matrix construction,
-    which makes it hard to add more complicated constraint relationships. So I will
-    in the more general construction use CPLEX instead of Scipy.
-
-    I want to eliminate (for now) the selection of gates from the ISA; rather we will
-    consider G to be a single parameterized gate. Example, XX(theta), iswap(theta), or fSim(theta)
-    but not {XX(theta1), iSWAP(theta2)}
-
     Crucially, NOTE we will assume the ISA contains a single gate described by a
     single continuous family: g = B * k, with k in [0,1]. The (duration/cost) is k.
 
-    Further, I think I will drop the binary decision variable for T vs rho(T) since it is not
-    a significant speedup and complicates the solution extraction step.
-
-    Finally, this will remain a specialized method because `GateInvariants` does not have
-    a proper way of dealing with parameterized gates. I tried to have both defined/parameterized gates
-    in the original implementation of from `MonodromyLPGate` but dropped this when refactoring into
-    `GateInvariants` in gulps.
-
-    I think we can consider a sufficiently long sequence_length, and rather than pad identities,
-    we can rely on the objective function to set theta/k:=0 when sentence is under-constrained and truncate ourselves.
-
-    NOTE I will try to follow same interface as MinimalOrderedISAConstraints, but will avoid
-    giving them a shared interface class for the time being. (init(), set(), solve())
-
-    Thus, the following constraints must be made
-    (a) standard qlr steps
-    (b) boundary conditions (start at I, finish at T)
-    (c) each G in (a) constraints by the bespoke parameterization
-    (d) monotonic strength ordering
+    TODO, has the opposite monotonic constraint as the discrete ISA, I have found
+    that it is slightly better to have shorter gates first.
     """
 
     _ci_block, _gi_block, _ciplus1_block, _bi = qlr_inequalities
@@ -229,171 +201,171 @@ class ContinuousISAConstraints(ISAConstraints):
                 )
 
 
-class HeterogeneousContinuousISAConstraints(ContinuousISAConstraints):
-    """MILP constraints for heterogeneous continuous ISA with multiple gate families.
+# class HeterogeneousContinuousISAConstraints(ContinuousISAConstraints):
+#     """MILP constraints for heterogeneous continuous ISA with multiple gate families.
 
-    Uses binary selection matrix z[i,f] to select gate family f at position i,
-    combined with continuous parameter k[i] for the selected family.
-    """
+#     Uses binary selection matrix z[i,f] to select gate family f at position i,
+#     combined with continuous parameter k[i] for the selected family.
+#     """
 
-    def __init__(
-        self,
-        isa: "ContinuousISA",
-        max_sequence_length: int = 6,
-        offset: float = 1e-8,
-        config: GulpsConfig | None = None,
-    ):
-        if isa.is_single_family:
-            raise ValueError("Use ContinuousISAConstraints for single-family ISAs.")
+#     def __init__(
+#         self,
+#         isa: "ContinuousISA",
+#         max_sequence_length: int = 6,
+#         offset: float = 1e-8,
+#         config: GulpsConfig | None = None,
+#     ):
+#         if isa.is_single_family:
+#             raise ValueError("Use ContinuousISAConstraints for single-family ISAs.")
 
-        self.isa = isa
-        self.num_families = len(isa.gate_set)
-        self.bases = [g.monodromy for g in isa.gate_set]
-        self.cost_rates = [isa.cost_dict[g] for g in isa.gate_set]
+#         self.isa = isa
+#         self.num_families = len(isa.gate_set)
+#         self.bases = [g.monodromy for g in isa.gate_set]
+#         self.cost_rates = [isa.cost_dict[g] for g in isa.gate_set]
 
-        super().__init__(
-            base=isa.gate_set[0],
-            max_sequence_length=max_sequence_length,
-            offset=offset,
-            k_lb=isa.k_lb,
-            single_qubit_cost=isa.single_qubit_cost,
-            config=config,
-        )
+#         super().__init__(
+#             base=isa.gate_set[0],
+#             max_sequence_length=max_sequence_length,
+#             offset=offset,
+#             k_lb=isa.k_lb,
+#             single_qubit_cost=isa.single_qubit_cost,
+#             config=config,
+#         )
 
-    def _create_model(self):
-        m = Model("HeterogeneousContinuousISAConstraints", ignore_names=True)
-        F = self.num_families
+#     def _create_model(self):
+#         m = Model("HeterogeneousContinuousISAConstraints", ignore_names=True)
+#         F = self.num_families
 
-        # STEP 1: VARIABLES
-        self.y = m.binary_var_list(self.N)  # position active?
-        self.k_vars = m.semicontinuous_var_list(self.N, lb=self.k_lb)  # parameter
+#         # STEP 1: VARIABLES
+#         self.y = m.binary_var_list(self.N)  # position active?
+#         self.k_vars = m.semicontinuous_var_list(self.N, lb=self.k_lb)  # parameter
 
-        # Binary selection: z[i,f] = 1 iff position i uses family f
-        self.z = m.binary_var_matrix(self.N, F)
+#         # Binary selection: z[i,f] = 1 iff position i uses family f
+#         self.z = m.binary_var_matrix(self.N, F)
 
-        self.gi_nested = [
-            m.continuous_var_list(3, lb=-1.0, ub=1.0) for _ in range(self.N)
-        ]
-        self.ci_nested = [
-            m.continuous_var_list(3, lb=-1.0, ub=1.0) for _ in range(self.N - 1)
-        ]
+#         self.gi_nested = [
+#             m.continuous_var_list(3, lb=-1.0, ub=1.0) for _ in range(self.N)
+#         ]
+#         self.ci_nested = [
+#             m.continuous_var_list(3, lb=-1.0, ub=1.0) for _ in range(self.N - 1)
+#         ]
 
-        # STEP 2: LINK y, k, and z
-        for i in range(self.N):
-            # k is active iff y is active
-            m.add_constraint(self.k_vars[i] >= self.k_lb * self.y[i])
-            m.add_constraint(self.k_vars[i] <= self.y[i])
+#         # STEP 2: LINK y, k, and z
+#         for i in range(self.N):
+#             # k is active iff y is active
+#             m.add_constraint(self.k_vars[i] >= self.k_lb * self.y[i])
+#             m.add_constraint(self.k_vars[i] <= self.y[i])
 
-            # Exactly one family selected iff position is active
-            m.add_constraint(m.sum(self.z[i, f] for f in range(F)) == self.y[i])
+#             # Exactly one family selected iff position is active
+#             m.add_constraint(m.sum(self.z[i, f] for f in range(F)) == self.y[i])
 
-        # STEP 3: GATE PARAMETERIZATION via indicators
-        # When z[i,f] == 1, enforce g_i = k_i * B[f]
-        for i in range(self.N):
-            for f in range(F):
-                for j in range(3):
-                    m.add_indicator(
-                        self.z[i, f],
-                        self.gi_nested[i][j] == self.bases[f][j] * self.k_vars[i],
-                        active_value=1,
-                    )
+#         # STEP 3: GATE PARAMETERIZATION via indicators
+#         # When z[i,f] == 1, enforce g_i = k_i * B[f]
+#         for i in range(self.N):
+#             for f in range(F):
+#                 for j in range(3):
+#                     m.add_indicator(
+#                         self.z[i, f],
+#                         self.gi_nested[i][j] == self.bases[f][j] * self.k_vars[i],
+#                         active_value=1,
+#                     )
 
-            # When inactive (y[i]=0), g_i = 0
-            for j in range(3):
-                m.add_indicator(
-                    self.y[i],
-                    self.gi_nested[i][j] == 0,
-                    active_value=0,
-                )
+#             # When inactive (y[i]=0), g_i = 0
+#             for j in range(3):
+#                 m.add_indicator(
+#                     self.y[i],
+#                     self.gi_nested[i][j] == 0,
+#                     active_value=0,
+#                 )
 
-        # STEP 4: MONOTONIC ORDERING
-        for i in range(self.N - 1):
-            m.add_constraint(self.k_vars[i] >= self.k_vars[i + 1])
-            m.add_constraint(self.y[i] >= self.y[i + 1])
+#         # STEP 4: MONOTONIC ORDERING
+#         for i in range(self.N - 1):
+#             m.add_constraint(self.k_vars[i] >= self.k_vars[i + 1])
+#             m.add_constraint(self.y[i] >= self.y[i + 1])
 
-            # Optional: order by family strength (like old code)
-            # sum_{f'<f} z[i,f'] >= sum_{f'<f} z[i+1,f']
-            for f in range(F):
-                m.add_constraint(
-                    m.sum(self.z[i, fp] for fp in range(f))
-                    <= m.sum(self.z[i + 1, fp] for fp in range(f))
-                )
+#             # Optional: order by family strength (like old code)
+#             # sum_{f'<f} z[i,f'] >= sum_{f'<f} z[i+1,f']
+#             for f in range(F):
+#                 m.add_constraint(
+#                     m.sum(self.z[i, fp] for fp in range(f))
+#                     <= m.sum(self.z[i + 1, fp] for fp in range(f))
+#                 )
 
-        # STEP 5: QLR CONSTRAINTS
-        self._qlr_constraints(m)
+#         # STEP 5: QLR CONSTRAINTS
+#         self._qlr_constraints(m)
 
-        # STEP 6: OBJECTIVE
-        # Cost = sum_i sum_f z[i,f] * cost_rate[f] * k[i]
-        # This is nonlinear, so we linearize using auxiliary variables w[i,f]
-        self.w = m.continuous_var_matrix(self.N, F, lb=0.0)
+#         # STEP 6: OBJECTIVE
+#         # Cost = sum_i sum_f z[i,f] * cost_rate[f] * k[i]
+#         # This is nonlinear, so we linearize using auxiliary variables w[i,f]
+#         self.w = m.continuous_var_matrix(self.N, F, lb=0.0)
 
-        for i in range(self.N):
-            for f in range(F):
-                # w[i,f] = z[i,f] * k[i] (linearized via big-M)
-                # w[i,f] <= k[i]
-                # w[i,f] <= z[i,f]  (since k <= 1)
-                # w[i,f] >= k[i] - (1 - z[i,f])
-                m.add_constraint(self.w[i, f] <= self.k_vars[i])
-                m.add_constraint(self.w[i, f] <= self.z[i, f])
-                m.add_constraint(self.w[i, f] >= self.k_vars[i] - (1 - self.z[i, f]))
+#         for i in range(self.N):
+#             for f in range(F):
+#                 # w[i,f] = z[i,f] * k[i] (linearized via big-M)
+#                 # w[i,f] <= k[i]
+#                 # w[i,f] <= z[i,f]  (since k <= 1)
+#                 # w[i,f] >= k[i] - (1 - z[i,f])
+#                 m.add_constraint(self.w[i, f] <= self.k_vars[i])
+#                 m.add_constraint(self.w[i, f] <= self.z[i, f])
+#                 m.add_constraint(self.w[i, f] >= self.k_vars[i] - (1 - self.z[i, f]))
 
-        obj_cost = m.sum(
-            self.cost_rates[f] * self.w[i, f] for i in range(self.N) for f in range(F)
-        ) + self.single_qubit_cost * (m.sum(self.y) + 1)
-        obj_depth = m.sum(self.y)
+#         obj_cost = m.sum(
+#             self.cost_rates[f] * self.w[i, f] for i in range(self.N) for f in range(F)
+#         ) + self.single_qubit_cost * (m.sum(self.y) + 1)
+#         obj_depth = m.sum(self.y)
 
-        m.set_multi_objective(
-            sense="min",
-            exprs=[obj_cost, obj_depth],
-            priorities=[2, 1],
-            abstols=[self.offset, 0],
-        )
+#         m.set_multi_objective(
+#             sense="min",
+#             exprs=[obj_cost, obj_depth],
+#             priorities=[2, 1],
+#             abstols=[self.offset, 0],
+#         )
 
-        return m
+#         return m
 
-    def solve_single(self, log_output: bool = False) -> ConstraintSolution:
-        sol = self.model.solve(log_output=log_output)
-        if not sol:
-            return ConstraintSolution(success=False)
+#     def solve_single(self, log_output: bool = False) -> ConstraintSolution:
+#         sol = self.model.solve(log_output=log_output)
+#         if not sol:
+#             return ConstraintSolution(success=False)
 
-        ks = [float(sol.get_value(self.k_vars[i])) for i in range(self.N)]
-        depth = sum(int(sol.get_value(self.y[i])) for i in range(self.N))
+#         ks = [float(sol.get_value(self.k_vars[i])) for i in range(self.N)]
+#         depth = sum(int(sol.get_value(self.y[i])) for i in range(self.N))
 
-        # Extract selected families
-        families = []
-        for i in range(depth):
-            for f in range(self.num_families):
-                if sol.get_value(self.z[i, f]) > 0.5:
-                    families.append(f)
-                    break
+#         # Extract selected families
+#         families = []
+#         for i in range(depth):
+#             for f in range(self.num_families):
+#                 if sol.get_value(self.z[i, f]) > 0.5:
+#                     families.append(f)
+#                     break
 
-        # Build gate list
-        gi_list = []
-        for i in range(depth):
-            base_gate = self.isa.gate_set[families[i]]
-            gi_list.append(
-                GateInvariants.from_unitary(
-                    base_gate.unitary.power(ks[i]), name=base_gate.name
-                )
-            )
+#         # Build gate list
+#         gi_list = []
+#         for i in range(depth):
+#             base_gate = self.isa.gate_set[families[i]]
+#             gi_list.append(
+#                 GateInvariants.from_unitary(
+#                     base_gate.unitary.power(ks[i]), name=base_gate.name
+#                 )
+#             )
 
-        cis = [
-            np.array(
-                [sol.get_value(self.ci_nested[i][j]) for j in range(3)], dtype=float
-            )
-            for i in range(self.N - 1)
-        ]
-        intermediate_invariants = (gi_list[0],) + tuple(
-            GateInvariants(tuple(c)) for c in cis[: depth - 1]
-        )
+#         cis = [
+#             np.array(
+#                 [sol.get_value(self.ci_nested[i][j]) for j in range(3)], dtype=float
+#             )
+#             for i in range(self.N - 1)
+#         ]
+#         intermediate_invariants = (gi_list[0],) + tuple(
+#             GateInvariants(tuple(c)) for c in cis[: depth - 1]
+#         )
 
-        cost = sum(ks[i] * self.cost_rates[families[i]] for i in range(depth))
-        cost += self.single_qubit_cost * (depth + 1)
+#         cost = sum(ks[i] * self.cost_rates[families[i]] for i in range(depth))
+#         cost += self.single_qubit_cost * (depth + 1)
 
-        return ConstraintSolution(
-            success=True,
-            sentence=tuple(gi_list),
-            intermediates=intermediate_invariants,
-            parameters=tuple(ks[:depth]),
-            cost=cost,
-        )
+#         return ConstraintSolution(
+#             success=True,
+#             sentence=tuple(gi_list),
+#             intermediates=intermediate_invariants,
+#             parameters=tuple(ks[:depth]),
+#             cost=cost,
+#         )
