@@ -23,7 +23,7 @@ COLORS = [
 ]
 
 
-# TODO fixme not detecting vertices versus 1d lines
+# TODO FIXME not detecting vertices versus 1d lines
 def _plot_polytope(circuit_polytope, ax, w, color="red"):
     """Plot a single circuit polytope on the given axes.
 

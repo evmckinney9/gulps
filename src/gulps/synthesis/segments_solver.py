@@ -32,10 +32,10 @@ class SegmentSynthesizer:
 
         # Solver registry: ordered from most specific to least specific
         # Cache checks for exact matches first, then specialized patterns, finally numeric fallback
-        self.solvers = [
+        self.solvers: List[SegmentSolver] = [
             self._cache,
-            LinearWeylSolver(tolerance=1e-6),  # (a,b,c) + (x,y,z) = (a+x, b+y, c+z) → identity
             # TODO: Add more specialized solvers as discovered
+            # LinearWeylSolver(),  # (a,b,c) + (x,y,z) = (a+x, b+y, c+z) → identity
             # Example: DiagonalWeylSolver() for (a,b,0) → (a,b',0)
             # Example: UniformScalingSolver() for (a,a,a) + (b,b,b)
             JaxLMSegmentSolver(config=self.config),  # Generic numeric (always succeeds)
@@ -74,9 +74,6 @@ class SegmentSynthesizer:
         dag = circuit_to_dag(QuantumCircuit(2, global_phase=0))
         qreg = dag.qregs["q"]
 
-        # Initialize with first gate
-        dag.apply_operation_back(gate_list[0].unitary, qreg[:])
-
         P = self._synthesize_batch(dag, qreg, gate_list, invariant_list)
 
         # Final recovery to true target
@@ -101,6 +98,8 @@ class SegmentSynthesizer:
         Uses per-step caching to avoid recomputing identical segments across
         decompositions.
         """
+        # Initialize with first gate
+        dag.apply_operation_back(gate_list[0].unitary, qreg[:])
         P = gate_list[0].unitary.to_matrix()
         cache = self._cache
         solvers = self.solvers
