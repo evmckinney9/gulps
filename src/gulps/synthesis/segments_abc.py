@@ -1,8 +1,11 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any, Optional, TYPE_CHECKING
 
 import numpy as np
+
+if TYPE_CHECKING:
+    from gulps.core.invariants import GateInvariants
 
 
 @dataclass
@@ -23,15 +26,31 @@ class SegmentSolver(ABC):
         U ≈ G · (u1 ⊗ u0) · C
 
     is locally equivalent to the target (up to invariants).
+
+    This interface can be implemented by:
+    - Cache lookups (exact match on invariants)
+    - Analytic solvers (pattern-specific closed forms)
+    - Numeric solvers (general optimization, always matches)
     """
 
     @abstractmethod
-    def solve_segment(
+    def try_solve(
         self,
-        prefix_op: np.ndarray,  # 4x4 complex np.ndarray
-        basis_gate: np.ndarray,  # 4x4 complex np.ndarray
-        target: np.ndarray,  # 4x4 complex np.ndarray
+        step: int,
+        prefix_inv: "GateInvariants",
+        basis_inv: "GateInvariants",
+        target_inv: "GateInvariants",
         *,
         rng_seed: int | None = None,
-    ) -> SegmentSolution:
+    ) -> Optional[SegmentSolution]:
+        """Try to solve this segment.
+
+        Returns:
+            SegmentSolution if this solver can handle the segment, None otherwise.
+
+        The solver should:
+        1. Check if it can handle this segment (pattern matching)
+        2. If yes, compute and return the solution
+        3. If no, return None to try the next solver
+        """
         pass

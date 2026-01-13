@@ -2,8 +2,10 @@ import logging
 from dataclasses import dataclass
 from typing import Optional
 
+import numpy as np
+
 from gulps.core.invariants import GateInvariants
-from gulps.synthesis.segments_abc import SegmentSolution
+from gulps.synthesis.segments_abc import SegmentSolution, SegmentSolver
 
 logger = logging.getLogger(__name__)
 
@@ -19,11 +21,8 @@ class SegmentCacheEntry:
     hit_count: int = 0
 
 
-class SegmentCache:
-    """Per-step cache for segment solutions with LFU eviction.
-
-    Uses list-based storage with fast tuple key comparison.
-    """
+class SegmentCache(SegmentSolver):
+    """Cache-based segment solver with LFU eviction."""
 
     def __init__(self, max_entries_per_step: int = 2):
         self._entries: dict[int, list[SegmentCacheEntry]] = {}
@@ -31,7 +30,19 @@ class SegmentCache:
         self.hits = 0
         self.misses = 0
 
-    def get(
+    def try_solve(
+        self,
+        step: int,
+        prefix_inv: GateInvariants,
+        basis_inv: GateInvariants,
+        target_inv: GateInvariants,
+        *,
+        rng_seed: int | None = None,
+    ) -> Optional[SegmentSolution]:
+        """Return cached solution if available, None otherwise."""
+        return self._lookup(step, prefix_inv, basis_inv, target_inv)
+
+    def _lookup(
         self,
         step: int,
         prefix_inv: GateInvariants,

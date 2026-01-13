@@ -17,9 +17,7 @@ from gulps.config import GulpsConfig
 from gulps.core.isa import ContinuousISA, DiscreteISA, ISAInvariants
 from gulps.linear_program.lp_abc import ConstraintSolution
 from gulps.linear_program.scipy_lp import MinimalOrderedISAConstraints
-from gulps.synthesis.jax_lm import JaxLMSegmentSolver
 from gulps.synthesis.recover_equiv import recover_local_equivalence
-from gulps.synthesis.segments_abc import SegmentSolver
 from gulps.synthesis.segments_solver import SegmentSynthesizer
 
 logger = logging.getLogger(__name__)
@@ -51,7 +49,6 @@ class GulpsDecomposer:
         names: Optional[List[str]] = None,
         precompute_polytopes: bool = True,
         isa: Optional[ISAInvariants] = None,
-        segment_solver: Optional[SegmentSolver] = None,
         config_options: Optional[GulpsConfig] = None,
     ):
         """Initialize the GulpsDecomposer.
@@ -70,9 +67,7 @@ class GulpsDecomposer:
                 when constructing DiscreteISA via gate_set/costs.
             isa: Optional pre-built ISA instance (DiscreteISA or ContinuousISA).
                 If provided, gate_set, costs, names, and precompute_polytopes are ignored.
-            segment_solver: Optional SegmentSolver for numerical synthesis.
-                Defaults to JaxLMSegmentSolver() if None.
-            tolerance_config: Optional GulpsConfig for all pipeline settings.
+            config_options: Optional GulpsConfig for all pipeline settings.
                 If None, uses default values. See GulpsConfig for all tunable parameters.
 
         Raises:
@@ -99,13 +94,7 @@ class GulpsDecomposer:
         self._is_continuous = isinstance(self.isa, ContinuousISA)
         self.config = config_options or GulpsConfig()
 
-        if segment_solver is None:
-            segment_solver = JaxLMSegmentSolver(config=self.config)
-
-        self._local_synthesis = SegmentSynthesizer(
-            solver=segment_solver,
-            config=self.config,
-        )
+        self._local_synthesis = SegmentSynthesizer(config=self.config)
 
     def _eval_edge_case(
         self, target: GateInvariants, return_dag: bool

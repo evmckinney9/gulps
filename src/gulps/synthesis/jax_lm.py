@@ -236,14 +236,25 @@ class JaxLMSegmentSolver(SegmentSolver):
             self.config.weyl_perturb_scale,
         )
 
-    def solve_segment(
+    def try_solve(
         self,
-        prefix_op: np.ndarray,
-        basis_gate: np.ndarray,
-        target: np.ndarray,
+        step: int,
+        prefix_inv,
+        basis_inv,
+        target_inv,
+        *,
+        rng_seed: int | None = None,
     ) -> SegmentSolution:
-        """Solve for local unitaries using two-stage optimization."""
+        """Solve for local unitaries using two-stage optimization.
+
+        Always returns a solution (generic numeric solver).
+        """
         start_time = time.perf_counter()
+
+        # Extract matrices from invariants
+        prefix_op = np.array(prefix_inv.unitary, dtype=np.complex128)
+        basis_gate = np.array(basis_inv.unitary, dtype=np.complex128)
+        target = np.array(target_inv.unitary, dtype=np.complex128)
 
         j_prefix = jnp.asarray(prefix_op, dtype=jnp.complex128)
         j_gate = jnp.asarray(basis_gate, dtype=jnp.complex128)
