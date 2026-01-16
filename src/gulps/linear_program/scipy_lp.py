@@ -43,8 +43,8 @@ class MinimalOrderedISAConstraints(ISAConstraints):
         # self.c = np.zeros(self.num_params)
         # self.c = -np.ones(self.num_params)
         # Option 4 - Weighted lexicographic (simplest change)
-        weights = np.array([4, 2, 1])  # or [100, 10, 1]
-        self.c = -np.tile(weights, self.n - 2)  # maximize in priority order
+        weights = -np.array([4, 2, 1])  # or [100, 10, 1]
+        self.c = np.tile(weights, self.n - 2)  # maximize in priority order
         self.A_ub, self.b_ub = self._setup_inequalities()
         self.A_eq, self.b_eq = None, None  # no equalities
 

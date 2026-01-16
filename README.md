@@ -20,9 +20,10 @@ To begin, define your instruction set architecture (ISA) to configure the decomp
 In this example, we define an ISA as a list of Qiskit `Gate` objects, each with an associated cost and (optionally) a name. The name is only used in debugging logs. Costs are required to prioritize candidate circuit sentences and can be interpreted either as normalized durations or as fidelities. I typically use durations, where fractional gates incur a proportionally fractional cost relative to their basis gate, because currently the cost is taken to be additive.
 
 ```python
+from qiskit.circuit.library import CXGate, iSwapGate
+from gulps import GulpsDecomposer
+
 isa = [
-    (CXGate(), 1.0, "cx"),
-    (CXGate().power(1 / 2), 1 / 2, "sqrt2cx"),
     (iSwapGate().power(1 / 2), 1 / 2, "sqrt2iswap"),
     (iSwapGate().power(1 / 3), 1 / 3, "sqrt3iswap"),
 ]
@@ -32,20 +33,31 @@ decomposer = GulpsDecomposer(gate_set=gate_set, costs=costs, names=names)
 
 That's it—once initialized, you can call the decomposer with either a Qiskit `Gate` or a 4×4 `np.ndarray` representing a two-qubit unitary:
 ```python
-u = random_unitary(4, seed=idx)
+from qiskit.quantum_info import random_unitary
+from qiskit import QuantumCircuit
+
+u = random_unitary(4, seed=0)
 v: QuantumCircuit = decomposer(u)
+v.draw()
 ```
 
 Alternatively, to compile a full `QuantumCircuit`, use the GULPS `TransformationPass`. Because GULPS leaves single-qubit gates in each segment as generic `Unitary` gates, I recommend appending `Optimize1qGatesDecomposition` to rewrite them into standard gate sets:
 
 ```python
+from gulps.qiskit_ext.synthesis_pass import GulpsDecompositionPass
+from qiskit.transpiler import PassManager
+from qiskit.transpiler.passes import Optimize1qGatesDecomposition
+from qiskit.circuit.random import random_circuit
+
+input_qc = random_circuit(4, 4, max_operands=2)
 pm = PassManager(
     [
-        GulpsDecompositionPass(gate_set, costs),
-        Optimize1qGatesDecomposition(),
+        GulpsDecompositionPass(decomposer),
+        Optimize1qGatesDecomposition(basis="u3"),
     ]
 )
 output_qc = pm.run(input_qc)
+output_qc.draw("mpl")
 ```
 ___
 ### 🔧 Overview of the Decomposition Process
@@ -53,28 +65,42 @@ The decomposition begins by identifying the cheapest feasible basis gate sentenc
 
 For example, this ISA:
 ```python
-isa = [
-    (iSwapGate().power(1 / 2), 1 / 2, "sqrt2iswap"),
-    (iSwapGate().power(1 / 3), 1 / 3, "sqrt3iswap"),
-]
+from gulps.core.isa import DiscreteISA
+
+isa = DiscreteISA(
+    gate_set=[iSwapGate().power(1 / 2), iSwapGate().power(1 / 3)],
+    costs=[1 / 2, 1 / 3],
+    names=["sqrt2iswap", "sqrt3iswap"],
+    precompute_polytopes=True,
+)
 ```
 has the following coverage set:
 ```python
-_plot_coverage_set(decomposer.isa.coverage_set)
+from gulps.core.coverage import coverage_report
+
+coverage_report(isa.coverage_set)
 ```
 ![isa_coverage](images/isa_coverage.png)
 
 Once a sentence is chosen, a linear program is used to determine a trajectory of intermediate invariants. These represent the cumulative two-qubit nonlocal action after each gate in the sentence—starting from the identity and ending at the target.
 ```python
-example_input = random_unitary(4, seed=None)
-example_sentence, example_intermediates = decomposer._best_decomposition(
+from gulps.core.invariants import GateInvariants
+from gulps.viz.invariant_viz import plot_decomposition
+
+example_input = random_unitary(4, seed=31)
+constraint_sol = decomposer._best_decomposition(
     target_inv=GateInvariants.from_unitary(example_input, enforce_alcove=True)
 )
-render_path(example_intermediates);
+plot_decomposition(
+    constraint_sol.intermediates, constraint_sol.sentence, decomposer.isa
+);
 ```
 ![example_cartan_trajectory](images/example_cartan_trajectory.png)
 
-In this example, the optimal sentence is composed of three $\sqrt[3]{\texttt{iSWAP}}$ gates. That is, the resulting circuit falls into a parameterized ansatz like this:
+In this example, the optimal sentence is composed of 2 $\sqrt[3]{\texttt{iSWAP}}$ gates and 1 $\sqrt[2]{\texttt{iSWAP}}$. 
+
+#### (TODO: update the remaining part of the example)
+That is, the resulting circuit falls into a parameterized ansatz like this:
 ![full_ansatz](images/full_ansatz.png)
 
 The intermediate points break the problem into simpler subproblems, each corresponding to a depth-2 circuit segment. In this case, the circuit has three segments, although the blue segment is fixed (e.g., identity). That leaves two segments requiring synthesis:

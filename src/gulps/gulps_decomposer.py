@@ -47,7 +47,7 @@ class GulpsDecomposer:
         gate_set: Optional[List[Gate]] = None,
         costs: Optional[List[float]] = None,
         names: Optional[List[str]] = None,
-        precompute_polytopes: bool = True,
+        precompute_polytopes: bool = False,
         isa: Optional[ISAInvariants] = None,
         config_options: Optional[GulpsConfig] = None,
     ):
