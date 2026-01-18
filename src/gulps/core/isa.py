@@ -62,6 +62,7 @@ class ContinuousISA(ISAInvariants):
         cls,
         base_gate: Gate | np.ndarray,
         name: Optional[str] = None,
+        single_qubit_cost: float = ISAInvariants.MIN_COST_1Q,
     ) -> "ContinuousISA":
         """Create ContinuousISA from a single base gate.
 
@@ -79,6 +80,7 @@ class ContinuousISA(ISAInvariants):
         return cls(
             gate_set=[base_inv],
             cost_dict=cost_dict,
+            single_qubit_cost=single_qubit_cost,
         )
 
 

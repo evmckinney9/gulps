@@ -240,6 +240,11 @@ class GulpsDecomposer:
             result = self._try_continuous_lp(alcove_target, log_output=log_output)
         else:
             result = self._try_discrete_lp(alcove_target, log_output=log_output)
+            result.parameters = [self.isa.cost_dict[s] for s in result.sentence]
+            result.cost = (
+                sum(result.parameters)
+                + (len(result.sentence) + 1) * self.isa.single_qubit_cost
+            )
 
         if not result.success:
             raise RuntimeError(

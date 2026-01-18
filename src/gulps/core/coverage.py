@@ -78,8 +78,8 @@ def isa_to_coverage(
     return coverage_set
 
 
-def coverage_report(coverage_set, chatty=False):
-    """Analyze, plot, and print coverage statistics.
+def compute_coverage_statistics(coverage_set, chatty=False):
+    """Compute coverage statistics without plotting or printing.
 
     Args:
         coverage_set: List of CircuitPolytope objects.
@@ -123,7 +123,7 @@ def coverage_report(coverage_set, chatty=False):
         cumulative_sum += haar_vol
         volume_info.append((cost, depth, haar_vol, cumulative_sum))
 
-    report = {
+    return {
         "volume_info": volume_info,
         "expected_cost": expected_cost,
         "expected_depth": expected_depth,
@@ -131,17 +131,31 @@ def coverage_report(coverage_set, chatty=False):
         "total_coverage": total_coverage,
     }
 
+
+def coverage_report(coverage_set, chatty=False):
+    """Analyze, plot, and print coverage statistics.
+
+    Args:
+        coverage_set: List of CircuitPolytope objects.
+        chatty: Whether to print verbose output during integral calculation.
+
+    Returns:
+        dict: Coverage analysis containing volume_info, expected_cost,
+            expected_depth, expected_index, and total_coverage.
+    """
+    report = compute_coverage_statistics(coverage_set, chatty=chatty)
+
     # Plot
-    plot_coverage_set(coverage_set, volume_info=volume_info)
+    plot_coverage_set(coverage_set, volume_info=report["volume_info"])
 
     # Print
     print("=" * 60)
     print("Coverage Set Statistics (Haar-averaged over SU(4))")
     print("=" * 60)
-    print(f"Expected Cost:  {expected_cost:.6f}")
+    print(f"Expected Cost:  {report['expected_cost']:.6f}")
     print(f"  → Average cost per random 2-qubit unitary")
     print()
-    print(f"Expected Depth: {expected_depth:.6f}")
+    print(f"Expected Depth: {report['expected_depth']:.6f}")
     print(f"  → Average number of 2-qubit gates")
     print("=" * 60)
 

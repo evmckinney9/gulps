@@ -1,36 +1,16 @@
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib import cm
-from matplotlib.cm import ScalarMappable
-from matplotlib.colorbar import ColorbarBase
-from matplotlib.colors import LinearSegmentedColormap
-from matplotlib.lines import Line2D
 from weylchamber import WeylChamber
 
 from gulps.core.invariants import GateInvariants
-from gulps.core.isa import ContinuousISA, DiscreteISA, ISAInvariants
-
-# Define color palette for basis gates (used for discrete ISAs)
-COLOR_PALETTE = [
-    "tab:blue",
-    "tab:red",
-    "tab:green",
-    "tab:purple",
-    "tab:orange",
-    "tab:cyan",
-    "tab:pink",
-    "tab:olive",
-    "tab:brown",
-    "gold",
-]
-
-# Define colormaps for continuous ISAs (one per basis gate)
-COLORMAP_NAMES = [
-    # "viridis",
-    "plasma",
-]
+from gulps.core.isa import ContinuousISA, ISAInvariants
+from gulps.viz.legend_helpers import (
+    add_continuous_legend,
+    add_discrete_legend,
+    build_color_map_from_isa,
+)
 
 
 def scatter_plot(invariant_list: List[GateInvariants]):
@@ -97,80 +77,6 @@ def _add_depth_indicators(
         zorder=-10,
         marker="o",
     )
-
-
-def _build_color_map_from_isa(
-    isa: ISAInvariants,
-) -> Tuple[Dict[str, any], List[str]]:
-    """Build consistent color mapping from ISA gate set.
-
-    Args:
-        isa: ISA containing the gate set to map colors to.
-
-    Returns:
-        Tuple of (color_map, legend_labels) where:
-        - color_map: For discrete ISA, maps gate name to color string.
-                    For continuous ISA, maps gate name to colormap object.
-        - legend_labels: List of legend labels in order
-    """
-    color_map = {}
-    legend_labels = []
-
-    for i, gate in enumerate(isa.gate_set):
-        # Handle continuous ISA: use colormaps for parameterization
-        if isinstance(isa, ContinuousISA):
-            base_name = gate.name
-            cmap_name = COLORMAP_NAMES[i % len(COLORMAP_NAMES)]
-            color_map[base_name] = plt.get_cmap(cmap_name)
-            legend_labels.append(f"{base_name}(θ)")
-        else:
-            # Discrete ISA: use discrete colors
-            color = COLOR_PALETTE[i % len(COLOR_PALETTE)]
-            color_map[gate.name] = color
-            legend_labels.append(gate.name)
-
-    return color_map, legend_labels
-
-
-def _add_colorbar_legend(ax, gate_color_map: Dict[str, any], legend_labels: List[str]):
-    """Add colorbar legend for continuous ISA families.
-
-    Args:
-        ax: Matplotlib 3D axes to add the legend to.
-        gate_color_map: Dictionary mapping gate name to colormap object.
-        legend_labels: List of legend labels (e.g., "iSWAP(θ)").
-    """
-    # Create a figure for the colorbar legend positioned to the right of the plot
-    fig = ax.figure
-
-    # Calculate position for colorbars
-    n_gates = len(legend_labels)
-    colorbar_width = 0.015
-    colorbar_spacing = 0.08
-    colorbar_height = 0.15
-
-    # Starting position on the right side
-    start_x = 0.88
-    start_y = 0.75
-
-    for i, label in enumerate(legend_labels):
-        gate_name = label.split("(")[0]
-        cmap = gate_color_map[gate_name]
-
-        # Create an axis for this colorbar
-        y_pos = start_y - i * colorbar_spacing
-        cax = fig.add_axes([start_x, y_pos, colorbar_width, colorbar_height])
-
-        # Create a ScalarMappable for the colorbar
-        norm = plt.cm.colors.Normalize(vmin=0.0, vmax=1.0)
-        sm = ScalarMappable(cmap=cmap, norm=norm)
-        sm.set_array([])
-
-        # Add the colorbar
-        cbar = fig.colorbar(sm, cax=cax, orientation="vertical")
-        cbar.set_label(label, rotation=0, labelpad=15, ha="left")
-        cbar.set_ticks([0.0, 0.5, 1.0])
-        cbar.set_ticklabels(["0", "0.5", "1"])
 
 
 def _render_path(
@@ -249,6 +155,7 @@ def plot_decomposition(
     sentence: Optional[List[GateInvariants]] = None,
     isa: Optional[ISAInvariants] = None,
     parameters: Optional[List[float]] = None,
+    ax: Optional[plt.Axes] = None,
 ):
     """Visualize the decomposition path in the Weyl chamber with colored segments.
 
@@ -263,6 +170,7 @@ def plot_decomposition(
         parameters: Optional list of gate parameters (for continuous ISAs).
                    If provided, parameters[i] is the fractional power of the basis gate
                    used to reach intermediates[i]. Used to select color from colormap.
+        ax: Optional matplotlib 3D axes to plot on. If None, creates new figure and axes.
 
     Returns:
         Matplotlib figure object.
@@ -279,8 +187,12 @@ def plot_decomposition(
     n_segments = len(traj_points) - 1
 
     # Set up the 3D plot
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection="3d", computed_zorder=False)
+    if ax is None:
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection="3d", computed_zorder=False)
+    else:
+        fig = ax.get_figure()
+
     w = WeylChamber()
     w.labels = {}
     w.render(ax)
@@ -288,7 +200,7 @@ def plot_decomposition(
     # Determine coloring scheme
     if sentence and isa:
         # ISA-based consistent coloring with legend
-        gate_color_map, legend_labels = _build_color_map_from_isa(isa)
+        gate_color_map, legend_labels = build_color_map_from_isa(isa)
 
         # Check if this is a continuous ISA with parameters
         if isinstance(isa, ContinuousISA) and parameters is not None:
@@ -302,26 +214,13 @@ def plot_decomposition(
                 colors.append(cmap(normalized_param))
 
             # Create colorbar legend for continuous families
-            _add_colorbar_legend(ax, gate_color_map, legend_labels)
+            add_continuous_legend(ax, gate_color_map, legend_labels)
         else:
             # Discrete ISA: use discrete colors
             colors = [gate_color_map.get(g.name, "black") for g in sentence]
 
             # Create standard legend with discrete colors
-            legend_colors = [
-                gate_color_map[label.split("(")[0]] for label in legend_labels
-            ]
-            custom_lines = [
-                Line2D([0], [0], color=color, lw=6) for color in legend_colors
-            ]
-            ax.legend(
-                custom_lines,
-                legend_labels,
-                loc="upper left",
-                bbox_to_anchor=(1.05, 1),
-                title="Basis Gate",
-                frameon=True,
-            )
+            add_discrete_legend(ax, gate_color_map, legend_labels)
     elif sentence:
         # Sentence without ISA - error
         raise ValueError(

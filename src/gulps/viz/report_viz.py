@@ -2,6 +2,75 @@ import lovelyplots
 import matplotlib.pyplot as plt
 import numpy as np
 import scienceplots
+from collections import Counter
+
+
+def compare_continuous_discrete(
+    continuous_params,
+    continuous_costs,
+    discrete_params,
+    discrete_costs,
+):
+    """Compare continuous vs discrete decomposer parameter and cost distributions.
+
+    Args:
+        continuous_params: List of parameters from continuous decomposer
+        continuous_costs: List of total costs from continuous decomposer
+        discrete_params: List of parameters from discrete decomposer
+        discrete_costs: List of total costs from discrete decomposer
+    """
+    N_continuous = len(continuous_costs)
+    N_discrete = len(discrete_costs)
+    nbins = int(np.sqrt(N_continuous))
+
+    # Compute discrete frequency distribution
+    discrete_counter = Counter(discrete_params)
+    discrete_vals = sorted(discrete_counter.keys())
+    discrete_freqs = np.array([discrete_counter[v] for v in discrete_vals]) / len(discrete_params)
+
+    with plt.style.context(["ieee", "science", "use_mathtext"]):
+        fig, axes = plt.subplots(1, 2, figsize=(8.0, 3.0))
+
+        # Left: Continuous (histogram)
+        axes[0].hist(
+            continuous_params,
+            bins=nbins,
+            weights=np.ones(len(continuous_params)) / len(continuous_params),
+            color="C0",
+            edgecolor="black",
+            linewidth=0.5,
+        )
+        axes[0].set_xlabel("Parameter (k)")
+        axes[0].set_ylabel("Frequency")
+        axes[0].set_title("Continuous ISA")
+        axes[0].set_xlim(0, 1.0)
+        axes[0].grid(axis="y", alpha=0.3)
+
+        # Right: Discrete (bar chart)
+        axes[1].bar(discrete_vals, discrete_freqs, width=0.05, color="C1", edgecolor="black")
+        axes[1].set_xlabel("Parameter (k)")
+        axes[1].set_ylabel("Frequency")
+        axes[1].set_title("Discrete ISA")
+        axes[1].set_xlim(0, 1.0)
+        axes[1].grid(axis="y", alpha=0.3)
+
+        plt.tight_layout()
+        plt.show()
+
+    # Print cost statistics
+    print("=== Cost Statistics ===")
+    print(
+        f"Continuous: mean={np.mean(continuous_costs):.4f}, std={np.std(continuous_costs):.4f}"
+    )
+    print(
+        f"Discrete:   mean={np.mean(discrete_costs):.4f}, std={np.std(discrete_costs):.4f}"
+    )
+    cost_improvement = (
+        (np.mean(discrete_costs) - np.mean(continuous_costs))
+        / np.mean(discrete_costs)
+        * 100
+    )
+    print(f"Cost improvement: {cost_improvement:.2f}%")
 
 
 def report_benchmark_results(fidelities, all_timings, decomposer, N, failures):

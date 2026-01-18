@@ -135,8 +135,32 @@ class ContinuousISAConstraints(ISAConstraints):
             cost=sum(ks[:depth]) + self.single_qubit_cost * (depth + 1),
         )
 
+    def _configure_model_params(self, m: Model) -> None:
+        """Configure CPLEX solver parameters for optimal performance.
+
+        These parameters were tuned empirically and significantly improve solve times.
+        Subclasses can override this method to customize solver behavior.
+        """
+        # NOTE these parameters I found by guess and checking
+        # these seem to help a lot
+        m.parameters.threads = 1
+        m.parameters.preprocessing.dual = 1
+        m.parameters.mip.limits.cutpasses = -1
+        m.parameters.mip.strategy.heuristicfreq = -1
+        # and these may help a bit but less obviously
+        m.parameters.mip.strategy.rinsheur = -1
+        m.parameters.barrier.algorithm = 3
+        m.parameters.emphasis.mip = 1
+        m.parameters.mip.strategy.nodeselect = 2
+        m.parameters.mip.strategy.branch = 1
+        m.parameters.mip.cuts.nodecuts = 2
+        m.parameters.preprocessing.symmetry = 0
+        m.parameters.preprocessing.folding = 0
+
     def _create_model(self):
         m = Model("ContinuousISAConstraints", ignore_names=True)
+        self._configure_model_params(m)
+
         # Define variables, constraints, and objective here
         # STEP 1. CREATE ALL VARIABLES
         # Variables
@@ -234,6 +258,7 @@ class ContinuousISAConstraints(ISAConstraints):
 
 #     def _create_model(self):
 #         m = Model("HeterogeneousContinuousISAConstraints", ignore_names=True)
+#         self._configure_model_params(m)  # Inherit optimized CPLEX parameters
 #         F = self.num_families
 
 #         # STEP 1: VARIABLES
