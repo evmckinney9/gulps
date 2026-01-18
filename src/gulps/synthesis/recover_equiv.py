@@ -6,6 +6,7 @@ from typing import Tuple
 import numpy as np
 from qiskit._accelerate import two_qubit_decompose
 from qiskit.circuit.library import UnitaryGate, XGate, YGate, ZGate
+from qiskit.exceptions import QiskitError
 from qiskit.quantum_info import Operator
 from qiskit.synthesis.two_qubit import TwoQubitWeylDecomposition
 
@@ -43,8 +44,24 @@ def recover_local_equivalence(
 
     # Weyl decompose both unitaries
     spec = None
-    T = TwoQubitWeylDecomposition(U_target, _specialization=spec)
-    B = TwoQubitWeylDecomposition(U_basis, _specialization=spec)
+    T = TwoQubitWeylDecomposition(U_target, fidelity=1.0, _specialization=spec)
+    try:
+        B = TwoQubitWeylDecomposition(U_basis, fidelity=1.0, _specialization=spec)
+    except QiskitError as e:
+        from scipy.linalg import svd
+
+        def closest_unitary(A):
+            """Calculate the unitary matrix U that is closest with respect to the
+            operator norm distance to the general matrix A.
+
+            Return U as a numpy matrix.
+            """
+            V, __, Wh = svd(A)
+            U = np.matrix(V.dot(Wh))
+            return U
+
+        U_basis_closest = closest_unitary(U_basis)
+        B = TwoQubitWeylDecomposition(U_basis_closest, fidelity=1.0)
 
     a1, b1, c1 = T.a, T.b, T.c
     a2, b2, c2 = B.a, B.b, B.c
