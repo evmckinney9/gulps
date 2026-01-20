@@ -309,6 +309,7 @@ class GulpsDecomposer:
         self.last_timing = {
             "lp_sentence": t1 - t0,
             "segments": t2 - t1,
+            "total": t2 - t0,
         }
 
         return stitched_circuit

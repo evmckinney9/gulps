@@ -8,6 +8,7 @@ from qiskit.quantum_info import Operator, average_gate_fidelity, random_unitary
 
 from gulps.core.invariants import GateInvariants
 from gulps.gulps_decomposer import GulpsDecomposer
+from gulps.isa_library.fsim import fsim
 from tests.fixtures.isas import get_all_test_isas
 
 
@@ -41,13 +42,6 @@ def test_mirror_isa():
 
 def test_swap_into_fsim():
     """Issue #2"""
-
-    def fsim(theta, phi):
-        _fsim = QuantumCircuit(2, name="fsim")
-        _fsim.append(XXPlusYYGate(2 * theta), [0, 1])
-        _fsim.cp(phi, 0, 1)
-        return _fsim.to_gate()
-
     decomposer = GulpsDecomposer(
         gate_set=[fsim(np.pi / 2, np.pi / 6).power(1 / 2)],
         costs=[1.0],
