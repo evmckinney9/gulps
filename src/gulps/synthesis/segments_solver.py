@@ -29,6 +29,7 @@ class SegmentSynthesizer:
     def __init__(self, config: GulpsConfig | None = None):
         self.config = config or GulpsConfig()
         self._cache = SegmentCache(max_entries_per_step=self.config.segment_cache_size)
+        self._jax_lm_solver = JaxLMSegmentSolver(config=self.config)
 
         # Solver registry: ordered from most specific to least specific
         # Cache checks for exact matches first, then specialized patterns, finally numeric fallback
@@ -38,7 +39,7 @@ class SegmentSynthesizer:
             # LinearWeylSolver(),  # (a,b,c) + (x,y,z) = (a+x, b+y, c+z) → identity
             # Example: DiagonalWeylSolver() for (a,b,0) → (a,b',0)
             # Example: UniformScalingSolver() for (a,a,a) + (b,b,b)
-            JaxLMSegmentSolver(config=self.config),  # Generic numeric (always succeeds)
+            self._jax_lm_solver,  # Generic numeric (always succeeds)
         ]
 
     def synthesize_segments(
@@ -116,7 +117,7 @@ class SegmentSynthesizer:
             # Try solvers in order until one succeeds
             seg_sol = None
             for solver in solvers:
-                seg_sol = solver.try_solve(step, prefix_inv, basis_inv, target_inv)
+                seg_sol = solver.try_solve(prefix_inv, basis_inv, target_inv, step=step)
                 if seg_sol is not None:
                     if solver is not cache and seg_sol.success:
                         cache.put(step, prefix_inv, basis_inv, target_inv, seg_sol)

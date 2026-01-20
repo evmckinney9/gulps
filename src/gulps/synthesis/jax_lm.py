@@ -238,11 +238,11 @@ class JaxLMSegmentSolver(SegmentSolver):
 
     def try_solve(
         self,
-        step: int,
         prefix_inv,
         basis_inv,
         target_inv,
         *,
+        step: int | None = 0,
         rng_seed: int | None = None,
     ) -> SegmentSolution:
         """Solve for local unitaries using two-stage optimization.

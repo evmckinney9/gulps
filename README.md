@@ -9,9 +9,9 @@ Most existing compilers only target CNOT gates. Analytical rules exist for a few
 #### 📌 Read the preprint: [Two-Qubit Gate Synthesis via Linear Programming for Heterogeneous Instruction Sets](https://arxiv.org/abs/2505.00543)
 
 ______
-### 🖥️ Getting Started
+### Getting Started
 
-- 🐍 `pip install gulps @ git+https://github.com/evmckinney9/gulps`
+- `pip install gulps @ git+https://github.com/evmckinney9/gulps`
 -  For usage examples, see: `src/gulps/notebooks/main.ipynb`.
 -  Report issues: [Github issue tracker](https://github.com/ajavadia/hetero_isas/issues/4)
 
@@ -60,7 +60,7 @@ output_qc = pm.run(input_qc)
 output_qc.draw("mpl")
 ```
 ___
-### 🔧 Overview of the Decomposition Process
+### Overview of the Decomposition Process
 The decomposition begins by identifying the cheapest feasible basis gate sentence—a sequence of native gates sufficient to construct the target unitary. We use [monodromy polytopes](https://github.com/qiskit-community/monodromy) to describe the reachable space of canonical invariants for each sentence in the ISA.
 
 For example, this ISA:
@@ -88,49 +88,42 @@ from gulps.core.invariants import GateInvariants
 from gulps.viz.invariant_viz import plot_decomposition
 
 example_input = random_unitary(4, seed=31)
-constraint_sol = decomposer._best_decomposition(
-    target_inv=GateInvariants.from_unitary(example_input, enforce_alcove=True)
-)
+target_inv = GateInvariants.from_unitary(example_input, enforce_alcove=True)
+constraint_sol = decomposer._best_decomposition(target_inv=target_inv)
 plot_decomposition(
     constraint_sol.intermediates, constraint_sol.sentence, decomposer.isa
 );
 ```
 ![example_cartan_trajectory](images/example_cartan_trajectory.png)
 
-In this example, the optimal sentence is composed of 2 $\sqrt[3]{\texttt{iSWAP}}$ gates and 1 $\sqrt[2]{\texttt{iSWAP}}$. 
-
-#### (TODO: update the remaining part of the example)
-That is, the resulting circuit falls into a parameterized ansatz like this:
+In this example, the optimal sentence is composed of 2 $\sqrt[3]{\texttt{iSWAP}}$ gates and 1 $\sqrt[2]{\texttt{iSWAP}}$. That is, the resulting circuit falls into a parameterized ansatz like this:
 ![full_ansatz](images/full_ansatz.png)
 
-The intermediate points break the problem into simpler subproblems, each corresponding to a depth-2 circuit segment. In this case, the circuit has three segments, although the blue segment is fixed (e.g., identity). That leaves two segments requiring synthesis:
+Unlike other decomposition techniques, the linear program contains additional information about the intermediate points used to reduce the problem into simpler subproblems, each corresponding to a depth-2 circuit segment. In this case, the circuit has three segments, although the first red segment (beginning at Identity is trivial). That leaves two segments requiring synthesis:
 
 | ![ansatz_1](images/ansatz_1.png) | ![ansatz_2](images/ansatz_2.png) |
 |:------------------------:|:------------------------:|
-| Orange              | Green                |
+| Red(2)                   | Blue                     |
 
 We solve for the local one-qubit gates in each segment using a numerical root-finding routine:
 ```python
-example_segment_solutions = decomposer._local_synthesis._synthesize_segments(
-    example_sentence, example_intermediates
+decomposer._local_synthesis._jax_lm_solver.try_solve(
+    constraint_sol.sentence[0],
+    constraint_sol.sentence[1],
+    constraint_sol.intermediates[1],
 )
-print("Segment solutions:", example_segment_solutions)
-Segment solutions:
-[array([ 3.04980046, -3.97898785, -5.08187288,  5.42993702,  4.16191883,0.7034179 ]),
-array([-2.49813347, -4.0929992 ,  0.14047136,  2.82952009,  4.63593378, 0.32678556])]
-```
+
+SegmentSolution(u0=Array([[ 0.70695489-0.01465516j,  0.27313926-0.65222308j],
+       [-0.27313926-0.65222308j,  0.70695489+0.01465516j]],      dtype=complex128), u1=Array([[ 0.70695488-0.01465514j,  0.27313926-0.6522231j ],
+       [-0.27313926-0.6522231j ,  0.70695488+0.01465514j]],      dtype=complex128), max_residual=4.786284230062776e-09, success=True, metadata={'stage': 'weyl', 'elapsed': 0.014199456010828726})
+```       
 After solving the individual segments, we apply a final stitching step to handle orietation between segments and to promote local equivalence into global unitary equivalence:
 ```python
-# Recover unitary equivalence by promoting local equivalence
-ret = decomposer._local_synthesis._stitch_segments(
-    example_sentence, example_intermediates, example_segment_solutions
-)
-U, V = c1c2c3(example_input), c1c2c3(Operator(ret).data)
-print("Input unitary weyl invariants:", U)
-print("Output unitary weyl invariants:", V)
-ret.draw()
-Input unitary weyl invariants: (np.float64(0.44173763), np.float64(0.34153949), np.float64(0.15117788))
-Output unitary weyl invariants: (np.float64(0.44173763), np.float64(0.34153949), np.float64(0.15117788))
+decomposer._local_synthesis.synthesize_segments(
+    gate_list=constraint_sol.sentence,
+    invariant_list=constraint_sol.intermediates,
+    target=target_inv,
+).draw("mpl")
 ```
 ![final](images/final.png)
 

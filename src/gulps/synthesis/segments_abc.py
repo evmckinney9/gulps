@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Optional
 
 import numpy as np
 
@@ -36,11 +36,11 @@ class SegmentSolver(ABC):
     @abstractmethod
     def try_solve(
         self,
-        step: int,
         prefix_inv: "GateInvariants",
         basis_inv: "GateInvariants",
         target_inv: "GateInvariants",
         *,
+        step: int | None = 0,
         rng_seed: int | None = None,
     ) -> Optional[SegmentSolution]:
         """Try to solve this segment.
