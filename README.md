@@ -1,7 +1,7 @@
 ##  [GULPS](https://c.tenor.com/NAwgHzRfK_wAAAAC/tenor.gif)
  GULPS (Global Unitary Linear Programming Synthesis) is the first open tool that **robustly compiles arbitrary two-qubit unitaries optimally into non-standard instruction sets**.  
 
-Most existing compilers only target CNOT gates. Analytical rules exist for a few special cases — fractional CNOT (XX family), Berkeley (B), and $\sqrt{\text{iSWAP}}$ — but nothing more general. Numerical methods can in principle handle arbitrary gates, but they are slow, unreliable, and do not scale as instruction sets grow.  **GULPS fills this gap** by combining linear programming with lightweight numerics to achieve:  
+Most existing compilers only target CNOT gates. Analytical rules exist for a few special cases like fractional CNOT (XX family), Berkeley (B), and $\sqrt{\text{iSWAP}}$, but nothing more general. Numerical methods can in principle handle arbitrary gates, but they are slow, unreliable, and do not scale as instruction sets grow.  **GULPS fills this gap** by combining linear programming with lightweight numerics to achieve:  
 - Support for **fractional, continuous, or heterogeneous gate sets**.  
 - **Scalability to larger ISAs**, unlike black-box numerical methods.  
 - A fast, practical tool integrated with Qiskit if you study **gate compilation from two-body Hamiltonians** or parameterized unitary families.
@@ -31,7 +31,7 @@ gate_set, costs, names = zip(*isa)
 decomposer = GulpsDecomposer(gate_set=gate_set, costs=costs, names=names)
 ```
 
-That's it—once initialized, you can call the decomposer with either a Qiskit `Gate` or a 4×4 `np.ndarray` representing a two-qubit unitary:
+That's it. Once initialized, you can call the decomposer with either a Qiskit `Gate` or a 4×4 `np.ndarray` representing a two-qubit unitary:
 ```python
 from qiskit.quantum_info import random_unitary
 from qiskit import QuantumCircuit
@@ -61,7 +61,7 @@ output_qc.draw("mpl")
 ```
 ___
 ### Overview of the Decomposition Process
-The decomposition begins by identifying the cheapest feasible basis gate sentence—a sequence of native gates sufficient to construct the target unitary. We use [monodromy polytopes](https://github.com/qiskit-community/monodromy) to describe the reachable space of canonical invariants for each sentence in the ISA.
+The decomposition begins by identifying the cheapest feasible basis gate sentence (a sequence of native gates sufficient to construct the target unitary). We use [monodromy polytopes](https://github.com/qiskit-community/monodromy) to describe the reachable space of canonical invariants for each sentence in the ISA.
 
 For example, this ISA:
 ```python
@@ -82,7 +82,7 @@ coverage_report(isa.coverage_set)
 ```
 ![isa_coverage](images/isa_coverage.png)
 
-Once a sentence is chosen, a linear program is used to determine a trajectory of intermediate invariants. These represent the cumulative two-qubit nonlocal action after each gate in the sentence—starting from the identity and ending at the target.
+Once a sentence is chosen, a linear program is used to determine a trajectory of intermediate invariants. These represent the cumulative two-qubit nonlocal action after each gate in the sentence, starting from the identity and ending at the target.
 ```python
 from gulps.core.invariants import GateInvariants
 from gulps.viz.invariant_viz import plot_decomposition
