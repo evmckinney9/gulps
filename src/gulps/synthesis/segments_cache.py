@@ -32,11 +32,11 @@ class SegmentCache(SegmentSolver):
 
     def try_solve(
         self,
-        step: int,
         prefix_inv: GateInvariants,
         basis_inv: GateInvariants,
         target_inv: GateInvariants,
         *,
+        step: int,
         rng_seed: int | None = None,
     ) -> Optional[SegmentSolution]:
         """Return cached solution if available, None otherwise."""

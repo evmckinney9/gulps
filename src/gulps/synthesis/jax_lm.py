@@ -18,26 +18,74 @@ Z = jnp.array([[1, 0], [0, -1]], dtype=jnp.complex128)
 I2 = jnp.eye(2, dtype=jnp.complex128)
 
 
-@jit
-def _rv(v: jnp.ndarray) -> jnp.ndarray:
-    """Rotation vector to SU(2) unitary via Rodriguez formula."""
-    a = jnp.linalg.norm(v)
-    half = 0.5 * a
-    s = jnp.where(
-        jnp.abs(half) < 1e-8,
-        1.0 - (half * half) / 6.0 + (half**4) / 120.0,
-        jnp.sin(half) / half,
-    )
-    c = jnp.cos(half)
-    vx, vy, vz = v
-    H = vx * X + vy * Y + vz * Z
-    return c * I2 - 1j * (0.5 * s) * H
+# @jit
+# def _rv(v: jnp.ndarray) -> jnp.ndarray:
+#     """Rotation vector to SU(2) unitary via Rodriguez formula."""
+#     a = jnp.linalg.norm(v)
+#     half = 0.5 * a
+#     s = jnp.where(
+#         jnp.abs(half) < 1e-8,
+#         1.0 - (half * half) / 6.0 + (half**4) / 120.0,
+#         jnp.sin(half) / half,
+#     )
+#     c = jnp.cos(half)
+#     vx, vy, vz = v
+#     H = vx * X + vy * Y + vz * Z
+#     return c * I2 - 1j * (0.5 * s) * H
+
+NUM_PARAMS = 8
+
+
+# @jit
+# def _params_to_unitaries(params: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray]:
+#     """Extract u0, u1 from 6D params."""
+
+#     def _rv(v: jnp.ndarray) -> jnp.ndarray:
+#         """Rotation vector to SU(2) via stabilized Rodriguez formula."""
+#         theta_sq = jnp.dot(v, v)
+#         theta = jnp.sqrt(theta_sq)
+#         half = 0.5 * theta
+
+#         # Taylor expansion for small angles: sin(x)/x ≈ 1 - x²/6 + x⁴/120
+#         # cos(x) ≈ 1 - x²/2 + x⁴/24
+#         sinc_half = jnp.where(
+#             theta_sq < 1e-8,
+#             0.5 - theta_sq / 48.0,  # (1 - (θ/2)²/6) / 2
+#             jnp.sin(half) / theta,
+#         )
+#         cos_half = jnp.where(
+#             theta_sq < 1e-8,
+#             1.0 - theta_sq / 8.0,  # 1 - (θ/2)²/2
+#             jnp.cos(half),
+#         )
+
+#         vx, vy, vz = v
+#         H = vx * X + vy * Y + vz * Z
+#         return cos_half * I2 - 1j * sinc_half * H
+
+#     return _rv(params[:3]), _rv(params[3:])
 
 
 @jit
 def _params_to_unitaries(params: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray]:
-    """Extract u0, u1 from 6D params."""
-    return _rv(params[:3]), _rv(params[3:])
+    """Extract u0, u1 from 8D params as two normalized quaternions -> SU(2).
+
+    params[:4]  = q0 = (w,x,y,z) for u0
+    params[4:]  = q1 = (w,x,y,z) for u1
+    """
+    eps = 1e-12
+
+    def quat_to_su2(q):
+        # normalize onto S^3
+        q = q / jnp.maximum(jnp.linalg.norm(q), eps)
+        w, x, y, z = q
+        a = w + 1j * z
+        b = x + 1j * y
+        return jnp.array([[a, b], [-jnp.conj(b), jnp.conj(a)]], dtype=jnp.complex128)
+
+    u0 = quat_to_su2(params[:4])
+    u1 = quat_to_su2(params[4:])
+    return u0, u1
 
 
 @jit
@@ -95,7 +143,7 @@ def _make_restart_loop(run_solver, max_restarts: int):
             i, key, best_params, best_res, done = carry
 
             key_i = fold_in(key, i)
-            init = uniform(key_i, shape=(6,), minval=init_min, maxval=init_max)
+            init = uniform(key_i, shape=(NUM_PARAMS,), minval=init_min, maxval=init_max)
             result = run_solver(
                 init, prefix_op=prefix_op, basis_gate=basis_gate, target_inv=target_inv
             )
@@ -114,7 +162,7 @@ def _make_restart_loop(run_solver, max_restarts: int):
         init_state = (
             jnp.int32(0),
             key,
-            jnp.zeros((6,), dtype=jnp.float64),
+            jnp.zeros((NUM_PARAMS,), dtype=jnp.float64),
             jnp.array(jnp.inf, dtype=jnp.float64),
             jnp.array(False),
         )
@@ -151,7 +199,7 @@ def _make_warmstart_loop(
 
             key_i = fold_in(key, i)
             perturb = uniform(
-                key_i, shape=(6,), minval=-perturb_scale, maxval=perturb_scale
+                key_i, shape=(NUM_PARAMS,), minval=-perturb_scale, maxval=perturb_scale
             )
 
             # Iteration 0: just evaluate warm_start, no solver
