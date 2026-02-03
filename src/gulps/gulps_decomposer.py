@@ -240,17 +240,22 @@ class GulpsDecomposer:
             result = self._try_continuous_lp(alcove_target, log_output=log_output)
         else:
             result = self._try_discrete_lp(alcove_target, log_output=log_output)
-            result.parameters = [self.isa.cost_dict[s] for s in result.sentence]
-            result.cost = (
-                sum(result.parameters)
-                + (len(result.sentence) + 1) * self.isa.single_qubit_cost
-            )
 
         if not result.success:
             raise RuntimeError(
                 f"No valid ISA sentence found for target with monodromy {alcove_target.monodromy}. "
                 f"All candidates failed the LP feasibility check. "
+                f"For small fractional basis gates, consider increasing isa.max_depth. "
                 f"This may indicate insufficient gate set strength or numerical issues."
+            )
+
+        # NOTE, not strictly necessary, but convenient for downstream cost calculations
+        # and for matching the ConstraintSolution attributes from continuous LPs
+        if not self._is_continuous:
+            result.parameters = [self.isa.cost_dict[s] for s in result.sentence]
+            result.cost = (
+                sum(result.parameters)
+                + (len(result.sentence) + 1) * self.isa.single_qubit_cost
             )
 
         return result
