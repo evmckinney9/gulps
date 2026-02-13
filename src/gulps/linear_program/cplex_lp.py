@@ -200,6 +200,11 @@ class ContinuousISAConstraints(ISAConstraints):
         obj_depth = m.sum(self.y)
         # obj_leftpack = m.sum((i + 1) * self.y[i] for i in range(self.N))
 
+        # TODO modify objective to match scipy_lp
+        # maximize total "strength" of intermediates (sum of monodromy coords)
+        # This pushes intermediates toward polytope facets, producing more predictable
+        # waypoints that improve segment cache hit rates across decompositions.
+
         m.set_multi_objective(
             sense="min",
             exprs=[obj_cost, obj_depth],
