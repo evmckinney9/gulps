@@ -18,23 +18,7 @@ Z = jnp.array([[1, 0], [0, -1]], dtype=jnp.complex128)
 I2 = jnp.eye(2, dtype=jnp.complex128)
 
 
-# @jit
-# def _rv(v: jnp.ndarray) -> jnp.ndarray:
-#     """Rotation vector to SU(2) unitary via Rodriguez formula."""
-#     a = jnp.linalg.norm(v)
-#     half = 0.5 * a
-#     s = jnp.where(
-#         jnp.abs(half) < 1e-8,
-#         1.0 - (half * half) / 6.0 + (half**4) / 120.0,
-#         jnp.sin(half) / half,
-#     )
-#     c = jnp.cos(half)
-#     vx, vy, vz = v
-#     H = vx * X + vy * Y + vz * Z
-#     return c * I2 - 1j * (0.5 * s) * H
-
-NUM_PARAMS = 8
-
+# NUM_PARAMS = 6
 
 # @jit
 # def _params_to_unitaries(params: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray]:
@@ -64,6 +48,16 @@ NUM_PARAMS = 8
 #         return cos_half * I2 - 1j * sinc_half * H
 
 #     return _rv(params[:3]), _rv(params[3:])
+
+
+###########################################
+# XXX TODO XXX
+# the 8d quaternion is significantly faster
+# but it breaks my edge cases
+# requires investigation
+###########################################
+
+NUM_PARAMS = 8
 
 
 @jit
@@ -101,7 +95,7 @@ def _kron_2x2(u0: jnp.ndarray, u1: jnp.ndarray) -> jnp.ndarray:
 
 @jit
 def _construct_unitary(params, prefix_op, basis_gate):
-    """Construct U = basis_gate @ (u1 ⊗ u0) @ prefix_op from 6D rotation-vector params."""
+    """Construct U = basis_gate @ (u1 ⊗ u0) @ prefix_op from rotation-vector params."""
     u0, u1 = _params_to_unitaries(params)
     return basis_gate @ _kron_2x2(u1, u0) @ prefix_op
 

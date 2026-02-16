@@ -23,13 +23,14 @@ def test_lp_agrees_with_polytope_solution(decomposer_fixture):
         target_inv = GateInvariants.from_unitary(target_unitary, enforce_alcove=True)
 
         # Step 1: Lookup via polytope
-        sentence, rho_bool = decomposer_fixture.isa.polytope_lookup(target_inv)
+        sentence = decomposer_fixture.isa.polytope_lookup(target_inv)
         assert sentence is not None, "Polytope lookup failed for reachable gate."
 
         # Step 2: Try LP on that sentence
-        sentence_out, intermediates, actual_rho = decomposer_fixture._try_lp(
-            sentence, target_inv, rho_bool=rho_bool
-        )
-        assert sentence_out is not None, (
+        constraint_solution = decomposer_fixture._try_discrete_lp(target_inv)
+        assert constraint_solution.success, (
             "LP failed even though polytope lookup succeeded."
+        )
+        assert constraint_solution.sentence == tuple(sentence), (
+            "LP solution sentence does not match polytope lookup sentence."
         )

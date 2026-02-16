@@ -42,14 +42,12 @@ class ContinuousISA(ISAInvariants):
     Attributes:
         gate_set: List of base gate invariants (one per family).
         cost_dict: Mapping from base gates to cost rates (cost = k * rate).
-        max_depth: Maximum number of gates in the sentence.
         k_lb: Minimum nonzero k value (gates with k < k_lb are pruned).
         single_qubit_cost: Cost offset per gate to prioritize shorter depth sequences.
     """
 
     gate_set: List[GateInvariants]
     cost_dict: Dict[GateInvariants, float] = field(default_factory=dict)
-    max_depth: int = 4
     k_lb: float = 0.1
     single_qubit_cost: float = ISAInvariants.MIN_COST_1Q
 
@@ -68,7 +66,6 @@ class ContinuousISA(ISAInvariants):
 
         Args:
             base_gate: Base gate unitary or Qiskit Gate.
-            max_depth: Maximum number of gates in the sentence.
             k_lb: Minimum nonzero k value (gates with k < k_lb are pruned).
             name: Optional name for the base gate.
 
@@ -99,7 +96,6 @@ class DiscreteISA(ISAInvariants):
         names: List[str] | None = None,
         precompute_polytopes: bool = False,
         single_qubit_cost: float = ISAInvariants.MIN_COST_1Q,
-        max_depth: int = 8,
     ):
         if not gate_set:
             raise ValueError("gate_set can't be empty.")
@@ -115,7 +111,6 @@ class DiscreteISA(ISAInvariants):
 
         self.cost_dict = {g: c for g, c in zip(self.gate_set, costs)}
         self.single_qubit_cost = single_qubit_cost
-        self.max_depth = max_depth
         if self.single_qubit_cost <= 0.0:
             logger.warning(
                 "Setting single_qubit_cost to zero may lead to unexpected behavior. "
@@ -127,7 +122,7 @@ class DiscreteISA(ISAInvariants):
         if precompute_polytopes:
             self.coverage_set = isa_to_coverage(self)
 
-    def enumerate(self) -> Generator[List[GateInvariants], None, None]:
+    def enumerate(self, max_depth: int) -> Generator[List[GateInvariants], None, None]:
         """Generate all ordered gate sequences up to max_depth."""
         counter = itertools.count()  # acts as cost tie-breaker
         # (cost, unique_index, sequence)
@@ -136,7 +131,7 @@ class DiscreteISA(ISAInvariants):
         while priority_queue:
             cost, _, sequence = heapq.heappop(priority_queue)
 
-            if len(sequence) == self.max_depth:
+            if len(sequence) == max_depth:
                 continue
 
             for gate in self.gate_set:

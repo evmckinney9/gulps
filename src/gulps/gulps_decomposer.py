@@ -157,7 +157,7 @@ class GulpsDecomposer:
             return constraints.solve(target, log_output=log_output)
 
         # Priority queue enumeration
-        for sentence in self.isa.enumerate():
+        for sentence in self.isa.enumerate(max_depth=self.config.max_depth):
             # Heuristic filter to skip obvious non-starters
             if (
                 sum(gate.strength for gate in sentence)
@@ -195,7 +195,7 @@ class GulpsDecomposer:
             # TODO: optimize by caching constraint object (construct once in __init__ or ISA)
             constraints = ContinuousISAConstraints(
                 base=self.isa.gate_set[0],
-                max_sequence_length=self.isa.max_depth,
+                max_sequence_length=self.config.max_depth,
                 k_lb=self.isa.k_lb,
                 single_qubit_cost=self.isa.single_qubit_cost,
                 config=self.config,
@@ -209,7 +209,7 @@ class GulpsDecomposer:
             # single_qubit_cost is pulled from isa.single_qubit_cost inside the constructor
             constraints = HeterogeneousContinuousISAConstraints(
                 isa=self.isa,
-                max_sequence_length=self.isa.max_depth,
+                max_sequence_length=self.config.max_depth,
                 config=self.config,
             )
 
@@ -245,7 +245,7 @@ class GulpsDecomposer:
             raise RuntimeError(
                 f"No valid ISA sentence found for target with monodromy {alcove_target.monodromy}. "
                 f"All candidates failed the LP feasibility check. "
-                f"For small fractional basis gates, consider increasing isa.max_depth. "
+                f"For small fractional basis gates, consider increasing config.max_depth. "
                 f"This may indicate insufficient gate set strength or numerical issues."
             )
 

@@ -54,5 +54,8 @@ class GulpsConfig:
     weyl_perturb_scale: float = 1e-4
     strict_convergence_checks: bool = False
 
+    # Search parameters
+    max_depth: int = 8  # Maximum gate sentence length for enumeration/LP
+
     # Cache parameters
     segment_cache_size: int = 3
