@@ -82,6 +82,13 @@ def plot_coverage_set(coverage_set, volume_info=None):
         print("No polytopes to plot.")
         return
 
+    # Skip the identity polytope (no operations, depth 0)
+    coverage_set = [p for p in coverage_set if len(p.operations) > 0]
+
+    if not coverage_set:
+        print("No non-trivial polytopes to plot.")
+        return
+
     n = len(coverage_set)
     ncols = min(n, MAX_COLS)
     nrows = (n + ncols - 1) // ncols
