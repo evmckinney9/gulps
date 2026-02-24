@@ -18,36 +18,37 @@ Z = jnp.array([[1, 0], [0, -1]], dtype=jnp.complex128)
 I2 = jnp.eye(2, dtype=jnp.complex128)
 
 
-# NUM_PARAMS = 6
+NUM_PARAMS = 6
 
-# @jit
-# def _params_to_unitaries(params: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray]:
-#     """Extract u0, u1 from 6D params."""
 
-#     def _rv(v: jnp.ndarray) -> jnp.ndarray:
-#         """Rotation vector to SU(2) via stabilized Rodriguez formula."""
-#         theta_sq = jnp.dot(v, v)
-#         theta = jnp.sqrt(theta_sq)
-#         half = 0.5 * theta
+@jit
+def _params_to_unitaries(params: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray]:
+    """Extract u0, u1 from 6D params."""
 
-#         # Taylor expansion for small angles: sin(x)/x ≈ 1 - x²/6 + x⁴/120
-#         # cos(x) ≈ 1 - x²/2 + x⁴/24
-#         sinc_half = jnp.where(
-#             theta_sq < 1e-8,
-#             0.5 - theta_sq / 48.0,  # (1 - (θ/2)²/6) / 2
-#             jnp.sin(half) / theta,
-#         )
-#         cos_half = jnp.where(
-#             theta_sq < 1e-8,
-#             1.0 - theta_sq / 8.0,  # 1 - (θ/2)²/2
-#             jnp.cos(half),
-#         )
+    def _rv(v: jnp.ndarray) -> jnp.ndarray:
+        """Rotation vector to SU(2) via stabilized Rodriguez formula."""
+        theta_sq = jnp.dot(v, v)
+        theta = jnp.sqrt(theta_sq)
+        half = 0.5 * theta
 
-#         vx, vy, vz = v
-#         H = vx * X + vy * Y + vz * Z
-#         return cos_half * I2 - 1j * sinc_half * H
+        # Taylor expansion for small angles: sin(x)/x ≈ 1 - x²/6 + x⁴/120
+        # cos(x) ≈ 1 - x²/2 + x⁴/24
+        sinc_half = jnp.where(
+            theta_sq < 1e-8,
+            0.5 - theta_sq / 48.0,  # (1 - (θ/2)²/6) / 2
+            jnp.sin(half) / theta,
+        )
+        cos_half = jnp.where(
+            theta_sq < 1e-8,
+            1.0 - theta_sq / 8.0,  # 1 - (θ/2)²/2
+            jnp.cos(half),
+        )
 
-#     return _rv(params[:3]), _rv(params[3:])
+        vx, vy, vz = v
+        H = vx * X + vy * Y + vz * Z
+        return cos_half * I2 - 1j * sinc_half * H
+
+    return _rv(params[:3]), _rv(params[3:])
 
 
 ###########################################
@@ -57,29 +58,29 @@ I2 = jnp.eye(2, dtype=jnp.complex128)
 # requires investigation
 ###########################################
 
-NUM_PARAMS = 8
+# NUM_PARAMS = 8
 
 
-@jit
-def _params_to_unitaries(params: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray]:
-    """Extract u0, u1 from 8D params as two normalized quaternions -> SU(2).
+# @jit
+# def _params_to_unitaries(params: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray]:
+#     """Extract u0, u1 from 8D params as two normalized quaternions -> SU(2).
 
-    params[:4]  = q0 = (w,x,y,z) for u0
-    params[4:]  = q1 = (w,x,y,z) for u1
-    """
-    eps = 1e-12
+#     params[:4]  = q0 = (w,x,y,z) for u0
+#     params[4:]  = q1 = (w,x,y,z) for u1
+#     """
+#     eps = 1e-12
 
-    def quat_to_su2(q):
-        # normalize onto S^3
-        q = q / jnp.maximum(jnp.linalg.norm(q), eps)
-        w, x, y, z = q
-        a = w + 1j * z
-        b = x + 1j * y
-        return jnp.array([[a, b], [-jnp.conj(b), jnp.conj(a)]], dtype=jnp.complex128)
+#     def quat_to_su2(q):
+#         # normalize onto S^3
+#         q = q / jnp.maximum(jnp.linalg.norm(q), eps)
+#         w, x, y, z = q
+#         a = w + 1j * z
+#         b = x + 1j * y
+#         return jnp.array([[a, b], [-jnp.conj(b), jnp.conj(a)]], dtype=jnp.complex128)
 
-    u0 = quat_to_su2(params[:4])
-    u1 = quat_to_su2(params[4:])
-    return u0, u1
+#     u0 = quat_to_su2(params[:4])
+#     u1 = quat_to_su2(params[4:])
+#     return u0, u1
 
 
 @jit

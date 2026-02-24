@@ -85,7 +85,7 @@ def weyl_coordinates(U: jnp.ndarray) -> jnp.ndarray:
 
     ev = jnp.linalg.eigvals(gamma)
     two_S = jnp.angle(ev) / jnp.pi
-    two_S = jnp.where(two_S <= -0.5, two_S + 2.0, two_S)
+    two_S = jnp.where(two_S < -0.5 + 1e-12, two_S + 2.0, two_S)
 
     S = jnp.sort(two_S / 2.0)[::-1]
 
