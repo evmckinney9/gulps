@@ -18,37 +18,37 @@ Z = jnp.array([[1, 0], [0, -1]], dtype=jnp.complex128)
 I2 = jnp.eye(2, dtype=jnp.complex128)
 
 
-NUM_PARAMS = 6
+# NUM_PARAMS = 6
 
 
-@jit
-def _params_to_unitaries(params: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray]:
-    """Extract u0, u1 from 6D params."""
+# @jit
+# def _params_to_unitaries(params: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray]:
+#     """Extract u0, u1 from 6D params."""
 
-    def _rv(v: jnp.ndarray) -> jnp.ndarray:
-        """Rotation vector to SU(2) via stabilized Rodriguez formula."""
-        theta_sq = jnp.dot(v, v)
-        theta = jnp.sqrt(theta_sq)
-        half = 0.5 * theta
+#     def _rv(v: jnp.ndarray) -> jnp.ndarray:
+#         """Rotation vector to SU(2) via stabilized Rodriguez formula."""
+#         theta_sq = jnp.dot(v, v)
+#         theta = jnp.sqrt(theta_sq)
+#         half = 0.5 * theta
 
-        # Taylor expansion for small angles: sin(x)/x ≈ 1 - x²/6 + x⁴/120
-        # cos(x) ≈ 1 - x²/2 + x⁴/24
-        sinc_half = jnp.where(
-            theta_sq < 1e-8,
-            0.5 - theta_sq / 48.0,  # (1 - (θ/2)²/6) / 2
-            jnp.sin(half) / theta,
-        )
-        cos_half = jnp.where(
-            theta_sq < 1e-8,
-            1.0 - theta_sq / 8.0,  # 1 - (θ/2)²/2
-            jnp.cos(half),
-        )
+#         # Taylor expansion for small angles: sin(x)/x ≈ 1 - x²/6 + x⁴/120
+#         # cos(x) ≈ 1 - x²/2 + x⁴/24
+#         sinc_half = jnp.where(
+#             theta_sq < 1e-8,
+#             0.5 - theta_sq / 48.0,  # (1 - (θ/2)²/6) / 2
+#             jnp.sin(half) / theta,
+#         )
+#         cos_half = jnp.where(
+#             theta_sq < 1e-8,
+#             1.0 - theta_sq / 8.0,  # 1 - (θ/2)²/2
+#             jnp.cos(half),
+#         )
 
-        vx, vy, vz = v
-        H = vx * X + vy * Y + vz * Z
-        return cos_half * I2 - 1j * sinc_half * H
+#         vx, vy, vz = v
+#         H = vx * X + vy * Y + vz * Z
+#         return cos_half * I2 - 1j * sinc_half * H
 
-    return _rv(params[:3]), _rv(params[3:])
+#     return _rv(params[:3]), _rv(params[3:])
 
 
 ###########################################
@@ -58,29 +58,29 @@ def _params_to_unitaries(params: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray]
 # requires investigation
 ###########################################
 
-# NUM_PARAMS = 8
+NUM_PARAMS = 8
 
 
-# @jit
-# def _params_to_unitaries(params: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray]:
-#     """Extract u0, u1 from 8D params as two normalized quaternions -> SU(2).
+@jit
+def _params_to_unitaries(params: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray]:
+    """Extract u0, u1 from 8D params as two normalized quaternions -> SU(2).
 
-#     params[:4]  = q0 = (w,x,y,z) for u0
-#     params[4:]  = q1 = (w,x,y,z) for u1
-#     """
-#     eps = 1e-12
+    params[:4]  = q0 = (w,x,y,z) for u0
+    params[4:]  = q1 = (w,x,y,z) for u1
+    """
+    eps = 1e-12
 
-#     def quat_to_su2(q):
-#         # normalize onto S^3
-#         q = q / jnp.maximum(jnp.linalg.norm(q), eps)
-#         w, x, y, z = q
-#         a = w + 1j * z
-#         b = x + 1j * y
-#         return jnp.array([[a, b], [-jnp.conj(b), jnp.conj(a)]], dtype=jnp.complex128)
+    def quat_to_su2(q):
+        # normalize onto S^3
+        q = q / jnp.maximum(jnp.linalg.norm(q), eps)
+        w, x, y, z = q
+        a = w + 1j * z
+        b = x + 1j * y
+        return jnp.array([[a, b], [-jnp.conj(b), jnp.conj(a)]], dtype=jnp.complex128)
 
-#     u0 = quat_to_su2(params[:4])
-#     u1 = quat_to_su2(params[4:])
-#     return u0, u1
+    u0 = quat_to_su2(params[:4])
+    u1 = quat_to_su2(params[4:])
+    return u0, u1
 
 
 @jit
@@ -144,12 +144,16 @@ def _make_restart_loop(run_solver, max_restarts: int):
             )
 
             res = jnp.max(jnp.abs(result.state.residual))
-            improved = res < best_res
+            params_finite = jnp.all(jnp.isfinite(result.params))
+            improved = (res < best_res) & params_finite
+
+            # If solver diverged (inf/nan params), fall back to the init
+            safe_params = jnp.where(params_finite, result.params, init)
 
             return (
                 i + 1,
                 key,
-                jnp.where(improved, result.params, best_params),
+                jnp.where(improved, safe_params, best_params),
                 jnp.where(improved, res, best_res),
                 done | (res <= tol),
             )
@@ -214,7 +218,9 @@ def _make_warmstart_loop(
                 return result.params, jnp.max(jnp.abs(result.state.residual))
 
             params, res = lax.cond(i == 0, iter_zero, iter_nonzero, None)
-            improved = res < best_res
+            params_finite = jnp.all(jnp.isfinite(params))
+            res_finite = jnp.isfinite(res)
+            improved = (res < best_res) & params_finite & res_finite
 
             return (
                 i + 1,
