@@ -46,12 +46,13 @@ Alternatively, to compile a full `QuantumCircuit`, use the GULPS `Transformation
 ```python
 from gulps.qiskit_ext.synthesis_pass import GulpsDecompositionPass
 from qiskit.transpiler import PassManager
-from qiskit.transpiler.passes import Optimize1qGatesDecomposition
+from qiskit.transpiler.passes import Optimize1qGatesDecomposition, ConsolidateBlocks
 from qiskit.circuit.random import random_circuit
 
 input_qc = random_circuit(4, 4, max_operands=2)
 pm = PassManager(
     [
+        ConsolidateBlocks(force_consolidate=True),
         GulpsDecompositionPass(decomposer),
         Optimize1qGatesDecomposition(basis="u3"),
     ]
