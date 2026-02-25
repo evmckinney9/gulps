@@ -11,7 +11,7 @@ Most existing compilers only target CNOT gates. Analytical rules exist for a few
 ______
 ### Getting Started
 
-- `pip install gulps @ git+https://github.com/evmckinney9/gulps`
+- `pip install gulps@git+https://github.com/evmckinney9/gulps`
 -  For usage examples, see: `src/gulps/notebooks/main.ipynb`.
 -  Report issues: [Github issue tracker](https://github.com/ajavadia/hetero_isas/issues/4)
 
@@ -116,7 +116,7 @@ decomposer._local_synthesis._jax_lm_solver.try_solve(
 SegmentSolution(u0=Array([[ 0.70695489-0.01465516j,  0.27313926-0.65222308j],
        [-0.27313926-0.65222308j,  0.70695489+0.01465516j]],      dtype=complex128), u1=Array([[ 0.70695488-0.01465514j,  0.27313926-0.6522231j ],
        [-0.27313926-0.6522231j ,  0.70695488+0.01465514j]],      dtype=complex128), max_residual=4.786284230062776e-09, success=True, metadata={'stage': 'weyl', 'elapsed': 0.014199456010828726})
-```       
+```  
 After solving the individual segments, we apply a final stitching step to handle orietation between segments and to promote local equivalence into global unitary equivalence:
 ```python
 decomposer._local_synthesis.synthesize_segments(
