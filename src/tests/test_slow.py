@@ -33,9 +33,9 @@ def test_cx_iswap_on_slow_seeds():
             Operator(target_unitary), Operator(output_circuit)
         )
         assert fidelity > 1 - 1e-6, f"Fidelity too low at seed {seed}: {fidelity}"
-        assert decomposer.last_timing["segments"] < 0.2, (
-            f"Numeric timing too high at seed {seed}: {decomposer.last_timing['segments']:.4f} seconds"
-        )
+        assert (
+            decomposer.last_timing["segments"] < 0.2
+        ), f"Numeric timing too high at seed {seed}: {decomposer.last_timing['segments']:.4f} seconds"
 
 
 def test_sq4iswap_on_slow_seeds():
@@ -56,9 +56,9 @@ def test_sq4iswap_on_slow_seeds():
             Operator(target_unitary), Operator(output_circuit)
         )
         assert fidelity > 1 - 1e-6, f"Fidelity too low at seed {seed}: {fidelity}"
-        assert decomposer.last_timing["segments"] < 0.2, (
-            f"Numeric timing too high at seed {seed}: {decomposer.last_timing['segments']:.4f} seconds"
-        )
+        assert (
+            decomposer.last_timing["segments"] < 0.2
+        ), f"Numeric timing too high at seed {seed}: {decomposer.last_timing['segments']:.4f} seconds"
 
 
 def test_sq2iswap_on_slow_seeds():
@@ -79,6 +79,6 @@ def test_sq2iswap_on_slow_seeds():
             Operator(target_unitary), Operator(output_circuit)
         )
         assert fidelity > 1 - 1e-6, f"Fidelity too low at seed {seed}: {fidelity}"
-        assert decomposer.last_timing["segments"] < 0.2, (
-            f"Numeric timing too high at seed {seed}: {decomposer.last_timing['segments']:.4f} seconds"
-        )
+        assert (
+            decomposer.last_timing["segments"] < 0.2
+        ), f"Numeric timing too high at seed {seed}: {decomposer.last_timing['segments']:.4f} seconds"

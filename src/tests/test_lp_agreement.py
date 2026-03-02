@@ -28,9 +28,9 @@ def test_lp_agrees_with_polytope_solution(decomposer_fixture):
 
         # Step 2: Try LP on that sentence
         constraint_solution = decomposer_fixture._try_discrete_lp(target_inv)
-        assert constraint_solution.success, (
-            "LP failed even though polytope lookup succeeded."
-        )
-        assert constraint_solution.sentence == tuple(sentence), (
-            "LP solution sentence does not match polytope lookup sentence."
-        )
+        assert (
+            constraint_solution.success
+        ), "LP failed even though polytope lookup succeeded."
+        assert constraint_solution.sentence == tuple(
+            sentence
+        ), "LP solution sentence does not match polytope lookup sentence."

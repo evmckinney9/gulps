@@ -33,20 +33,14 @@ def get_isa_scaling():
     iswap_denoms = [2, 3, 4, 5, 6, 7, 8]
     for n in range(1, len(iswap_denoms) + 1):
         denoms = iswap_denoms[:n]
-        gate_set = [
-            (iSwapGate().power(1 / d), 1 / d, f"iswap^1/{d}")
-            for d in denoms
-        ]
+        gate_set = [(iSwapGate().power(1 / d), 1 / d, f"iswap^1/{d}") for d in denoms]
         configs.append((f"iswap_prog_{n}g", gate_set))
 
     # Progressive CX: {1/2}, {1/2,1/3}, ..., {1/2,...,1/7}
     cx_denoms = [2, 3, 4, 5, 6, 7]
     for n in range(1, len(cx_denoms) + 1):
         denoms = cx_denoms[:n]
-        gate_set = [
-            (CXGate().power(1 / d), 1 / d, f"cx^1/{d}")
-            for d in denoms
-        ]
+        gate_set = [(CXGate().power(1 / d), 1 / d, f"cx^1/{d}") for d in denoms]
         configs.append((f"cx_prog_{n}g", gate_set))
 
     # Progressive mixed: pair CX and iSwap at each fraction level
@@ -75,16 +69,20 @@ def get_depth_scaling():
     configs = []
 
     for d in range(2, 9):
-        configs.append((
-            f"iswap^1/{d}",
-            [(iSwapGate().power(1 / d), 1 / d, f"iswap^1/{d}")],
-        ))
+        configs.append(
+            (
+                f"iswap^1/{d}",
+                [(iSwapGate().power(1 / d), 1 / d, f"iswap^1/{d}")],
+            )
+        )
 
     for d in range(2, 9):
-        configs.append((
-            f"cx^1/{d}",
-            [(CXGate().power(1 / d), 1 / d, f"cx^1/{d}")],
-        ))
+        configs.append(
+            (
+                f"cx^1/{d}",
+                [(CXGate().power(1 / d), 1 / d, f"cx^1/{d}")],
+            )
+        )
 
     return configs
 
@@ -103,32 +101,38 @@ def get_comparison_isas():
     configs = []
 
     # (1) Non-standard fractional gate
-    configs.append((
-        "iswap^1/4",
-        [(iSwapGate().power(1 / 4), 0.25, "iswap^1/4")],
-    ))
+    configs.append(
+        (
+            "iswap^1/4",
+            [(iSwapGate().power(1 / 4), 0.25, "iswap^1/4")],
+        )
+    )
 
     # (2) Heterogeneous discrete ISA
-    configs.append((
-        "hetero_4g",
-        [
-            (CXGate(), 1.0, "cx"),
-            (CXGate().power(1 / 2), 0.5, "cx^1/2"),
-            (iSwapGate().power(1 / 2), 0.5, "iswap^1/2"),
-            (iSwapGate().power(1 / 3), 1 / 3, "iswap^1/3"),
-        ],
-    ))
+    configs.append(
+        (
+            "hetero_4g",
+            [
+                (CXGate(), 1.0, "cx"),
+                (CXGate().power(1 / 2), 0.5, "cx^1/2"),
+                (iSwapGate().power(1 / 2), 0.5, "iswap^1/2"),
+                (iSwapGate().power(1 / 3), 1 / 3, "iswap^1/3"),
+            ],
+        )
+    )
 
     # (3) Continuous fSim (discrete approximation for nuop/bsqkit comparison;
     #     gulps uses ContinuousISA.from_base_gate for the actual solve)
-    configs.append((
-        "fsim_continuous",
-        [
-            (fsim(np.pi / 2, np.pi / 6), 1.0, "fsim"),
-            (fsim(np.pi / 2, np.pi / 6).power(1 / 2), 0.5, "fsim^1/2"),
-            (fsim(np.pi / 2, np.pi / 6).power(1 / 3), 1 / 3, "fsim^1/3"),
-        ],
-    ))
+    configs.append(
+        (
+            "fsim_continuous",
+            [
+                (fsim(np.pi / 2, np.pi / 6), 1.0, "fsim"),
+                (fsim(np.pi / 2, np.pi / 6).power(1 / 2), 0.5, "fsim^1/2"),
+                (fsim(np.pi / 2, np.pi / 6).power(1 / 3), 1 / 3, "fsim^1/3"),
+            ],
+        )
+    )
 
     return configs
 

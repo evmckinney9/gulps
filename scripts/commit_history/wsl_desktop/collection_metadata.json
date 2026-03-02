@@ -1,0 +1,24 @@
+{
+  "collected": "2026-03-02",
+  "description": "Metadata for backlog.csv and pruned_log.csv benchmark collections",
+  "machine": {
+    "arch": "x86_64",
+    "hostname": "Evan-Desktop",
+    "os": "Linux (WSL2) 5.15.167.4-microsoft-standard-WSL2",
+    "python": "3.12.3"
+  },
+  "notes": [
+    "All timings are wall-clock medians of 1000 random SU(4) unitaries per commit (seeds 0..999).",
+    "JAX JIT warmup (seed 9999) is run before the timed loop and not included.",
+    "Failed decompositions (numerical non-convergence) still contribute their wall-clock time to the median.",
+    "Results are only comparable across commits run on the same machine under similar load.",
+    "Commits with warmup failures are excluded (see BAD_COMMITS in scripts/collect_backlog.sh).",
+    "Commits predating 1e7924f (2025-07-23) are excluded as the numerics were not yet functional."
+  ],
+  "packages": {
+    "jax": "0.8.1",
+    "numpy": "2.3.5",
+    "qiskit": "2.2.3",
+    "scipy": "1.16.3"
+  }
+}

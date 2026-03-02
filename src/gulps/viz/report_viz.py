@@ -26,7 +26,9 @@ def compare_continuous_discrete(
     # Compute discrete frequency distribution
     discrete_counter = Counter(discrete_params)
     discrete_vals = sorted(discrete_counter.keys())
-    discrete_freqs = np.array([discrete_counter[v] for v in discrete_vals]) / len(discrete_params)
+    discrete_freqs = np.array([discrete_counter[v] for v in discrete_vals]) / len(
+        discrete_params
+    )
 
     with plt.style.context(["ieee", "science", "use_mathtext"]):
         fig, axes = plt.subplots(1, 2, figsize=(8.0, 3.0))
@@ -47,7 +49,9 @@ def compare_continuous_discrete(
         axes[0].grid(axis="y", alpha=0.3)
 
         # Right: Discrete (bar chart)
-        axes[1].bar(discrete_vals, discrete_freqs, width=0.05, color="C1", edgecolor="black")
+        axes[1].bar(
+            discrete_vals, discrete_freqs, width=0.05, color="C1", edgecolor="black"
+        )
         axes[1].set_xlabel("Parameter (k)")
         axes[1].set_ylabel("Frequency")
         axes[1].set_title("Discrete ISA")
