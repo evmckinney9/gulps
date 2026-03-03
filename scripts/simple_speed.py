@@ -1,6 +1,4 @@
-import matplotlib.pyplot as plt
 import numpy as np
-from qiskit import QuantumCircuit
 from qiskit.circuit.library import (
     CXGate,
     RZXGate,
@@ -10,16 +8,10 @@ from qiskit.circuit.library import (
 )
 from qiskit.quantum_info import Operator, average_gate_fidelity
 from qiskit.quantum_info.random import random_unitary
-from tqdm import trange
 
 from gulps import logger
-from gulps.core.coverage import coverage_report
-from gulps.core.invariants import GateInvariants
 from gulps.core.isa import DiscreteISA
 from gulps.gulps_decomposer import GulpsDecomposer
-from gulps.isa_library.fsim import fsim
-from gulps.viz.invariant_viz import plot_decomposition
-from gulps.viz.report_viz import report_benchmark_results
 
 
 def main():
