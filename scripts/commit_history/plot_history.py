@@ -1,31 +1,42 @@
+import csv
 import subprocess
+from datetime import datetime
 from pathlib import Path
 
 import lovelyplots
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
-import pandas as pd
 import scienceplots
 
 REPO_ROOT = Path(
     subprocess.check_output(["git", "rev-parse", "--show-toplevel"], text=True).strip()
 )
 
-# pruned: the commits we care about (labeled)
 data_set = "wsl_desktop"
-df = pd.read_csv(REPO_ROOT / "scripts/commit_history" / data_set / "pruned_log.csv")
-df["date"] = pd.to_datetime(df["date"], utc=True).dt.tz_convert(None)
-df = df.sort_values("date").reset_index(drop=True)
+data_dir = REPO_ROOT / "scripts/commit_history" / data_set
 
-# full backlog: scatter the extras as unlabeled background context
-df_back = pd.read_csv(REPO_ROOT / "scripts/commit_history" / data_set / "backlog.csv")
-df_back["date"] = pd.to_datetime(df_back["date"], utc=True).dt.tz_convert(None)
-df_back = df_back.sort_values("date").reset_index(drop=True)
 
-earliest = df["date"].min()
-df_extra = df_back[
-    ~df_back["commit"].isin(df["commit"]) & (df_back["date"] >= earliest)
-].reset_index(drop=True)
+def read_csv(path):
+    """Read CSV into a list of dicts, parsing date and median columns."""
+    rows = []
+    with open(path) as f:
+        for row in csv.DictReader(f):
+            row["date"] = datetime.fromisoformat(row["date"])
+            for k in ("isa1_median", "isa2_median", "isa3_median"):
+                row[k] = float(row[k]) if row.get(k) else None
+            rows.append(row)
+    rows.sort(key=lambda r: r["date"])
+    return rows
+
+
+pruned = read_csv(data_dir / "pruned_log.csv")
+backlog = read_csv(data_dir / "backlog.csv")
+
+pruned_commits = {r["commit"] for r in pruned}
+earliest = pruned[0]["date"]
+extra = [
+    r for r in backlog if r["commit"] not in pruned_commits and r["date"] >= earliest
+]
 
 isa_series = [
     ("isa1_median", r"isa1  [$\sqrt[4]{\mathrm{iSwap}}$]", "tab:blue"),
@@ -51,8 +62,8 @@ with plt.style.context(["ieee", "science", "use_mathtext"]):
     # background scatter: unlabeled commits not in pruned set
     for col, _, color in isa_series:
         ax.scatter(
-            df_extra["date"],
-            df_extra[col] * 1000,
+            [r["date"] for r in extra],
+            [r[col] * 1000 for r in extra],
             s=6,
             color=color,
             alpha=0.35,
@@ -63,8 +74,8 @@ with plt.style.context(["ieee", "science", "use_mathtext"]):
     # foreground: pruned (labeled) commits as connected line
     for col, label, color in isa_series:
         ax.plot(
-            df["date"],
-            df[col] * 1000,
+            [r["date"] for r in pruned],
+            [r[col] * 1000 for r in pruned],
             "o-",
             markersize=3,
             linewidth=1,
@@ -75,7 +86,7 @@ with plt.style.context(["ieee", "science", "use_mathtext"]):
         )
 
     # all labels rise above the top edge of the axes, clearing the data area entirely
-    for _, row in df.iterrows():
+    for row in pruned:
         ax.annotate(
             row["subject"][:30].translate(_LATEX_ESCAPES),
             xy=(row["date"], 1),
@@ -101,8 +112,4 @@ with plt.style.context(["ieee", "science", "use_mathtext"]):
     ax.grid(True, alpha=0.3)
     fig.subplots_adjust(top=0.5)
     plt.show()
-    # save the figure in the same directory as the data
-    fig.savefig(
-        REPO_ROOT / "scripts/commit_history" / data_set / "history_plot.pdf",
-        bbox_inches="tight",
-    )
+    fig.savefig(data_dir / "history_plot.pdf", bbox_inches="tight")

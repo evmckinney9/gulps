@@ -65,8 +65,8 @@ fi
 # --- oldest commit to benchmark (don't go past this) ---
 OLDEST_COMMIT="1e7924fc4f2d2d18f46c7c93c8a3811747879d59"
 
-# --- collect commits newest-first (walk backwards) ---
-COMMITS=$(git log --format="%H" --first-parent "${OLDEST_COMMIT}^..HEAD")
+# --- collect commits oldest-first ---
+COMMITS=$(git log --format="%H" --first-parent --reverse "${OLDEST_COMMIT}^..HEAD")
 
 if [[ -n "$START_COMMIT" ]]; then
     FULL_START=$(git rev-parse "$START_COMMIT")
@@ -74,11 +74,11 @@ if [[ -n "$START_COMMIT" ]]; then
 fi
 
 if [[ "$LIMIT" -gt 0 ]]; then
-    COMMITS=$(echo "$COMMITS" | head -n "$LIMIT")
+    COMMITS=$(echo "$COMMITS" | tail -n "$LIMIT")
 fi
 
 TOTAL=$(echo "$COMMITS" | wc -l)
-echo "=== Collecting benchmarks for $TOTAL commits (newest first) ==="
+echo "=== Collecting benchmarks for $TOTAL commits (oldest first) ==="
 echo "=== Machine: $(hostname), 1000 unitaries x 3 ISAs per commit ==="
 
 # --- already collected set (for skip logic) ---
@@ -117,10 +117,10 @@ for COMMIT in $COMMITS; do
             continue
         fi
 
-        # Skip commits that don't touch any .py files
-        PY_CHANGED=$(git diff-tree --no-commit-id --name-only -r "$COMMIT" 2>/dev/null | grep -c '\.py$' || true)
+        # Skip commits that don't touch any .py files in the package
+        PY_CHANGED=$(git diff-tree --no-commit-id --name-only -r "$COMMIT" 2>/dev/null | grep -c '^src/gulps/.*\.py$' || true)
         if [[ "$PY_CHANGED" -eq 0 ]]; then
-            echo "[$IDX/$TOTAL] $SHORT — skip (no .py changes)"
+            echo "[$IDX/$TOTAL] $SHORT — skip (no src/gulps/ .py changes)"
             continue
         fi
     fi

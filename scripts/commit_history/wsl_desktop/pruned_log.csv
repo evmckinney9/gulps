@@ -1,9 +1,10 @@
 commit,date,subject,status,isa1_median,isa2_median,isa3_median
-6eb49b30d9d33b7c8f1f7b4bb41439ff95efba90,2026-02-24T17:52:55-05:00,fix: close #13; sanitize inf params near-zero residuals,OK,0.00958,0.009542,0.007517
-0a430329c3d4b309231e16505c69d8f54b462b92,2026-01-27T03:18:05-05:00,fix: faster quarternion local parameterization,OK,0.009756,0.009733,0.007554
-ad56036cc3bfbf2b8f53c79d54f48a0681a7d9bf,2026-01-12T01:53:12-05:00,refactor: simplify and improve edge case logic,OK,0.015866,0.012015,0.007688
-ea7b9fbd0e9c4b1fd14354614e5820612a86725e,2026-01-09T15:27:27-05:00,feat: generalize GulpsDecomposer to support discrete and continuous ISA,OK,0.016056,0.011802,0.007684
-7c416bc33c40d1c61b1ed0836c0ff1bc85566505,2026-01-08T00:25:01-05:00,feat: fast jax while loop,OK,0.015833,0.011531,0.00778
-e980e78d670f8aac3d4e56daa2bd7bf2d156bf70,2026-01-05T01:38:49-05:00,feat: class contains both sequential and batched stitch strategies,OK,0.022169,0.019502,0.014173
-f96aab93f976cfea89d7cfca052ed94cc1c3d391,2025-12-24T15:58:35-05:00,feat: more stable rv smooth def,OK,0.030268,0.024065,0.018054
 5900831f1be3a9bc6b5e4b194f64217c766aa42e,2025-12-01T17:49:11-05:00,refactor: remove dependence on monodromy fork,OK,0.202361,0.185575,0.018435
+f96aab93f976cfea89d7cfca052ed94cc1c3d391,2025-12-24T15:58:35-05:00,feat: more stable rv smooth def,OK,0.030268,0.024065,0.018054
+e980e78d670f8aac3d4e56daa2bd7bf2d156bf70,2026-01-05T01:38:49-05:00,feat: class contains both sequential and batched stitch strategies,OK,0.022169,0.019502,0.014173
+7c416bc33c40d1c61b1ed0836c0ff1bc85566505,2026-01-08T00:25:01-05:00,feat: fast jax while loop,OK,0.015833,0.011531,0.00778
+ea7b9fbd0e9c4b1fd14354614e5820612a86725e,2026-01-09T15:27:27-05:00,feat: generalize GulpsDecomposer to support discrete and continuous ISA,OK,0.016056,0.011802,0.007684
+ad56036cc3bfbf2b8f53c79d54f48a0681a7d9bf,2026-01-12T01:53:12-05:00,refactor: simplify and improve edge case logic,OK,0.015866,0.012015,0.007688
+0a430329c3d4b309231e16505c69d8f54b462b92,2026-01-27T03:18:05-05:00,fix: faster quarternion local parameterization,OK,0.009756,0.009733,0.007554
+6eb49b30d9d33b7c8f1f7b4bb41439ff95efba90,2026-02-24T17:52:55-05:00,fix: close #13; sanitize inf params near-zero residuals,OK,0.00958,0.009542,0.007517
+b39d0ac3e6a6ba8cd7db21a4ed8392c867d08038,2026-03-02T23:06:08-05:00,feat: remove jaxopt dependency; performance increase,OK,0.007813,0.008584,0.007666
