@@ -1,8 +1,9 @@
+from collections import Counter
+
 import lovelyplots
 import matplotlib.pyplot as plt
 import numpy as np
 import scienceplots
-from collections import Counter
 
 
 def compare_continuous_discrete(
@@ -88,12 +89,17 @@ def report_benchmark_results(fidelities, all_timings, decomposer, N, failures):
         f"Fidelity: median={np.median(fidelities):.10f}, min={np.min(fidelities):.10f}"
     )
 
-    if all_timings:
-        phase_names = list(all_timings[0].keys())
-        timing_array = np.array([[t[k] for k in phase_names] for t in all_timings])
-        total_avg = timing_array.sum(axis=1).mean() * 1000
-        print(f"Avg time: {total_avg:.1f} ms/decomposition")
+    preferred_order = ["lp_sentence", "segments", "total"]
+    phase_names = [k for k in preferred_order if k in all_timings[0]]
+    timing_array = np.array([[t[k] for k in phase_names] for t in all_timings])
 
+    if "total" in phase_names:
+        total_idx = phase_names.index("total")
+        total_avg = timing_array[:, total_idx].mean() * 1000
+    else:
+        total_avg = timing_array.sum(axis=1).mean() * 1000
+
+    print(f"Avg time: {total_avg:.1f} ms/decomposition")
     print(
         f"Cache: {cache_stats['hit_rate'] * 100:.1f}% hit rate ({cache_stats['hits']}/{cache_stats['hits'] + cache_stats['misses']})"
     )

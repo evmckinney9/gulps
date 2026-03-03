@@ -36,25 +36,15 @@ class MinimalOrderedISAConstraints(ISAConstraints):
         self._setup_model()
 
     def _setup_model(self):
-        # simple objective is null
-        # self.c = np.zeros(self.num_params)
-
-        # a better objective
         # maximize total "strength" of intermediates (sum of monodromy coords)
         # This pushes intermediates toward polytope facets, producing more predictable
         # waypoints that improve segment cache hit rates across decompositions.
         # Use -1 coefficients since linprog minimizes.
         self.c = -np.ones(self.num_params)
 
-        # alternative option, use a weighted lexicographic objective
-        # to prioritize saturating a coordinate first
-        # weights = -np.array([4, 2, 1])
-        # self.c = np.tile(weights, self.n - 2)  # maximize in priority order
-
         self.A_ub, self.b_ub = self._setup_inequalities()
         self.A_eq, self.b_eq = None, None  # no equalities
 
-    # XXX this is a bit hard to read
     def _setup_inequalities(self):
         A_ub = np.zeros((self.num_ineq, self.num_params))
         b_ub = np.zeros(self.num_ineq)

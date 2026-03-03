@@ -1,4 +1,4 @@
-"""Contains hardcoded QLR inequalities from monodromy.
+"""Hardcoded QLR inequalities from monodromy.
 
 L(c_{i-1}, g_i, c_i) <= b (for each row)
 
@@ -6,36 +6,18 @@ Convention: g_1, ..., g_n are gates.
 c_i is the intermediate invariant after applying g_1, ..., g_i.
 c_1 = g_1 (first gate's invariant). c_n = target.
 
-Import using qlr_inequalities (tuple).
+Generated from:
+    from monodromy.static.qlr_table import generate_qlr_inequalities
+    _qlr = np.array(generate_qlr_inequalities())
+    _ci_block = -1.0 * _qlr[:, 1:4]
+    _gi_block = -1.0 * _qlr[:, 4:7]
+    _ciplus1_block = -1.0 * _qlr[:, 7:10]
+    _bi = _qlr[:, 0].reshape(72,)
 """
 
 import numpy as np
 
 len_qlr = 72
-
-# from monodromy.static.qlr_table import generate_qlr_inequalities
-
-# _qlr_inequalities = np.array(generate_qlr_inequalities())
-# _ci_block = -1.0 * _qlr_inequalities[:, 1:4]  # alphas -> c_i
-# _gi_block = -1.0 * _qlr_inequalities[:, 4:7]  # betas -> g_i
-# _ciplus1_block = -1.0 * _qlr_inequalities[:, 7:10]  # gammas -> c_{i+1}
-# _bi = _qlr_inequalities[:, 0].reshape(len_qlr, 1)  # d -> b
-
-# FIXME can similarly hardcode these
-# from monodromy.coordinates import rho_reflect
-# from monodromy.static.qlr_table import generate_qlr_inequalities, qlr_polytope
-
-# _qlr_inequalities = rho_reflect(qlr_polytope).convex_subpolytopes[0].inequalities
-# _qlr_inequalities = np.array(_qlr_inequalities)
-
-# _rho_ci_block = -1.0 * _qlr_inequalities[:, 1:4]  # alphas -> c_i
-# _rho_gi_block = -1.0 * _qlr_inequalities[:, 4:7]  # betas -> g_i
-# _rho_ciplus1_block = -1.0 * _qlr_inequalities[:, 7:10]  # gammas -> c_{i+1}
-# _rho_bi = _qlr_inequalities[:, 0].reshape(72, 1)  # d -> b
-
-
-# qlr_inequalities = (_ci_block, _gi_block, _ciplus1_block, _bi)
-# rho_qlr_inequalities = (_rho_ci_block, _rho_gi_block, _rho_ciplus1_block, _rho_bi)
 
 
 _ci_block = np.array(

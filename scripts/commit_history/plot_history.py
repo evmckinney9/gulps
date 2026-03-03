@@ -101,3 +101,8 @@ with plt.style.context(["ieee", "science", "use_mathtext"]):
     ax.grid(True, alpha=0.3)
     fig.subplots_adjust(top=0.5)
     plt.show()
+    # save the figure in the same directory as the data
+    fig.savefig(
+        REPO_ROOT / "scripts/commit_history" / data_set / "history_plot.pdf",
+        bbox_inches="tight",
+    )

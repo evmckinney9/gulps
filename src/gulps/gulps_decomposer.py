@@ -152,7 +152,6 @@ class GulpsDecomposer:
                     f"The target may lie outside all polytope coverage. "
                     f"Try disabling precompute_polytopes or expanding the gate set."
                 )
-            # TODO: optimize by caching constraint objects for previously seen sentences
             constraints = MinimalOrderedISAConstraints(sentence, config=self.config)
             return constraints.solve(target, log_output=log_output)
 
@@ -164,7 +163,6 @@ class GulpsDecomposer:
                 < target.strength - self.config.lp_feasibility_tol
             ):
                 continue
-            # TODO: optimize by caching constraint objects for previously seen sentences
             constraints = MinimalOrderedISAConstraints(sentence, config=self.config)
             result = constraints.solve(target, log_output=log_output)
             if result.success:
