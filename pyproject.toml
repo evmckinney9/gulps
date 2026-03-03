@@ -19,7 +19,7 @@ dependencies = [
     "weylchamber @ git+https://github.com/evmckinney9/weylchamber",
     "qutip",
     "numpy",
-    "jaxopt",
+    "jax",
 ]
 [project.optional-dependencies]
 cplex = ["qiskit-optimization[cplex]"]

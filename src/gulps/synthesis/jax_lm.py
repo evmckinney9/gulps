@@ -2,61 +2,12 @@ import time
 
 import jax.numpy as jnp
 import numpy as np
-from jax import jit, lax
+from jax import jacrev, jit, lax
 from jax.random import PRNGKey, fold_in, uniform
-from jaxopt import GaussNewton, LevenbergMarquardt
-from jaxopt.linear_solve import solve_lu
 
 from gulps.config import GulpsConfig
 from gulps.core.jax_invariants import makhlin_invariants, weyl_coordinates
 from gulps.synthesis.segments_abc import SegmentSolution, SegmentSolver
-
-# Pauli matrices
-X = jnp.array([[0, 1], [1, 0]], dtype=jnp.complex128)
-Y = jnp.array([[0, -1j], [1j, 0]], dtype=jnp.complex128)
-Z = jnp.array([[1, 0], [0, -1]], dtype=jnp.complex128)
-I2 = jnp.eye(2, dtype=jnp.complex128)
-
-
-# NUM_PARAMS = 6
-
-
-# @jit
-# def _params_to_unitaries(params: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray]:
-#     """Extract u0, u1 from 6D params."""
-
-#     def _rv(v: jnp.ndarray) -> jnp.ndarray:
-#         """Rotation vector to SU(2) via stabilized Rodriguez formula."""
-#         theta_sq = jnp.dot(v, v)
-#         theta = jnp.sqrt(theta_sq)
-#         half = 0.5 * theta
-
-#         # Taylor expansion for small angles: sin(x)/x ≈ 1 - x²/6 + x⁴/120
-#         # cos(x) ≈ 1 - x²/2 + x⁴/24
-#         sinc_half = jnp.where(
-#             theta_sq < 1e-8,
-#             0.5 - theta_sq / 48.0,  # (1 - (θ/2)²/6) / 2
-#             jnp.sin(half) / theta,
-#         )
-#         cos_half = jnp.where(
-#             theta_sq < 1e-8,
-#             1.0 - theta_sq / 8.0,  # 1 - (θ/2)²/2
-#             jnp.cos(half),
-#         )
-
-#         vx, vy, vz = v
-#         H = vx * X + vy * Y + vz * Z
-#         return cos_half * I2 - 1j * sinc_half * H
-
-#     return _rv(params[:3]), _rv(params[3:])
-
-
-###########################################
-# XXX TODO XXX
-# the 8d quaternion is significantly faster
-# but it breaks my edge cases
-# requires investigation
-###########################################
 
 NUM_PARAMS = 8
 
@@ -117,8 +68,57 @@ _makhlin_residual = _make_residual_fn(makhlin_invariants)
 _weyl_residual = _make_residual_fn(weyl_coordinates)
 
 
-def _make_restart_loop(run_solver, max_restarts: int):
-    """Factory that creates a jitted restart loop for a specific solver."""
+def _get_jax_matrix(inv) -> jnp.ndarray:
+    """Get JAX 4x4 unitary matrix from GateInvariants, with caching.
+
+    Avoids repeated Qiskit UnitaryGate → numpy → JAX conversion overhead
+    (~0.4ms per call). The cached array is stored on the invariants object.
+    """
+    cached = getattr(inv, "_jax_matrix", None)
+    if cached is not None:
+        return cached
+    mat = jnp.asarray(np.array(inv.unitary, dtype=np.complex128), dtype=jnp.complex128)
+    try:
+        inv._jax_matrix = mat
+    except AttributeError:
+        pass  # frozen dataclass or similar
+    return mat
+
+
+@jit
+def _compute_target_invariants(target_mat):
+    """Fused target Makhlin + Weyl invariant computation (1 dispatch instead of 2)."""
+    return makhlin_invariants(target_mat), weyl_coordinates(target_mat)
+
+
+@jit
+def _detect_branch_and_weyl_target(makhlin_params, prefix_op, basis_gate, target_weyl):
+    """Fused branch detection (1 dispatch instead of ~5).
+
+    Constructs the current unitary from Makhlin params, computes its Weyl coordinates,
+    and determines whether the direct or rho-reflected Weyl target is closer.
+    """
+    U = _construct_unitary(makhlin_params, prefix_op, basis_gate)
+    constructed_weyl = weyl_coordinates(U)
+    reflected_weyl = target_weyl * jnp.array([-1.0, 1.0, -1.0]) + jnp.array(
+        [1.0, 0.0, 0.0]
+    )
+    direct_res = jnp.max(jnp.abs(constructed_weyl - target_weyl))
+    reflect_res = jnp.max(jnp.abs(constructed_weyl - reflected_weyl))
+    use_reflected = reflect_res < direct_res
+    return jnp.where(use_reflected, reflected_weyl, target_weyl)
+
+
+def _make_gn_restart_loop(
+    residual_fn, *, maxiter: int, max_restarts: int, solver_tol: float
+):
+    """Factory: Gauss-Newton restart loop with early exit.
+
+    Replaces JaxOpt GaussNewton with a lean implementation using only
+    JAX primitives. For our underdetermined system (3 residuals, 8 params),
+    uses the minimum-norm step via a 3x3 solve:
+        dx = J^T (J J^T + eps*I)^{-1} (-r)
+    """
 
     @jit
     def run_until_success(
@@ -139,23 +139,45 @@ def _make_restart_loop(run_solver, max_restarts: int):
 
             key_i = fold_in(key, i)
             init = uniform(key_i, shape=(NUM_PARAMS,), minval=init_min, maxval=init_max)
-            result = run_solver(
-                init, prefix_op=prefix_op, basis_gate=basis_gate, target_inv=target_inv
+
+            # --- Inner GN iterations ---
+            def gn_cond(inner):
+                j, _, prev_norm = inner
+                return (j < maxiter) & (prev_norm > solver_tol)
+
+            def gn_body(inner):
+                j, x, _ = inner
+                r = residual_fn(x, prefix_op, basis_gate, target_inv)
+                J = jacrev(residual_fn, argnums=0)(x, prefix_op, basis_gate, target_inv)
+                # Minimum-norm GN step via 3x3 Gram solve
+                gram = J @ J.T + 1e-14 * jnp.eye(J.shape[0], dtype=jnp.float64)
+                w = jnp.linalg.solve(gram, -r)
+                x_new = x + J.T @ w
+                r_new = residual_fn(x_new, prefix_op, basis_gate, target_inv)
+                new_norm = jnp.max(jnp.abs(r_new))
+                finite = jnp.all(jnp.isfinite(x_new)) & jnp.isfinite(new_norm)
+                return (
+                    j + 1,
+                    jnp.where(finite, x_new, x),
+                    jnp.where(finite, new_norm, jnp.inf),
+                )
+
+            r0 = residual_fn(init, prefix_op, basis_gate, target_inv)
+            init_norm = jnp.max(jnp.abs(r0))
+            _, final_x, final_res = lax.while_loop(
+                gn_cond, gn_body, (jnp.int32(0), init, init_norm)
             )
 
-            res = jnp.max(jnp.abs(result.state.residual))
-            params_finite = jnp.all(jnp.isfinite(result.params))
-            improved = (res < best_res) & params_finite
-
-            # If solver diverged (inf/nan params), fall back to the init
-            safe_params = jnp.where(params_finite, result.params, init)
+            params_finite = jnp.all(jnp.isfinite(final_x))
+            improved = (final_res < best_res) & params_finite
+            safe_params = jnp.where(params_finite, final_x, init)
 
             return (
                 i + 1,
                 key,
                 jnp.where(improved, safe_params, best_params),
-                jnp.where(improved, res, best_res),
-                done | (res <= tol),
+                jnp.where(improved, final_res, best_res),
+                done | (final_res <= tol),
             )
 
         init_state = (
@@ -171,13 +193,22 @@ def _make_restart_loop(run_solver, max_restarts: int):
     return run_until_success
 
 
-def _make_warmstart_loop(
-    run_solver, residual_fn, max_restarts: int, perturb_scale: float
+def _make_lm_warmstart_loop(
+    residual_fn,
+    *,
+    maxiter: int,
+    max_restarts: int,
+    solver_tol: float,
+    perturb_scale: float,
 ):
-    """Factory that creates a jitted warm-start restart loop.
+    """Factory: Levenberg-Marquardt warm-start restart loop.
+
+    Replaces JaxOpt LevenbergMarquardt with a lean implementation.
+    Uses adaptive damping with the same 3x3 Gram solve as GN:
+        dx = J^T (J J^T + lam*I)^{-1} (-r)
 
     Iteration 0 evaluates the warm start directly (no solver call).
-    Subsequent iterations run the solver with perturbations.
+    Subsequent iterations run LM with perturbations.
     """
 
     @jit
@@ -201,21 +232,49 @@ def _make_warmstart_loop(
                 key_i, shape=(NUM_PARAMS,), minval=-perturb_scale, maxval=perturb_scale
             )
 
-            # Iteration 0: just evaluate warm_start, no solver
-            # Iteration 1+: run solver with perturbed warm_start
+            # Iteration 0: just evaluate warm_start, no solver call
+            # Iteration 1+: run LM with perturbed warm_start
             def iter_zero(_):
                 res_vec = residual_fn(warm_start, prefix_op, basis_gate, target_inv)
                 return warm_start, jnp.max(jnp.abs(res_vec))
 
             def iter_nonzero(_):
                 init = warm_start + perturb
-                result = run_solver(
-                    init,
-                    prefix_op=prefix_op,
-                    basis_gate=basis_gate,
-                    target_inv=target_inv,
+
+                # --- Inner LM iterations with adaptive damping ---
+                def lm_cond(inner):
+                    j, _, prev_norm, _ = inner
+                    return (j < maxiter) & (prev_norm > solver_tol)
+
+                def lm_body(inner):
+                    j, x, prev_norm, lam = inner
+                    r = residual_fn(x, prefix_op, basis_gate, target_inv)
+                    J = jacrev(residual_fn, argnums=0)(
+                        x, prefix_op, basis_gate, target_inv
+                    )
+                    # Damped step: dx = J^T (J J^T + lam*I)^{-1} (-r)
+                    gram = J @ J.T + lam * jnp.eye(J.shape[0], dtype=jnp.float64)
+                    w = jnp.linalg.solve(gram, -r)
+                    x_new = x + J.T @ w
+                    r_new = residual_fn(x_new, prefix_op, basis_gate, target_inv)
+                    new_norm = jnp.max(jnp.abs(r_new))
+                    # Adaptive damping: decrease on improvement, increase on failure
+                    improved = jnp.isfinite(new_norm) & (new_norm < prev_norm)
+                    lam_new = jnp.where(improved, lam * 0.5, lam * 2.0)
+                    lam_new = jnp.clip(lam_new, 1e-12, 1e6)
+                    return (
+                        j + 1,
+                        jnp.where(improved, x_new, x),
+                        jnp.where(improved, new_norm, prev_norm),
+                        lam_new,
+                    )
+
+                r0 = residual_fn(init, prefix_op, basis_gate, target_inv)
+                init_norm = jnp.max(jnp.abs(r0))
+                _, final_x, final_res, _ = lax.while_loop(
+                    lm_cond, lm_body, (jnp.int32(0), init, init_norm, jnp.float64(1e-3))
                 )
-                return result.params, jnp.max(jnp.abs(result.state.residual))
+                return final_x, final_res
 
             params, res = lax.cond(i == 0, iter_zero, iter_nonzero, None)
             params_finite = jnp.all(jnp.isfinite(params))
@@ -254,35 +313,19 @@ class JaxLMSegmentSolver(SegmentSolver):
         self.config = config or GulpsConfig()
         self._key = PRNGKey(rng_seed or 0)
 
-        makhlin_solver = GaussNewton(
-            residual_fun=_makhlin_residual,
+        self._solve_makhlin = _make_gn_restart_loop(
+            _makhlin_residual,
             maxiter=self.config.makhlin_maxiter,
-            tol=self.config.segment_solver_tol,
-            implicit_diff=False,
-            implicit_diff_solve=solve_lu,
-            jit=True,
+            max_restarts=self.config.makhlin_restarts,
+            solver_tol=self.config.segment_solver_tol,
         )
 
-        weyl_solver = LevenbergMarquardt(
-            residual_fun=_weyl_residual,
-            maxiter=self.config.weyl_maxiter,
-            tol=self.config.segment_solver_tol,
-            implicit_diff=False,
-            jit=True,
-            materialize_jac=True,
-            solver=solve_lu,
-        )
-
-        self._solve_makhlin = _make_restart_loop(
-            makhlin_solver.run,
-            self.config.makhlin_restarts,
-        )
-
-        self._solve_weyl = _make_warmstart_loop(
-            weyl_solver.run,
+        self._solve_weyl = _make_lm_warmstart_loop(
             _weyl_residual,
-            self.config.weyl_restarts,
-            self.config.weyl_perturb_scale,
+            maxiter=self.config.weyl_maxiter,
+            max_restarts=self.config.weyl_restarts,
+            solver_tol=self.config.segment_solver_tol,
+            perturb_scale=self.config.weyl_perturb_scale,
         )
 
     def try_solve(
@@ -300,17 +343,14 @@ class JaxLMSegmentSolver(SegmentSolver):
         """
         start_time = time.perf_counter()
 
-        # Extract matrices from invariants
-        prefix_op = np.array(prefix_inv.unitary, dtype=np.complex128)
-        basis_gate = np.array(basis_inv.unitary, dtype=np.complex128)
-        target = np.array(target_inv.unitary, dtype=np.complex128)
+        # Use cached JAX arrays from GateInvariants when available,
+        # avoiding repeated Qiskit→numpy→JAX conversion overhead
+        j_prefix = _get_jax_matrix(prefix_inv)
+        j_gate = _get_jax_matrix(basis_inv)
+        j_target = _get_jax_matrix(target_inv)
 
-        j_prefix = jnp.asarray(prefix_op, dtype=jnp.complex128)
-        j_gate = jnp.asarray(basis_gate, dtype=jnp.complex128)
-        j_target = jnp.asarray(target, dtype=jnp.complex128)
-
-        target_makhlin = makhlin_invariants(j_target)
-        target_weyl = weyl_coordinates(j_target)
+        # Fused target invariant computation (1 dispatch instead of 2)
+        target_makhlin, target_weyl = _compute_target_invariants(j_target)
 
         # Stage 1: Makhlin exploration
         makhlin_params, makhlin_res = self._solve_makhlin(
@@ -330,18 +370,10 @@ class JaxLMSegmentSolver(SegmentSolver):
                 f"Stage 1 (Makhlin) failed: best residual {float(makhlin_res):.2e}"
             )
 
-        # Determine Weyl branch (direct vs reflected)
-        U = _construct_unitary(makhlin_params, j_prefix, j_gate)
-        constructed_weyl = weyl_coordinates(U)
-        reflected_weyl = target_weyl * jnp.array([-1.0, 1.0, -1.0]) + jnp.array(
-            [1.0, 0.0, 0.0]
+        # Fused branch detection (1 dispatch instead of ~5)
+        weyl_target = _detect_branch_and_weyl_target(
+            makhlin_params, j_prefix, j_gate, target_weyl
         )
-
-        direct_res = jnp.max(jnp.abs(constructed_weyl - target_weyl))
-        reflect_res = jnp.max(jnp.abs(constructed_weyl - reflected_weyl))
-        use_reflected = reflect_res < direct_res
-
-        weyl_target = jnp.where(use_reflected, reflected_weyl, target_weyl)
 
         # Stage 2: Weyl polishing with warm start
         weyl_params, weyl_res = self._solve_weyl(

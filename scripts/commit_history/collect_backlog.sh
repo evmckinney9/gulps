@@ -61,6 +61,7 @@ if [[ ! -f "$OUTPUT_CSV" ]]; then
     echo "commit,date,subject,status,isa1_median,isa2_median,isa3_median" > "$OUTPUT_CSV"
 fi
 
+
 # --- oldest commit to benchmark (don't go past this) ---
 OLDEST_COMMIT="1e7924fc4f2d2d18f46c7c93c8a3811747879d59"
 
@@ -126,43 +127,56 @@ for COMMIT in $COMMITS; do
 
     echo -n "[$IDX/$TOTAL] $SHORT $SUBJECT ... "
 
-    cleanup_worktree
-    git worktree add --detach "$WORKTREE_DIR" "$COMMIT" 2>/dev/null
-
-    cp "$BENCHMARK_SCRIPT" "$WORKTREE_DIR/benchmark_task.py"
-
-    ERRLOG="$WORKTREE_DIR/_bench_err.log"
-
-    pushd "$WORKTREE_DIR" > /dev/null
-
-    if [[ ! -f "pyproject.toml" ]] && [[ ! -f "setup.py" ]]; then
-        echo ""
-        echo "STOPPED at $SHORT: no pyproject.toml or setup.py"
-        cleanup_worktree
-        exit 1
+    IS_HEAD=false
+    if [[ "$COMMIT" == "$(git rev-parse HEAD)" ]]; then
+        IS_HEAD=true
     fi
 
-    # If this commit uses the monodromy fork, uninstall first so pip fetches the correct version
-    if grep -q "monodromy" pyproject.toml 2>/dev/null; then
-        "$REPO_ROOT/.venv/bin/pip" uninstall monodromy -y --quiet 2>/dev/null || true
-    fi
-
-    # Install — show errors if it fails
-    if ! "$REPO_ROOT/.venv/bin/pip" install -e . --quiet 2>"$ERRLOG"; then
-        echo ""
-        echo "STOPPED at $SHORT: pip install failed"
-        echo "--- error log ---"
-        cat "$ERRLOG"
-        popd > /dev/null
+    if $IS_HEAD; then
+        # HEAD: benchmark in-place — no worktree, no reinstall needed
+        ERRLOG="/tmp/_bench_head_err.log"
+        BENCH_SCRIPT="$BENCHMARK_SCRIPT"
+    else
+        # Historical commit: check out via worktree
         cleanup_worktree
-        exit 1
+        git worktree add --detach "$WORKTREE_DIR" "$COMMIT" 2>/dev/null
+
+        cp "$BENCHMARK_SCRIPT" "$WORKTREE_DIR/benchmark_task.py"
+
+        ERRLOG="$WORKTREE_DIR/_bench_err.log"
+        BENCH_SCRIPT="$WORKTREE_DIR/benchmark_task.py"
+
+        pushd "$WORKTREE_DIR" > /dev/null
+
+        if [[ ! -f "pyproject.toml" ]] && [[ ! -f "setup.py" ]]; then
+            echo ""
+            echo "STOPPED at $SHORT: no pyproject.toml or setup.py"
+            cleanup_worktree
+            exit 1
+        fi
+
+        # If this commit uses the monodromy fork, uninstall first so pip fetches the correct version
+        if grep -q "monodromy" pyproject.toml 2>/dev/null; then
+            "$REPO_ROOT/.venv/bin/pip" uninstall monodromy -y --quiet 2>/dev/null || true
+        fi
+
+        # Install — show errors if it fails
+        if ! "$REPO_ROOT/.venv/bin/pip" install -e . --quiet 2>"$ERRLOG"; then
+            echo ""
+            echo "STOPPED at $SHORT: pip install failed"
+            echo "--- error log ---"
+            cat "$ERRLOG"
+            popd > /dev/null
+            cleanup_worktree
+            exit 1
+        fi
     fi
 
     # Run benchmark — stdout=JSON, stderr=progress+errors (tee to terminal and log)
     RESULT=""
     BENCH_ARGS=""
     if $DRY_RUN; then BENCH_ARGS="-n 10"; fi
-    if RESULT=$("$REPO_ROOT/.venv/bin/python" benchmark_task.py $BENCH_ARGS 2> >(tee "$ERRLOG" >&2)); then
+    if RESULT=$("$REPO_ROOT/.venv/bin/python" "$BENCH_SCRIPT" $BENCH_ARGS 2> >(tee "$ERRLOG" >&2)); then
         CSV_VALS=$("$REPO_ROOT/.venv/bin/python" -c "
 import json, sys
 d = json.loads(sys.argv[1])
@@ -180,12 +194,12 @@ print(','.join(str(d.get(k, '')) for k in ['isa1','isa2','isa3']))
         echo "STOPPED at $SHORT: benchmark_task.py failed"
         echo "--- error log ---"
         cat "$ERRLOG"
-        popd > /dev/null
+        if ! $IS_HEAD; then popd > /dev/null; fi
         cleanup_worktree
         exit 1
     fi
 
-    popd > /dev/null
+    if ! $IS_HEAD; then popd > /dev/null; fi
 done
 
 echo ""
