@@ -328,6 +328,42 @@ class JaxLMSegmentSolver(SegmentSolver):
             perturb_scale=self.config.weyl_perturb_scale,
         )
 
+        # Fuse the full pipeline into a single JIT dispatch.
+        # Inner @jit functions are inlined when called from a JIT context,
+        # eliminating 4 Python→XLA roundtrips per solve.
+        solve_makhlin = self._solve_makhlin
+        solve_weyl = self._solve_weyl
+
+        @jit
+        def _fused_solve(key, prefix_op, basis_gate, target_mat, makhlin_tol, weyl_tol):
+            target_makhlin, target_weyl = _compute_target_invariants(target_mat)
+
+            makhlin_params, makhlin_res = solve_makhlin(
+                key,
+                prefix_op,
+                basis_gate,
+                target_makhlin,
+                makhlin_tol,
+            )
+
+            weyl_target = _detect_branch_and_weyl_target(
+                makhlin_params, prefix_op, basis_gate, target_weyl
+            )
+
+            weyl_params, weyl_res = solve_weyl(
+                key,
+                prefix_op,
+                basis_gate,
+                weyl_target,
+                weyl_tol,
+                makhlin_params,
+            )
+
+            u0, u1 = _params_to_unitaries(weyl_params)
+            return u0, u1, weyl_res, makhlin_res
+
+        self._fused_solve = _fused_solve
+
     def try_solve(
         self,
         prefix_inv,
@@ -343,49 +379,19 @@ class JaxLMSegmentSolver(SegmentSolver):
         """
         start_time = time.perf_counter()
 
-        # Use cached JAX arrays from GateInvariants when available,
-        # avoiding repeated Qiskit→numpy→JAX conversion overhead
         j_prefix = _get_jax_matrix(prefix_inv)
         j_gate = _get_jax_matrix(basis_inv)
         j_target = _get_jax_matrix(target_inv)
 
-        # Fused target invariant computation (1 dispatch instead of 2)
-        target_makhlin, target_weyl = _compute_target_invariants(j_target)
-
-        # Stage 1: Makhlin exploration
-        makhlin_params, makhlin_res = self._solve_makhlin(
+        u0, u1, weyl_res, makhlin_res = self._fused_solve(
             self._key,
             j_prefix,
             j_gate,
-            target_makhlin,
+            j_target,
             self.config.makhlin_conv_tol,
-        )
-
-        # Optional early check (skipped by default to avoid device sync)
-        if (
-            self.config.strict_convergence_checks
-            and float(makhlin_res) > self.config.makhlin_conv_tol
-        ):
-            raise RuntimeError(
-                f"Stage 1 (Makhlin) failed: best residual {float(makhlin_res):.2e}"
-            )
-
-        # Fused branch detection (1 dispatch instead of ~5)
-        weyl_target = _detect_branch_and_weyl_target(
-            makhlin_params, j_prefix, j_gate, target_weyl
-        )
-
-        # Stage 2: Weyl polishing with warm start
-        weyl_params, weyl_res = self._solve_weyl(
-            self._key,
-            j_prefix,
-            j_gate,
-            weyl_target,
             self.config.weyl_conv_tol,
-            makhlin_params,
         )
 
-        # Check residual (need this value for return anyway)
         weyl_res_py = float(weyl_res)
         if weyl_res_py > self.config.weyl_conv_tol:
             makhlin_res_py = float(makhlin_res)
@@ -394,7 +400,6 @@ class JaxLMSegmentSolver(SegmentSolver):
                 f"Stage 2 residual {weyl_res_py:.2e}"
             )
 
-        u0, u1 = _params_to_unitaries(weyl_params)
         return SegmentSolution(
             u0=u0,
             u1=u1,
