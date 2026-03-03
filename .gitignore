@@ -1,5 +1,7 @@
 .vscode
 
+scripts/temp_diagnostics/
+
 #ruff
 .ruff_cache
 

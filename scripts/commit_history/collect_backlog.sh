@@ -202,6 +202,12 @@ print(','.join(str(d.get(k, '')) for k in ['isa1','isa2','isa3']))
     if ! $IS_HEAD; then popd > /dev/null; fi
 done
 
+# Restore the editable install from the repo root so the venv points at HEAD,
+# not the (now-deleted) worktree directory.
+echo ""
+echo "Restoring editable install from HEAD..."
+"$REPO_ROOT/.venv/bin/pip" install -e "$REPO_ROOT" --quiet
+
 echo ""
 echo "=== Done. Results in $OUTPUT_CSV ==="
 echo "Total collected: $(tail -n +2 "$OUTPUT_CSV" | wc -l)"
