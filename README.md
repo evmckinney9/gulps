@@ -31,7 +31,7 @@ gate_set, costs, names = zip(*isa)
 decomposer = GulpsDecomposer(gate_set=gate_set, costs=costs, names=names)
 ```
 
-That's it. Once initialized, you can call the decomposer with either a Qiskit `Gate` or a 4×4 `np.ndarray` representing a two-qubit unitary:
+That's it. Once initialized, you can call the decomposer with either a Qiskit `Gate` or a 4x4 `np.ndarray` representing a two-qubit unitary:
 ```python
 from qiskit.quantum_info import random_unitary
 from qiskit import QuantumCircuit

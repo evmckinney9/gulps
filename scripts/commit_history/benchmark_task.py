@@ -43,9 +43,6 @@ import time
 def bench(decomposer, name, n):
     from qiskit.quantum_info import random_unitary
 
-    # JIT warmup
-    decomposer(random_unitary(4, seed=9999))
-
     times = []
     errors = 0
     for seed in range(n):

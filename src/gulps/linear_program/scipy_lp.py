@@ -62,7 +62,7 @@ class _LPScaffolding:
                 offset = LEN_GATE_INVARIANTS * i
                 A_ub[rows, offset : offset + LEN_GATE_INVARIANTS] += _ciplus1_block
 
-        # CSC, bounds, and HiGHS options — all length-dependent
+        # CSC, bounds, and HiGHS options; all length-dependent
         if num_params > 0:
             A_csc = csc_array(A_ub)
             self.csc_indptr = A_csc.indptr.copy()
@@ -173,7 +173,7 @@ class MinimalOrderedISAConstraints(ISAConstraints):
                 )
             return ConstraintSolution(success=False)
 
-        # 2-gate sentence (no free variables — feasibility check only)
+        # 2-gate sentence (no free variables, feasibility check only)
         if self.num_params == 0:
             if np.all(tol <= self.b_ub):
                 return ConstraintSolution(
@@ -183,7 +183,7 @@ class MinimalOrderedISAConstraints(ISAConstraints):
                 )
             return ConstraintSolution(success=False)
 
-        # 3+ gate sentence — call HiGHS via cached scaffolding
+        # 3+ gate sentence - call HiGHS via cached scaffolding
         s = self._scaffolding
         res = _highs_wrapper(
             s.c,

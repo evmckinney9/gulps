@@ -14,8 +14,6 @@ SEGMENT_TIME_LIMIT = 0.2  # seconds
 def _run_slow_seeds(isa, seeds):
     """Shared helper: warm up, then assert fidelity + timing on each seed."""
     decomposer = GulpsDecomposer(isa=isa)
-    decomposer(random_unitary(4, seed=0))  # JIT warmup
-
     for seed in seeds:
         u = random_unitary(4, seed=seed)
         v = decomposer(u)

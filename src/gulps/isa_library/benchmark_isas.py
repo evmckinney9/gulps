@@ -91,9 +91,9 @@ def get_comparison_isas():
     """ISAs for cross-decomposer comparison (gulps vs nuop vs bsqkit).
 
     Three representative cases:
-        1. Non-standard discrete gate (iswap^1/4) — tests basic non-CX support.
-        2. Heterogeneous discrete ISA — multiple gate families, tests mixed-ISA handling.
-        3. Continuous fSim family — tests continuous parameter optimization.
+        1. Non-standard discrete gate (iswap^1/4) - tests basic non-CX support.
+        2. Heterogeneous discrete ISA - multiple gate families, tests mixed-ISA handling.
+        3. TODO FIXME Continuous fSim family - tests continuous parameter optimization.
 
     Returns:
         List of (name, gate_set) tuples.

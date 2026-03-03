@@ -12,9 +12,6 @@ def bench_isa(isa, N=1000):
     name = "+".join(g.name for g in isa.gate_set)
     decomposer = GulpsDecomposer(isa=isa)
 
-    # JIT warmup
-    decomposer(random_unitary(4, seed=9999))
-
     fidelities = []
     all_timings = []
     failures = 0
@@ -49,7 +46,7 @@ def main():
     N = 1_000
     isas = get_slim_isas()
 
-    print(f"Benchmarking {len(isas)} ISAs × {N} random unitaries each\n")
+    print(f"Benchmarking {len(isas)} ISAs x {N} random unitaries each\n")
 
     results = []
     for isa in isas:
