@@ -1,78 +1,70 @@
-# test_decomposer_end_to_end.py
+"""End-to-end fidelity tests across every ISA in the fixture library."""
 
 import numpy as np
 import pytest
 from qiskit.circuit.library import iSwapGate
 from qiskit.quantum_info import Operator, average_gate_fidelity, random_unitary
 
-from gulps.core.invariants import GateInvariants
+from gulps.core.isa import DiscreteISA
 from gulps.gulps_decomposer import GulpsDecomposer
 from tests.fixtures.isas import get_all_test_isas
 
-N_tests = 100
+N_RANDOM = 100
+FIDELITY_TOL = 1 - 1e-6
+
+
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
+@pytest.fixture(params=get_all_test_isas(precompute_polytopes=True))
+def decomposer(request):
+    return GulpsDecomposer(isa=request.param)
 
 
 @pytest.fixture(params=get_all_test_isas())
-def decomposer_fixture(request):
-    gates, costs = request.param
-    return GulpsDecomposer(gates, costs, precompute_polytopes=True)
+def decomposer_no_precompute(request):
+    return GulpsDecomposer(isa=request.param)
 
 
-@pytest.fixture(params=get_all_test_isas())
-def decomposer_fixture_no_precompute(request):
-    gates, costs = request.param
-    return GulpsDecomposer(gates, costs, precompute_polytopes=False)
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+def _assert_fidelity(target, circuit, label=""):
+    fid = average_gate_fidelity(Operator(target), Operator(circuit))
+    assert fid > FIDELITY_TOL, (
+        f"Fidelity too low{' (' + label + ')' if label else ''}: {fid}"
+    )
 
 
-def test_decomposer_on_local_unitary():
-    # Local-only gate: U\otimes V
+# ---------------------------------------------------------------------------
+# Tests
+# ---------------------------------------------------------------------------
+def test_local_unitary():
+    """A tensor-product target (zero entangling power) should decompose perfectly."""
     U = random_unitary(2, seed=42).data
-    V = random_unitary(2, seed=42).data
+    V = random_unitary(2, seed=43).data
     target = np.kron(U, V)
 
-    decomposer = GulpsDecomposer(
-        gate_set=[iSwapGate().power(1 / 2)],
-        costs=[1.0],
-        precompute_polytopes=True,
-    )
-    output_circuit = decomposer._run(target)
-    fidelity = average_gate_fidelity(Operator(target), Operator(output_circuit))
-    assert fidelity > 1 - 1e-6, f"Local-only fidelity too low: {fidelity}"
+    isa = DiscreteISA([iSwapGate().power(1 / 2)], [0.5], ["sq2iswap"])
+    _assert_fidelity(target, GulpsDecomposer(isa=isa)(target), "local")
 
 
-def test_decomposer_on_exact_isa_gate():
+def test_exact_isa_gate():
+    """A target that *is* a basis gate should round-trip exactly."""
     gate = iSwapGate().power(1 / 2)
-
-    decomposer = GulpsDecomposer(
-        gate_set=[gate],
-        costs=[1.0],
-        precompute_polytopes=True,
-    )
-
-    output_circuit = decomposer._run(gate)
-    fidelity = average_gate_fidelity(Operator(gate), Operator(output_circuit))
-    assert fidelity > 1 - 1e-6, f"ISA gate fidelity too low: {fidelity}"
+    isa = DiscreteISA([gate], [0.5], ["sq2iswap"])
+    _assert_fidelity(gate, GulpsDecomposer(isa=isa)(gate), "exact ISA gate")
 
 
-def test_decomposer_fidelity_on_random_unitaries(decomposer_fixture):
-    for seed in range(N_tests):
-        target_unitary = random_unitary(4, seed=seed)
-        output_circuit = decomposer_fixture._run(target_unitary)
-
-        fidelity = average_gate_fidelity(
-            Operator(target_unitary), Operator(output_circuit)
-        )
-        assert fidelity > 1 - 1e-6, f"Fidelity too low at seed {seed}: {fidelity}"
+def test_random_unitaries(decomposer):
+    """N_RANDOM random unitaries x every ISA with polytope precompute."""
+    for seed in range(N_RANDOM):
+        u = random_unitary(4, seed=seed)
+        _assert_fidelity(u, decomposer(u), f"seed={seed}")
 
 
-def test_decomposer_fidelity_no_precompute_on_random_unitaries(
-    decomposer_fixture_no_precompute,
-):
-    for seed in range(N_tests):
-        target_unitary = random_unitary(4, seed=seed)
-        output_circuit = decomposer_fixture_no_precompute._run(target_unitary)
-
-        fidelity = average_gate_fidelity(
-            Operator(target_unitary), Operator(output_circuit)
-        )
-        assert fidelity > 1 - 1e-6, f"Fidelity too low at seed {seed}: {fidelity}"
+def test_random_unitaries_no_precompute(decomposer_no_precompute):
+    """Same sweep but with on-demand sentence enumeration."""
+    for seed in range(N_RANDOM):
+        u = random_unitary(4, seed=seed)
+        _assert_fidelity(u, decomposer_no_precompute(u), f"seed={seed}")

@@ -56,8 +56,8 @@ class GateInvariants:
         cls, gate: Gate | np.ndarray, enforce_alcove=False, name: Optional[str] = None
     ) -> "GateInvariants":
         U = Operator(gate).data
-        if not isinstance(gate, Gate):
-            gate = UnitaryGate(gate, label=name)
+        if not isinstance(gate, UnitaryGate):
+            gate = UnitaryGate(U, label=name)
         if enforce_alcove:
             coords = tuple(unitary_to_monodromy_coordinate(U))
         else:
