@@ -1,12 +1,30 @@
 from typing import List
 
 import numpy as np
-from scipy.optimize import linprog
+from scipy.optimize._highspy._core import (
+    HighsDebugLevel,
+    HighsModelStatus,
+    ObjSense,
+)
+from scipy.optimize._highspy._core import (
+    simplex_constants as _s_c,
+)
+from scipy.optimize._highspy._highs_wrapper import _highs_wrapper
+from scipy.optimize._linprog_highs import _replace_inf
+from scipy.sparse import csc_array
 
 from gulps.config import GulpsConfig
 from gulps.core.invariants import LEN_GATE_INVARIANTS, GateInvariants
 from gulps.linear_program.lp_abc import ConstraintSolution, ISAConstraints
 from gulps.linear_program.qlr import len_qlr, qlr_inequalities
+
+# Singleton empty integrality array (avoids repeated allocation)
+_EMPTY_INTEGRALITY = np.empty(0, dtype=np.uint8)
+
+# Successful HiGHS statuses
+_OPTIMAL_STATUSES = frozenset(
+    {HighsModelStatus.kOptimal, HighsModelStatus.kObjectiveBound}
+)
 
 
 class MinimalOrderedISAConstraints(ISAConstraints):
@@ -43,7 +61,36 @@ class MinimalOrderedISAConstraints(ISAConstraints):
         self.c = -np.ones(self.num_params)
 
         self.A_ub, self.b_ub = self._setup_inequalities()
-        self.A_eq, self.b_eq = None, None  # no equalities
+
+        # Pre-compute CSC representation and HiGHS options dict once.
+        # This avoids the per-solve overhead of scipy.linprog option validation
+        # which creates a HighsOptionsManager for every option on every call (~0.65s/200 calls).
+        if self.num_params > 0:
+            A_csc = csc_array(self.A_ub)
+            self._csc_indptr = A_csc.indptr.copy()
+            self._csc_indices = A_csc.indices.copy()
+            self._csc_data = A_csc.data.copy()
+            self._lhs_ub = _replace_inf(np.full(self.num_ineq, -np.inf))
+            self._lb = _replace_inf(np.full(self.num_params, -np.inf))
+            self._ub = _replace_inf(np.full(self.num_params, np.inf))
+            self._highs_options = {
+                "presolve": True,
+                "sense": ObjSense.kMinimize,
+                "solver": "simplex",
+                "time_limit": float("inf"),
+                "highs_debug_level": HighsDebugLevel.kHighsDebugLevelNone,
+                "dual_feasibility_tolerance": self.config.lp_feasibility_tol,
+                "ipm_optimality_tolerance": None,
+                "log_to_console": False,
+                "mip_max_nodes": None,
+                "output_flag": False,
+                "primal_feasibility_tolerance": self.config.lp_feasibility_tol,
+                "simplex_dual_edge_weight_strategy": None,
+                "simplex_strategy": _s_c.SimplexStrategy.kSimplexStrategyDual,
+                "ipm_iteration_limit": None,
+                "simplex_iteration_limit": None,
+                "mip_rel_gap": None,
+            }
 
     def _setup_inequalities(self):
         A_ub = np.zeros((self.num_ineq, self.num_params))
@@ -105,26 +152,29 @@ class MinimalOrderedISAConstraints(ISAConstraints):
                 )
             return ConstraintSolution(success=False)
 
-        result = linprog(
-            c=self.c,
-            A_ub=self.A_ub,
-            b_ub=self.b_ub,
-            method="highs",
-            bounds=(None, None),
-            options={
-                "disp": log_output,
-                "presolve": True,
-                "primal_feasibility_tolerance": self.config.lp_feasibility_tol,
-                "dual_feasibility_tolerance": self.config.lp_feasibility_tol,
-            },
+        # Call HiGHS directly, bypassing scipy.linprog option validation overhead
+        rhs = _replace_inf(self.b_ub)
+        res = _highs_wrapper(
+            self.c,
+            self._csc_indptr,
+            self._csc_indices,
+            self._csc_data,
+            self._lhs_ub,
+            rhs,
+            self._lb,
+            self._ub,
+            _EMPTY_INTEGRALITY,
+            self._highs_options,
         )
-        if not result.success:
+        if res.get("status") not in _OPTIMAL_STATUSES:
             return ConstraintSolution(success=False)
+
+        x = res["x"]
 
         # Extract intermediate invariants from LP solution vector
         lp_invariants = [
-            GateInvariants(tuple(result.x[i : i + LEN_GATE_INVARIANTS]))
-            for i in range(0, len(result.x), LEN_GATE_INVARIANTS)
+            GateInvariants(tuple(x[i : i + LEN_GATE_INVARIANTS]))
+            for i in range(0, len(x), LEN_GATE_INVARIANTS)
         ]
         intermediates = (self.isa_sequence[0], *lp_invariants, self._target_def)
 

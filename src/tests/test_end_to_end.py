@@ -9,8 +9,8 @@ from gulps.core.isa import DiscreteISA
 from gulps.gulps_decomposer import GulpsDecomposer
 from tests.fixtures.isas import get_all_test_isas
 
-N_RANDOM = 100
-FIDELITY_TOL = 1 - 1e-6
+N_RANDOM = 20
+FIDELITY_TOL = 1 - 1e-8
 
 
 # ---------------------------------------------------------------------------
@@ -31,9 +31,9 @@ def decomposer_no_precompute(request):
 # ---------------------------------------------------------------------------
 def _assert_fidelity(target, circuit, label=""):
     fid = average_gate_fidelity(Operator(target), Operator(circuit))
-    assert fid > FIDELITY_TOL, (
-        f"Fidelity too low{' (' + label + ')' if label else ''}: {fid}"
-    )
+    assert (
+        fid > FIDELITY_TOL
+    ), f"Fidelity too low{' (' + label + ')' if label else ''}: {fid}"
 
 
 # ---------------------------------------------------------------------------

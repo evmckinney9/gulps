@@ -39,6 +39,8 @@ def bench_isa(isa, N=1000):
         "fid_min": float(np.min(fidelities)),
         "mean_ms": float(np.mean(times)) * 1000 if times else float("inf"),
         "median_ms": float(np.median(times)) * 1000 if times else float("inf"),
+        "p95_ms": float(np.percentile(times, 95)) * 1000 if times else float("inf"),
+        "max_ms": float(np.max(times)) * 1000 if times else float("inf"),
     }
 
 
@@ -57,6 +59,8 @@ def main():
             f"  {r['name']:30s}: "
             f"mean={r['mean_ms']:6.1f} ms  "
             f"median={r['median_ms']:6.1f} ms  "
+            f"p95={r['p95_ms']:6.1f} ms  "
+            f"max={r['max_ms']:7.1f} ms  "
             f"({r['n'] - r['failures']}/{r['n']} ok, "
             f"fid_min={r['fid_min']:.8f})"
         )
