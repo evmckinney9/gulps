@@ -54,3 +54,4 @@ e403cbfc9d8d499201dce734d2f5627ee6711dfb,2026-03-02T20:57:13-05:00,fix: double c
 b39d0ac3e6a6ba8cd7db21a4ed8392c867d08038,2026-03-02T23:06:08-05:00,feat: remove jaxopt dependency; performance increase,OK,0.007813,0.008584,0.007666
 4c9cde2f1031a27faec43b1e38dbd552f4a7c257,2026-03-02T23:55:50-05:00,test: update test fixtures,OK,0.007586,0.008056,0.007198
 3e5fe8f4bca85b4fbd41d36149102427bbe6dab1,2026-03-03T00:25:20-05:00,perf: hardcode highs call,OK,0.007396,0.007912,0.007206
+6424ee9f5ab969ccbbcfffb3bcdbead38aa5b47e,2026-03-03T01:50:50-05:00,perf: avoid redundant scipy lp highs constructions,OK,0.006299,0.007115,0.006411

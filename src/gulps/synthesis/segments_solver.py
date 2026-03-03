@@ -30,17 +30,8 @@ class SegmentSynthesizer:
         self.config = config or GulpsConfig()
         self._cache = SegmentCache(max_entries_per_step=self.config.segment_cache_size)
         self._jax_lm_solver = JaxLMSegmentSolver(config=self.config)
-
-        # Solver registry: ordered from most specific to least specific
-        # Cache checks for exact matches first, then specialized patterns, finally numeric fallback
-        self.solvers: List[SegmentSolver] = [
-            self._cache,
-            # TODO: Add more specialized solvers as discovered
-            # LinearWeylSolver(),  # (a,b,c) + (x,y,z) = (a+x, b+y, c+z) → identity
-            # Example: DiagonalWeylSolver() for (a,b,0) → (a,b',0)
-            # Example: UniformScalingSolver() for (a,a,a) + (b,b,b)
-            self._jax_lm_solver,  # Generic numeric (always succeeds)
-        ]
+        # Future: specialized solvers (LinearWeylSolver, DiagonalWeylSolver, etc.)
+        # could short-circuit the numeric fallback for structured segment patterns.
 
     def synthesize_segments(
         self,
@@ -103,25 +94,30 @@ class SegmentSynthesizer:
         dag.apply_operation_back(gate_list[0].unitary, qreg[:])
         P = gate_list[0].unitary.to_matrix()
         cache = self._cache
-        solvers = self.solvers
+        jax_lm = self._jax_lm_solver
         num_segments = len(invariant_list)
 
         # Solve and stitch each segment
         # Segment i (1-indexed): append g_i to c_{i-1} to reach c_i
+        use_cache = True
         for i in range(1, num_segments):
             step = i - 1
             prefix_inv = gate_list[0] if i == 1 else invariant_list[i - 1]
             basis_inv = gate_list[i]
             target_inv = invariant_list[i]
 
-            # Try solvers in order until one succeeds
+            # Cache lookup: once it misses, downstream prefixes diverge
+            # (LP intermediates are target-dependent) so skip future lookups.
             seg_sol = None
-            for solver in solvers:
-                seg_sol = solver.try_solve(prefix_inv, basis_inv, target_inv, step=step)
-                if seg_sol is not None:
-                    if solver is not cache and seg_sol.success:
-                        cache.put(step, prefix_inv, basis_inv, target_inv, seg_sol)
-                    break
+            if use_cache:
+                seg_sol = cache.try_solve(prefix_inv, basis_inv, target_inv, step=step)
+                if seg_sol is None:
+                    use_cache = False
+
+            if seg_sol is None:
+                seg_sol = jax_lm.try_solve(prefix_inv, basis_inv, target_inv, step=step)
+                if seg_sol is not None and seg_sol.success:
+                    cache.put(step, prefix_inv, basis_inv, target_inv, seg_sol)
 
             if seg_sol is None or not seg_sol.success:
                 residual = seg_sol.max_residual if seg_sol else float("inf")
