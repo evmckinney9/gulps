@@ -56,3 +56,5 @@ b39d0ac3e6a6ba8cd7db21a4ed8392c867d08038,2026-03-02T23:06:08-05:00,feat: remove 
 3e5fe8f4bca85b4fbd41d36149102427bbe6dab1,2026-03-03T00:25:20-05:00,perf: hardcode highs call,OK,0.007396,0.007912,0.007206
 6424ee9f5ab969ccbbcfffb3bcdbead38aa5b47e,2026-03-03T01:50:50-05:00,perf: avoid redundant scipy lp highs constructions,OK,0.006299,0.007115,0.006411
 b1134ff8f193be634d1002c29be60d767f14226c,2026-03-03T02:18:46-05:00,refactor: remove specialized solvers in segmentsynthesizer,OK,0.006067,0.006679,0.006176
+5e46bf216ab66c8ed348a5f06961c4e75d20ba05,2026-03-03T02:34:51-05:00,perf: fuse calls to jiited functions to reduce overhead,OK,0.005969,0.006863,0.006345
+0c6669a2d75a7203cbbba2985f3fff2e462e45f6,2026-03-03T12:31:17-05:00,perf: adpative makhlin/weyl convergence criteria,OK,0.006077,0.006591,0.006386
