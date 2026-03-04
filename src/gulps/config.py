@@ -24,6 +24,10 @@ class GulpsConfig:
             Used when comparing Weyl coordinates in recovery. Default: 1e-5
 
     Solver Attributes:
+        makhlin_probe_restarts: Number of random restarts for the cheap Makhlin
+            probe that decides warm-path vs cold-path dispatch.  Higher values
+            reduce cold-path frequency at negligible cost (early-exit on
+            convergence).  Default: 8
         makhlin_restarts: Number of random restarts for Stage 1 (Makhlin) optimization.
             More restarts improve robustness but increase runtime. Default: 128
         makhlin_maxiter: Maximum iterations per Stage 1 restart.
@@ -47,6 +51,8 @@ class GulpsConfig:
     equiv_recovery_tol: float = 1e-5
 
     # Solver parameters
+    # TODO, are we using both probe_restarts and restarts?
+    makhlin_probe_restarts: int = 8
     makhlin_restarts: int = 256
     makhlin_maxiter: int = 256
     weyl_restarts: int = 128

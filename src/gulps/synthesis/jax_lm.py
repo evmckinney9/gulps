@@ -249,8 +249,6 @@ class JaxLMSegmentSolver(SegmentSolver):
     Python-level fallback with separate JIT as safety net.
     """
 
-    _MAKHLIN_PROBE = 4
-
     def __init__(self, config: GulpsConfig | None = None, rng_seed: int | None = None):
         self.config = config or GulpsConfig()
         self._key = PRNGKey(rng_seed or 0)
@@ -259,7 +257,7 @@ class JaxLMSegmentSolver(SegmentSolver):
         solve_makhlin_probe = _make_gn_restart_loop(
             _makhlin_residual_fused,
             maxiter=self.config.makhlin_maxiter,
-            max_restarts=self._MAKHLIN_PROBE,
+            max_restarts=self.config.makhlin_probe_restarts,
             solver_tol=self.config.segment_solver_tol,
         )
         solve_weyl_polish = _make_lm_warmstart_loop(

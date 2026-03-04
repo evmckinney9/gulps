@@ -93,6 +93,9 @@ class SegmentCache(SegmentSolver):
             ):
                 return
 
+        if self._max_entries <= 0:
+            return
+
         new_entry = SegmentCacheEntry(
             prefix_key=pk, basis_key=bk, target_key=tk, solution=solution, hit_count=0
         )

@@ -10,9 +10,9 @@ from gulps.gulps_decomposer import GulpsDecomposer
 
 class GulpsDecompositionPass(TransformationPass):
     def __init__(self, decomposer: GulpsDecomposer, **kwargs) -> None:
-        self.requires = [Collect2qBlocks(), ConsolidateBlocks()]
-        self._decomposer = decomposer
         super().__init__()
+        self.requires = [Collect2qBlocks(), ConsolidateBlocks(force_consolidate=True)]
+        self._decomposer = decomposer
 
     def run(self, dag: DAGCircuit) -> DAGCircuit:
         for node in dag.op_nodes():
