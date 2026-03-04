@@ -15,7 +15,7 @@ REPO_ROOT = Path(
 data_set = "wsl_desktop"
 data_dir = REPO_ROOT / "scripts/commit_history" / data_set
 
-N = 6  # number of most-recent commits to show
+N = 10  # number of most-recent commits to show
 
 
 def read_csv(path):

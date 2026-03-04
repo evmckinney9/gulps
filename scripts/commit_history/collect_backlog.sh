@@ -84,15 +84,25 @@ echo "=== Machine: $(hostname), 1000 unitaries x 3 ISAs per commit ==="
 # --- already collected set (for skip logic) ---
 COLLECTED=$(cut -d',' -f1 "$OUTPUT_CSV" | tail -n +2)
 
+IDX=0
+DID_WORKTREE_INSTALL=false
+
 cleanup_worktree() {
     if [[ -d "$WORKTREE_DIR" ]]; then
         git worktree remove --force "$WORKTREE_DIR" 2>/dev/null || rm -rf "$WORKTREE_DIR"
     fi
 }
-trap cleanup_worktree EXIT
 
-IDX=0
-DID_WORKTREE_INSTALL=false
+restore_head_install() {
+    # Re-point the venv at HEAD so it isn't left pointing at a deleted worktree.
+    # Runs on every exit (normal, Ctrl+C, error) if a worktree install happened.
+    if $DID_WORKTREE_INSTALL; then
+        echo ""
+        echo "Restoring editable install from HEAD..."
+        "$REPO_ROOT/.venv/bin/pip" install -e "$REPO_ROOT" --quiet
+    fi
+}
+trap 'cleanup_worktree; restore_head_install' EXIT
 for COMMIT in $COMMITS; do
     IDX=$((IDX + 1))
     SHORT=$(git log -1 --format="%h" "$COMMIT")
@@ -203,14 +213,6 @@ print(','.join(str(d.get(k, '')) for k in ['isa1','isa2','isa3']))
 
     if ! $IS_HEAD; then popd > /dev/null; fi
 done
-
-# Restore the editable install from the repo root so the venv points at HEAD,
-# not the (now-deleted) worktree directory.
-if $DID_WORKTREE_INSTALL; then
-    echo ""
-    echo "Restoring editable install from HEAD..."
-    "$REPO_ROOT/.venv/bin/pip" install -e "$REPO_ROOT" --quiet
-fi
 
 echo ""
 echo "=== Done. Results in $OUTPUT_CSV ==="

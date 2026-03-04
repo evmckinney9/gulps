@@ -13,7 +13,6 @@ from qiskit._accelerate.two_qubit_decompose import weyl_coordinates
 from qiskit.circuit import Gate
 from qiskit.circuit.library import UnitaryGate
 from qiskit.quantum_info import Operator
-from weylchamber import canonical_gate
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +29,6 @@ class GateInvariants:
         unitary: Optional[np.ndarray] = None,
         rho_reflect: Optional["GateInvariants"] = None,
     ):
-        # XXX
         # if logspec is a np.ndarray, convert to tuple
         if isinstance(logspec, np.ndarray):
             logspec = tuple(logspec.tolist())
@@ -118,9 +116,27 @@ class GateInvariants:
 
     @property
     def canonical_matrix(self) -> np.ndarray:
-        """Canonical gate matrix (lazy computed from Weyl)."""
+        """Canonical gate matrix from Weyl coordinates."""
         if self._canonical_matrix is None:
-            self._canonical_matrix = canonical_gate(*self.weyl).full()
+            c1, c2, c3 = self.weyl
+            a = np.pi / 2 * c1
+            b = np.pi / 2 * c2
+            g = np.pi / 2 * c3
+            eig = np.exp(1j * g)
+            eig_c = np.exp(-1j * g)
+            cam = np.cos(a - b)
+            sam = np.sin(a - b)
+            cap = np.cos(a + b)
+            sap = np.sin(a + b)
+            self._canonical_matrix = np.array(
+                [
+                    [eig * cam, 0, 0, 1j * eig * sam],
+                    [0, eig_c * cap, 1j * eig_c * sap, 0],
+                    [0, 1j * eig_c * sap, eig_c * cap, 0],
+                    [1j * eig * sam, 0, 0, eig * cam],
+                ],
+                dtype=np.complex128,
+            )
         return self._canonical_matrix
 
     @property

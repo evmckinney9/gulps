@@ -69,15 +69,16 @@ _weyl_residual = _make_residual_fn(weyl_coordinates)
 
 
 def _get_jax_matrix(inv) -> jnp.ndarray:
-    """Get JAX 4x4 unitary matrix from GateInvariants, with caching.
-
-    Avoids repeated Qiskit UnitaryGate → numpy → JAX conversion overhead
-    (~0.4ms per call). The cached array is stored on the invariants object.
-    """
+    """Get JAX 4x4 unitary matrix from GateInvariants, with caching."""
     cached = getattr(inv, "_jax_matrix", None)
     if cached is not None:
         return cached
-    mat = jnp.asarray(np.array(inv.unitary, dtype=np.complex128), dtype=jnp.complex128)
+    # Use canonical_matrix directly (avoids Qiskit UnitaryGate round-trip)
+    if inv._unitary is not None:
+        mat_np = np.asarray(inv._unitary, dtype=np.complex128)
+    else:
+        mat_np = inv.canonical_matrix
+    mat = jnp.asarray(mat_np, dtype=jnp.complex128)
     try:
         inv._jax_matrix = mat
     except AttributeError:
@@ -524,9 +525,11 @@ class JaxLMSegmentSolver(SegmentSolver):
                     f"Stage 2 residual {weyl_res_py:.2e}"
                 )
 
+        # Convert to numpy once (avoids repeated JAX device→host transfers
+        # when u0/u1 are used in downstream numpy operations)
         return SegmentSolution(
-            u0=u0,
-            u1=u1,
+            u0=np.asarray(u0),
+            u1=np.asarray(u1),
             max_residual=weyl_res_py,
             success=True,
             metadata={

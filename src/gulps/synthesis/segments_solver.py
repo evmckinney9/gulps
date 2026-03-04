@@ -11,9 +11,7 @@ from gulps.config import GulpsConfig
 from gulps.core.invariants import GateInvariants
 from gulps.synthesis.jax_lm import JaxLMSegmentSolver
 from gulps.synthesis.recover_equiv import recover_local_equivalence
-from gulps.synthesis.segments_abc import SegmentSolution, SegmentSolver
 from gulps.synthesis.segments_cache import SegmentCache
-from gulps.synthesis.segments_specialized import LinearWeylSolver
 
 logger = logging.getLogger(__name__)
 
@@ -30,8 +28,6 @@ class SegmentSynthesizer:
         self.config = config or GulpsConfig()
         self._cache = SegmentCache(max_entries_per_step=self.config.segment_cache_size)
         self._jax_lm_solver = JaxLMSegmentSolver(config=self.config)
-        # Future: specialized solvers (LinearWeylSolver, DiagonalWeylSolver, etc.)
-        # could short-circuit the numeric fallback for structured segment patterns.
 
     def synthesize_segments(
         self,
@@ -132,7 +128,12 @@ class SegmentSynthesizer:
             dag.apply_operation_back(basis_inv.unitary, qreg[:])
 
             # Update accumulated unitary
-            P = np.asarray(basis_inv.unitary, dtype=np.complex128) @ np.kron(u1, u0) @ P
+            u1u0 = np.empty((4, 4), dtype=np.complex128)
+            u1u0[0:2, 0:2] = u1[0, 0] * u0
+            u1u0[0:2, 2:4] = u1[0, 1] * u0
+            u1u0[2:4, 0:2] = u1[1, 0] * u0
+            u1u0[2:4, 2:4] = u1[1, 1] * u0
+            P = np.asarray(basis_inv.unitary, dtype=np.complex128) @ u1u0 @ P
 
             # Intermediate recovery (skip for final segment)
             if i < num_segments - 1:
@@ -143,6 +144,11 @@ class SegmentSynthesizer:
                 dag.global_phase += gphase
                 dag.apply_operation_back(UnitaryGate(k3, check_input=False), [qreg[0]])
                 dag.apply_operation_back(UnitaryGate(k4, check_input=False), [qreg[1]])
-                P = np.kron(k4, k3) @ P
+                k4k3 = np.empty((4, 4), dtype=np.complex128)
+                k4k3[0:2, 0:2] = k4[0, 0] * k3
+                k4k3[0:2, 2:4] = k4[0, 1] * k3
+                k4k3[2:4, 0:2] = k4[1, 0] * k3
+                k4k3[2:4, 2:4] = k4[1, 1] * k3
+                P = k4k3 @ P
 
         return P

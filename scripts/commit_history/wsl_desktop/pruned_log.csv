@@ -8,3 +8,4 @@ ad56036cc3bfbf2b8f53c79d54f48a0681a7d9bf,2026-01-12T01:53:12-05:00,refactor: sim
 0a430329c3d4b309231e16505c69d8f54b462b92,2026-01-27T03:18:05-05:00,fix: faster quarternion local parameterization,OK,0.009756,0.009733,0.007554
 6eb49b30d9d33b7c8f1f7b4bb41439ff95efba90,2026-02-24T17:52:55-05:00,fix: close #13; sanitize inf params near-zero residuals,OK,0.00958,0.009542,0.007517
 b39d0ac3e6a6ba8cd7db21a4ed8392c867d08038,2026-03-02T23:06:08-05:00,feat: remove jaxopt dependency; performance increase,OK,0.007813,0.008584,0.007666
+a1a6ae7747e0d3664e7ca37d15f6afedb63ae812,2026-03-03T14:01:23-05:00,wip: perf highspy refactor [skip ci],OK,0.003298,0.002486,0.002072
