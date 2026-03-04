@@ -92,6 +92,7 @@ cleanup_worktree() {
 trap cleanup_worktree EXIT
 
 IDX=0
+DID_WORKTREE_INSTALL=false
 for COMMIT in $COMMITS; do
     IDX=$((IDX + 1))
     SHORT=$(git log -1 --format="%h" "$COMMIT")
@@ -170,6 +171,7 @@ for COMMIT in $COMMITS; do
             cleanup_worktree
             exit 1
         fi
+        DID_WORKTREE_INSTALL=true
     fi
 
     # Run benchmark — stdout=JSON, stderr=progress+errors (tee to terminal and log)
@@ -204,9 +206,11 @@ done
 
 # Restore the editable install from the repo root so the venv points at HEAD,
 # not the (now-deleted) worktree directory.
-echo ""
-echo "Restoring editable install from HEAD..."
-"$REPO_ROOT/.venv/bin/pip" install -e "$REPO_ROOT" --quiet
+if $DID_WORKTREE_INSTALL; then
+    echo ""
+    echo "Restoring editable install from HEAD..."
+    "$REPO_ROOT/.venv/bin/pip" install -e "$REPO_ROOT" --quiet
+fi
 
 echo ""
 echo "=== Done. Results in $OUTPUT_CSV ==="

@@ -8,12 +8,12 @@ from qiskit.quantum_info import Operator, average_gate_fidelity, random_unitary
 from gulps.core.isa import DiscreteISA
 from gulps.gulps_decomposer import GulpsDecomposer
 from gulps.isa_library.fsim import fsim
-from tests.fixtures.isas import get_all_test_isas
+from tests.fixtures.isas import get_all_test_isas, get_slim_isas
 
-FIDELITY_TOL = 1 - 1e-6
+FIDELITY_TOL = 1 - 1e-8
 
 
-@pytest.fixture(params=get_all_test_isas(precompute_polytopes=True))
+@pytest.fixture(params=get_slim_isas(precompute_polytopes=True))
 def decomposer(request):
     return GulpsDecomposer(isa=request.param)
 

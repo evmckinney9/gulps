@@ -7,7 +7,7 @@ from qiskit.quantum_info import Operator, average_gate_fidelity, random_unitary
 
 from gulps.core.isa import DiscreteISA
 from gulps.gulps_decomposer import GulpsDecomposer
-from tests.fixtures.isas import get_all_test_isas
+from tests.fixtures.isas import get_all_test_isas, get_slim_isas
 
 N_RANDOM = 20
 FIDELITY_TOL = 1 - 1e-8
@@ -16,7 +16,7 @@ FIDELITY_TOL = 1 - 1e-8
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
-@pytest.fixture(params=get_all_test_isas(precompute_polytopes=True))
+@pytest.fixture(params=get_slim_isas(precompute_polytopes=True))
 def decomposer(request):
     return GulpsDecomposer(isa=request.param)
 
@@ -31,9 +31,9 @@ def decomposer_no_precompute(request):
 # ---------------------------------------------------------------------------
 def _assert_fidelity(target, circuit, label=""):
     fid = average_gate_fidelity(Operator(target), Operator(circuit))
-    assert (
-        fid > FIDELITY_TOL
-    ), f"Fidelity too low{' (' + label + ')' if label else ''}: {fid}"
+    assert fid > FIDELITY_TOL, (
+        f"Fidelity too low{' (' + label + ')' if label else ''}: {fid}"
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -40,6 +40,7 @@ def get_all_test_isas(**isa_kwargs) -> list[DiscreteISA]:
     """All ISAs: slim set + correctness-focused extras."""
     return get_slim_isas(**isa_kwargs) + [
         DiscreteISA([iSwapGate()], [1.0], ["iswap"], **isa_kwargs),
+        DiscreteISA([CXGate()], [1.0], ["cx"], **isa_kwargs),
         DiscreteISA(
             [CXGate(), iSwapGate().power(1 / 2)],
             [1.0, 0.5],

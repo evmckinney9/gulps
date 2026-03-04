@@ -7,7 +7,7 @@ from qiskit.quantum_info import Operator, average_gate_fidelity, random_unitary
 from gulps.core.isa import DiscreteISA
 from gulps.gulps_decomposer import GulpsDecomposer
 
-FIDELITY_TOL = 1 - 1e-6
+FIDELITY_TOL = 1 - 1e-8
 SEGMENT_TIME_LIMIT = 0.2  # seconds
 
 

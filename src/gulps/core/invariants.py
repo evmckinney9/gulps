@@ -74,10 +74,10 @@ class GateInvariants:
     def _unitary_to_mono_coordinates(
         U,
     ) -> Tuple[np.float64, np.float64, np.float64, np.float64]:
-        # convention breaks things # XXX ???
-        # return tuple(unitary_to_monodromy_coordinate(U))
-        a, b, c = positive_canonical_to_monodromy_coordinate(*weyl_coordinates(U))
-        return (a, b, c, -1.0 * (a + b + c))
+        return tuple(unitary_to_monodromy_coordinate(U))
+        # NOTE, backup conventon. the above used to give some unexplained precision issues
+        # a, b, c = positive_canonical_to_monodromy_coordinate(*weyl_coordinates(U))
+        # return (a, b, c, -1.0 * (a + b + c))
 
     @property
     def unitary(self) -> UnitaryGate:

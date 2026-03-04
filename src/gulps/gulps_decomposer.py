@@ -214,14 +214,14 @@ class GulpsDecomposer:
         return constraints.solve(target, log_output=log_output)
 
     def _best_decomposition(
-        self, target_inv: GateInvariants, log_output: bool = False
+        self, alcove_target: GateInvariants, log_output: bool = False
     ) -> ConstraintSolution:
         """Find the optimal gate sentence and intermediate invariants for the target.
 
         Dispatches to discrete or continuous LP solver based on ISA type.
 
         Args:
-            target_inv: Target gate invariants to decompose.
+            alcove_target: Target gate invariants in alcove-normalized form.
             log_output: If True, enable verbose LP solver output.
 
         Returns:
@@ -230,10 +230,6 @@ class GulpsDecomposer:
         Raises:
             RuntimeError: If no valid decomposition found.
         """
-        alcove_target = GateInvariants.from_unitary(
-            target_inv.unitary, enforce_alcove=True
-        )
-
         if self._is_continuous:
             result = self._try_continuous_lp(alcove_target, log_output=log_output)
         else:
@@ -282,15 +278,15 @@ class GulpsDecomposer:
             Timing information for the last decomposition is stored in self.last_timing
             with keys 'lp_sentence' and 'segments' (in seconds).
         """
-        true_target = GateInvariants.from_unitary(target)
+        alcove_target = GateInvariants.from_unitary(target, enforce_alcove=True)
 
-        edge_output = self._eval_edge_case(true_target, return_dag)
+        edge_output = self._eval_edge_case(alcove_target, return_dag)
         if edge_output is not None:
             return edge_output
 
         # --- A) LP ---
         t0 = time.perf_counter()  # TIMING
-        result = self._best_decomposition(true_target, log_output=log_output)
+        result = self._best_decomposition(alcove_target, log_output=log_output)
         sentence = result.sentence
         intermediates = result.intermediates
 
@@ -303,7 +299,7 @@ class GulpsDecomposer:
         stitched_circuit = self._local_synthesis.synthesize_segments(
             gate_list=sentence,
             invariant_list=intermediates,
-            target=true_target,
+            target=alcove_target,
             return_dag=return_dag,
         )
         t2 = time.perf_counter()  # TIMING

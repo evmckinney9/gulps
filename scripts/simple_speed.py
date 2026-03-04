@@ -1,72 +1,156 @@
+"""Benchmark GULPS decomposition on seeded random unitaries across 3 iSwap ISAs.
+
+Rich diagnostics go to stderr (human-readable).
+Machine-parseable JSON goes to stdout:
+  {"isa1_median": ..., "isa2_median": ..., "isa3_median": ...}
+
+ISAs (matching benchmark_task.py for backlog compatibility):
+  isa1: [iSwap^(1/4)]
+  isa2: [iSwap^(1/3), iSwap^(1/4)]
+  isa3: [iSwap^(1/4), iSwap^(1/3), iSwap^(1/2)]
+
+Usage:
+  python scripts/simple_speed.py           # full run, 1000 unitaries
+  python scripts/simple_speed.py -n 10     # quick smoke test
+"""
+
+import argparse
+import json
+import logging
+import statistics
+import sys
+import time
+
 import numpy as np
-from qiskit.quantum_info import Operator, average_gate_fidelity
-from qiskit.quantum_info.random import random_unitary
-
-from gulps import logger
-from gulps.gulps_decomposer import GulpsDecomposer
-from tests.fixtures.isas import get_slim_isas
 
 
-def bench_isa(isa, N=1000):
-    """Benchmark a single DiscreteISA on N random unitaries. Returns (median_ms, failures)."""
-    name = "+".join(g.name for g in isa.gate_set)
-    decomposer = GulpsDecomposer(isa=isa)
+def bench(decomposer, name, n):
+    """Benchmark a decomposer on n seeded random unitaries.
 
-    fidelities = []
-    all_timings = []
+    Returns (times_list, fidelities_list). Raises on any failure or low fidelity.
+    """
+    from qiskit.quantum_info import Operator, average_gate_fidelity, random_unitary
+
+    times = []
     failures = 0
+    fidelities = []
 
-    for idx in range(N):
-        u = random_unitary(4, seed=idx)
+    for seed in range(n):
+        target = random_unitary(4, seed=seed)
         try:
-            fid = average_gate_fidelity(u, Operator(decomposer(u)))
+            t0 = time.perf_counter()
+            result = decomposer._run(target)
+            t1 = time.perf_counter()
+            fid = average_gate_fidelity(target, Operator(result))
             if fid < 1 - 1e-8:
-                raise ValueError(f"Fidelity too low: {fid:.8f}")
-            fidelities.append(fid)
-            all_timings.append(decomposer.last_timing)
+                raise ValueError(
+                    f"{name} seed={seed}: fidelity {fid:.10f} below threshold"
+                )
         except Exception as e:
+            # print(e, file=sys.stderr)
             failures += 1
+            continue
 
-    fidelities = np.array(fidelities) if fidelities else np.array([0.0])
-    times = [t["total"] for t in all_timings]
-    return {
-        "name": name,
-        "n": N,
-        "failures": failures,
-        "fid_min": float(np.min(fidelities)),
-        "mean_ms": float(np.mean(times)) * 1000 if times else float("inf"),
-        "median_ms": float(np.median(times)) * 1000 if times else float("inf"),
-        "p95_ms": float(np.percentile(times, 95)) * 1000 if times else float("inf"),
-        "max_ms": float(np.max(times)) * 1000 if times else float("inf"),
-    }
+        fidelities.append(fid)
+        times.append(t1 - t0)
+
+        if (seed + 1) % 50 == 0 or seed == n - 1:
+            elapsed = sum(times)
+            rate = (seed + 1) / elapsed
+            eta = (n - seed - 1) / rate
+            med = statistics.median(times)
+            print(
+                f"\r  {name}: {seed + 1}/{n}  "
+                f"elapsed={elapsed:.1f}s  eta={eta:.1f}s  "
+                f"median={med:.4f}s",
+                end="",
+                file=sys.stderr,
+            )
+    print(file=sys.stderr)
+
+    return times, fidelities, failures
+
+
+def print_rich_stats(name, times, fidelities, n, file=sys.stderr):
+    """Print detailed human-readable stats to the given file handle."""
+    times_ms = np.array(times) * 1000
+    fids = np.array(fidelities) if fidelities else np.array([0.0])
+    print(
+        f"  {name:30s}: "
+        f"mean={np.mean(times_ms):6.1f} ms  "
+        f"median={np.median(times_ms):6.1f} ms  "
+        f"p95={np.percentile(times_ms, 95):6.1f} ms  "
+        f"max={np.max(times_ms):7.1f} ms  "
+        f"({n}/{n} ok, "
+        f"fid_min={np.min(fids):.8f})",
+        file=file,
+    )
 
 
 def main():
-    logger.setLevel("INFO")
-    N = 1_000
-    isas = get_slim_isas()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("-n", type=int, default=1000)
+    args = parser.parse_args()
 
-    print(f"Benchmarking {len(isas)} ISAs x {N} random unitaries each\n")
+    # Legacy import fallback (supports running at old commits via collect_backlog.sh)
+    try:
+        from gulps.gulps_decomposer import GulpsDecomposer
+    except ModuleNotFoundError:
+        try:
+            from gulps.synthesis.gulps_decomposer import GulpsDecomposer
+        except ModuleNotFoundError:
+            from gulps.gulps_synthesis import GulpsDecomposer
 
-    results = []
-    for isa in isas:
-        r = bench_isa(isa, N)
-        results.append(r)
-        print(
-            f"  {r['name']:30s}: "
-            f"mean={r['mean_ms']:6.1f} ms  "
-            f"median={r['median_ms']:6.1f} ms  "
-            f"p95={r['p95_ms']:6.1f} ms  "
-            f"max={r['max_ms']:7.1f} ms  "
-            f"({r['n'] - r['failures']}/{r['n']} ok, "
-            f"fid_min={r['fid_min']:.8f})"
-        )
+    logging.getLogger("gulps").setLevel(logging.WARNING)
 
-    # Summary line (for commit history tracking)
-    medians = [r["median_ms"] for r in results]
+    from qiskit.circuit.library import iSwapGate
+
+    # power = 1/N means iSwap^(1/N)
+    sq4, sq3, sq2 = 1 / 4, 1 / 3, 1 / 2
+
+    isas = {
+        "isa1": [sq4],
+        "isa2": [sq3, sq4],
+        "isa3": [sq4, sq3, sq2],
+    }
+
     print(
-        f"\nOverall: geometric mean of medians = {np.exp(np.mean(np.log(medians))):.1f} ms"
+        f"iSwap benchmark: {len(isas)} ISAs x {args.n} random unitaries each\n",
+        file=sys.stderr,
     )
+
+    json_result = {}
+    all_medians_ms = []
+
+    for isa_key, powers in isas.items():
+        gates = [iSwapGate().power(p) for p in powers]
+        costs = list(powers)
+        label = "+".join(f"iSwap^(1/{int(1 / p)})" for p in powers)
+        display_name = f"{isa_key}/{label}"
+
+        decomposer = GulpsDecomposer(
+            gate_set=gates,
+            costs=costs,
+            precompute_polytopes=False,
+        )
+        times, fidelities, failures = bench(decomposer, display_name, args.n)
+        median_s = statistics.median(times)
+
+        # Rich stats to stderr
+        print_rich_stats(display_name, times, fidelities, args.n - failures)
+        # Collect for JSON (keys stay isa1/isa2/isa3 for backlog CSV compat)
+        json_result[isa_key] = round(median_s, 6)
+        all_medians_ms.append(median_s * 1000)
+
+    # Summary to stderr
+    geo_mean = np.exp(np.mean(np.log(all_medians_ms)))
+    print(
+        f"\nOverall: geometric mean of medians = {geo_mean:.1f} ms",
+        file=sys.stderr,
+    )
+
+    # JSON to stdout (compatible with collect_backlog.sh extraction)
+    print(json.dumps(json_result))
 
 
 if __name__ == "__main__":
