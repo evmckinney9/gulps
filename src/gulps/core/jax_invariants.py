@@ -30,18 +30,14 @@ _M = jnp.array([[1.0, 1.0, 0.0], [1.0, 0.0, 1.0], [0.0, 1.0, 1.0]], dtype=jnp.fl
 def makhlin_invariants(U: jnp.ndarray) -> jnp.ndarray:
     """Compute Makhlin invariants [Re(G1), Im(G1), Re(G2)].
 
-    WARNING: Determinant normalization is skipped for performance.
-    This appears stable in practice but may cause issues for gates
-    far from SU(4). If optimization fails mysteriously, try restoring:
-        det_um = jnp.linalg.det(Um)
-        det_um /= jnp.abs(det_um)
+    Used for target invariant computation (once per segment).
+    The hot-path Makhlin residual uses ``_makhlin_residual_fused``
+    in ``jax_lm.py`` which precomputes the magic-basis transform
+    and determinant phase to avoid redundant work per iteration.
     """
     Um = MAGIC_DAG @ U @ MAGIC
-
-    # Skipping det normalization - risky but faster
     det_um = jnp.linalg.det(Um)
-    det_um /= jnp.abs(det_um)
-    # det_um = 1.0
+    det_um = det_um / jnp.abs(det_um)
 
     M = Um.T @ Um
     t1 = jnp.trace(M)
@@ -75,9 +71,7 @@ def weyl_coordinates(U: jnp.ndarray) -> jnp.ndarray:
     - (0.5, 0.5, 0) = DCNOT
     - (0.5, 0.5, 0.5) = SWAP
 
-    WARNING: SU(4) normalization is skipped for performance.
-    Global phase cancels in U @ U_tilde, but if issues arise, restore:
-        U = _su4_normalize(U)
+    Uses SU(4) normalization to ensure correct global phase.
     """
     U = _su4_normalize(U)
     U_tilde = _SYSY @ U.T @ _SYSY

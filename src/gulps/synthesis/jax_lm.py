@@ -1,3 +1,9 @@
+"""Adaptive Makhlin/Weyl segment solver (Gauss-Newton + Levenberg-Marquardt).
+
+Orchestration logic: restart loops, dispatch strategy, and the public
+JaxLMSegmentSolver class.  All JAX math primitives live in jax_primitives.py.
+"""
+
 import time
 
 import jax.numpy as jnp
@@ -6,131 +12,31 @@ from jax import jacrev, jit, lax
 from jax.random import PRNGKey, fold_in, uniform
 
 from gulps.config import GulpsConfig
-from gulps.core.jax_invariants import makhlin_invariants, weyl_coordinates
+from gulps.synthesis.jax_primitives import (
+    NUM_PARAMS,
+    _get_jax_matrix,
+    _kron_2x2,
+    _makhlin_residual_fused,
+    _params_to_unitaries,
+    _precompute_makhlin_args,
+    _weyl_residual,
+    makhlin_invariants,
+    weyl_coordinates,
+)
 from gulps.synthesis.segments_abc import SegmentSolution, SegmentSolver
 
-NUM_PARAMS = 8
 
-
-@jit
-def _params_to_unitaries(params: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray]:
-    """Extract u0, u1 from 8D params as two normalized quaternions -> SU(2).
-
-    params[:4]  = q0 = (w,x,y,z) for u0
-    params[4:]  = q1 = (w,x,y,z) for u1
-    """
-    eps = 1e-12
-
-    def quat_to_su2(q):
-        # normalize onto S^3
-        q = q / jnp.maximum(jnp.linalg.norm(q), eps)
-        w, x, y, z = q
-        a = w + 1j * z
-        b = x + 1j * y
-        return jnp.array([[a, b], [-jnp.conj(b), jnp.conj(a)]], dtype=jnp.complex128)
-
-    u0 = quat_to_su2(params[:4])
-    u1 = quat_to_su2(params[4:])
-    return u0, u1
-
-
-@jit
-def _kron_2x2(u0: jnp.ndarray, u1: jnp.ndarray) -> jnp.ndarray:
-    """Kronecker product of two 2x2 matrices."""
-    return jnp.block(
-        [
-            [u0[0, 0] * u1, u0[0, 1] * u1],
-            [u0[1, 0] * u1, u0[1, 1] * u1],
-        ]
-    )
-
-
-@jit
-def _construct_unitary(params, prefix_op, basis_gate):
-    """Construct U = basis_gate @ (u1 ⊗ u0) @ prefix_op from rotation-vector params."""
-    u0, u1 = _params_to_unitaries(params)
-    return basis_gate @ _kron_2x2(u1, u0) @ prefix_op
-
-
-def _make_residual_fn(invariant_fn):
-    """Create residual function: target_inv - constructed_inv."""
-
-    @jit
-    def residual(x, prefix_op, basis_gate, target_inv):
-        U = _construct_unitary(x, prefix_op, basis_gate)
-        return target_inv - invariant_fn(U)
-
-    return residual
-
-
-# Pre-built residual functions
-_makhlin_residual = _make_residual_fn(makhlin_invariants)
-_weyl_residual = _make_residual_fn(weyl_coordinates)
-
-
-def _get_jax_matrix(inv) -> jnp.ndarray:
-    """Get JAX 4x4 unitary matrix from GateInvariants, with caching."""
-    cached = getattr(inv, "_jax_matrix", None)
-    if cached is not None:
-        return cached
-    # Use canonical_matrix directly (avoids Qiskit UnitaryGate round-trip)
-    if inv._unitary is not None:
-        mat_np = np.asarray(inv._unitary, dtype=np.complex128)
-    else:
-        mat_np = inv.canonical_matrix
-    mat = jnp.asarray(mat_np, dtype=jnp.complex128)
-    try:
-        inv._jax_matrix = mat
-    except AttributeError:
-        pass  # frozen dataclass or similar
-    return mat
-
-
-@jit
-def _compute_target_invariants(target_mat):
-    """Fused target Makhlin + Weyl invariant computation (1 dispatch instead of 2)."""
-    return makhlin_invariants(target_mat), weyl_coordinates(target_mat)
-
-
-@jit
-def _detect_branch_and_weyl_target(makhlin_params, prefix_op, basis_gate, target_weyl):
-    """Fused branch detection (1 dispatch instead of ~5).
-
-    Constructs the current unitary from Makhlin params, computes its Weyl coordinates,
-    and determines whether the direct or rho-reflected Weyl target is closer.
-    """
-    U = _construct_unitary(makhlin_params, prefix_op, basis_gate)
-    constructed_weyl = weyl_coordinates(U)
-    reflected_weyl = target_weyl * jnp.array([-1.0, 1.0, -1.0]) + jnp.array(
-        [1.0, 0.0, 0.0]
-    )
-    direct_res = jnp.max(jnp.abs(constructed_weyl - target_weyl))
-    reflect_res = jnp.max(jnp.abs(constructed_weyl - reflected_weyl))
-    use_reflected = reflect_res < direct_res
-    return jnp.where(use_reflected, reflected_weyl, target_weyl)
-
-
+# ---------------------------------------------------------------------------
+# Restart loop factories
+# ---------------------------------------------------------------------------
 def _gn_step(residual_fn, x, prefix_op, basis_gate, target_inv, damping):
-    """Single damped Gauss-Newton step → (x_new, residual_norm)."""
+    """Single damped Gauss-Newton step -> (x_new, residual_norm)."""
     r = residual_fn(x, prefix_op, basis_gate, target_inv)
     J = jacrev(residual_fn, argnums=0)(x, prefix_op, basis_gate, target_inv)
     gram = J @ J.T + damping * jnp.eye(J.shape[0], dtype=jnp.float64)
-    w = jnp.linalg.solve(gram, -r)
-    x_new = x + J.T @ w
+    x_new = x + J.T @ jnp.linalg.solve(gram, -r)
     r_new = residual_fn(x_new, prefix_op, basis_gate, target_inv)
     return x_new, jnp.max(jnp.abs(r_new))
-
-
-def _warm_polish(solver, params, key, prefix_op, basis_gate, target_weyl, tol):
-    """Branch-detect → warm-start LM solve → extract u0, u1.
-
-    Common pattern used by primary and fallback solve paths.
-    ``solver`` must accept (key, prefix_op, basis_gate, target, tol, warm_start).
-    """
-    target = _detect_branch_and_weyl_target(params, prefix_op, basis_gate, target_weyl)
-    final, res = solver(key, prefix_op, basis_gate, target, tol, params)
-    u0, u1 = _params_to_unitaries(final)
-    return u0, u1, res
 
 
 def _make_gn_restart_loop(
@@ -142,21 +48,17 @@ def _make_gn_restart_loop(
     stagnation_iters: int = 32,
     stagnation_factor: float = 0.1,
 ):
-    """Gauss-Newton restart loop with stagnation-based early exit.
-
-    Each restart draws random initial params, runs GN with minimum-norm
-    steps (3x3 Gram solve), and abandons stagnant restarts early.
-    """
+    """Build a JIT'd random-restart GN solver with stagnation early-exit."""
 
     @jit
     def run_until_success(
-        key: PRNGKey,
-        prefix_op: jnp.ndarray,
-        basis_gate: jnp.ndarray,
-        target_inv: jnp.ndarray,
-        tol: float,
-        init_min: float = -jnp.pi / 2,
-        init_max: float = jnp.pi / 2,
+        key,
+        prefix_op,
+        basis_gate,
+        target_inv,
+        tol,
+        init_min=-jnp.pi / 2,
+        init_max=jnp.pi / 2,
     ):
         def cond_fn(carry):
             i, _, _, best_res, done = carry
@@ -164,11 +66,10 @@ def _make_gn_restart_loop(
 
         def body_fn(carry):
             i, key, best_params, best_res, done = carry
+            init = uniform(
+                fold_in(key, i), shape=(NUM_PARAMS,), minval=init_min, maxval=init_max
+            )
 
-            key_i = fold_in(key, i)
-            init = uniform(key_i, shape=(NUM_PARAMS,), minval=init_min, maxval=init_max)
-
-            # --- Inner GN iterations with stagnation detection ---
             def gn_cond(inner):
                 j, _, prev_norm, init_n = inner
                 stagnated = (
@@ -209,14 +110,17 @@ def _make_gn_restart_loop(
                 done | (final_res <= tol),
             )
 
-        init_state = (
-            jnp.int32(0),
-            key,
-            jnp.zeros((NUM_PARAMS,), dtype=jnp.float64),
-            jnp.array(jnp.inf, dtype=jnp.float64),
-            jnp.array(False),
+        _, _, best_params, best_res, _ = lax.while_loop(
+            cond_fn,
+            body_fn,
+            (
+                jnp.int32(0),
+                key,
+                jnp.zeros((NUM_PARAMS,), dtype=jnp.float64),
+                jnp.array(jnp.inf, dtype=jnp.float64),
+                jnp.array(False),
+            ),
         )
-        _, _, best_params, best_res, _ = lax.while_loop(cond_fn, body_fn, init_state)
         return best_params, best_res
 
     return run_until_success
@@ -230,38 +134,28 @@ def _make_lm_warmstart_loop(
     solver_tol: float,
     perturb_scale: float,
 ):
-    """Levenberg-Marquardt warm-start restart loop with adaptive damping.
-
-    Restart 0 evaluates the warm start directly; subsequent restarts
-    perturb it and run LM with adaptive damping via the 3x3 Gram solve.
-    """
+    """Build a JIT'd warm-start LM solver with adaptive damping."""
 
     @jit
-    def run_until_success(
-        key: PRNGKey,
-        prefix_op: jnp.ndarray,
-        basis_gate: jnp.ndarray,
-        target_inv: jnp.ndarray,
-        tol: float,
-        warm_start: jnp.ndarray,
-    ):
+    def run_until_success(key, prefix_op, basis_gate, target_inv, tol, warm_start):
         def cond_fn(carry):
             i, _, _, best_res, done = carry
             return (i < max_restarts) & (~done)
 
         def body_fn(carry):
             i, key, best_params, best_res, done = carry
-
-            key_i = fold_in(key, i)
             perturb = uniform(
-                key_i, shape=(NUM_PARAMS,), minval=-perturb_scale, maxval=perturb_scale
+                fold_in(key, i),
+                shape=(NUM_PARAMS,),
+                minval=-perturb_scale,
+                maxval=perturb_scale,
             )
 
-            # Iteration 0: just evaluate warm_start, no solver call
-            # Iteration 1+: run LM with perturbed warm_start
+            # Restart 0: just evaluate warm_start (no perturbation, no iterations).
+            # Restart 1+: perturbed warm_start -> LM iterations.
             def iter_zero(_):
-                res_vec = residual_fn(warm_start, prefix_op, basis_gate, target_inv)
-                return warm_start, jnp.max(jnp.abs(res_vec))
+                r = residual_fn(warm_start, prefix_op, basis_gate, target_inv)
+                return warm_start, jnp.max(jnp.abs(r))
 
             def iter_nonzero(_):
                 init = warm_start + perturb
@@ -295,8 +189,7 @@ def _make_lm_warmstart_loop(
 
             params, res = lax.cond(i == 0, iter_zero, iter_nonzero, None)
             params_finite = jnp.all(jnp.isfinite(params))
-            res_finite = jnp.isfinite(res)
-            improved = (res < best_res) & params_finite & res_finite
+            improved = (res < best_res) & params_finite & jnp.isfinite(res)
 
             return (
                 i + 1,
@@ -306,48 +199,69 @@ def _make_lm_warmstart_loop(
                 done | (res <= tol),
             )
 
-        init_state = (
-            jnp.int32(0),
-            key,
-            warm_start,
-            jnp.array(jnp.inf, dtype=jnp.float64),
-            jnp.array(False),
+        _, _, best_params, best_res, _ = lax.while_loop(
+            cond_fn,
+            body_fn,
+            (
+                jnp.int32(0),
+                key,
+                warm_start,
+                jnp.array(jnp.inf, dtype=jnp.float64),
+                jnp.array(False),
+            ),
         )
-        _, _, best_params, best_res, _ = lax.while_loop(cond_fn, body_fn, init_state)
         return best_params, best_res
 
     return run_until_success
 
 
+def _warm_polish(solver, params, key, prefix_op, basis_gate, target_weyl, tol):
+    """Branch-detect -> warm-start LM solve -> extract u0, u1."""
+    # Pick closer of direct or rho-reflected Weyl target
+    u0, u1 = _params_to_unitaries(params)
+    U = basis_gate @ _kron_2x2(u1, u0) @ prefix_op
+    c = weyl_coordinates(U)
+    refl = target_weyl * jnp.array([-1, 1, -1]) + jnp.array([1, 0, 0])
+    target = jnp.where(
+        jnp.max(jnp.abs(c - refl)) < jnp.max(jnp.abs(c - target_weyl)),
+        refl,
+        target_weyl,
+    )
+    final, res = solver(key, prefix_op, basis_gate, target, tol, params)
+    u0, u1 = _params_to_unitaries(final)
+    return u0, u1, res
+
+
+# ---------------------------------------------------------------------------
+# Public solver class
+# ---------------------------------------------------------------------------
+
+
 class JaxLMSegmentSolver(SegmentSolver):
-    """Adaptive Makhlin/Weyl segment solver exploiting landscape complementarity.
+    """Adaptive Makhlin/Weyl segment solver.
 
     Single JIT dispatch:
-      1. Makhlin GN probe (4 restarts) — basin-finding, not full convergence.
-      2. Converged → branch detect → Weyl LM polish.
-      3. Near-miss → quick Weyl LM from probe params (2 restarts).
-      4. Both fail → cold Weyl GN (full budget).
+      1. Makhlin GN probe (4 restarts) -- basin-finding.
+      2. Converged -> branch detect -> Weyl LM polish.
+      3. Near-miss -> quick Weyl LM (2 restarts).
+      4. Both fail -> cold Weyl GN (full budget).
 
     Python-level fallback with separate JIT as safety net.
     """
 
-    _MAKHLIN_PROBE = 4  # Bimodal: converges in <4 or not at all
+    _MAKHLIN_PROBE = 4
 
-    def __init__(
-        self,
-        config: GulpsConfig | None = None,
-        rng_seed: int | None = None,
-    ):
+    def __init__(self, config: GulpsConfig | None = None, rng_seed: int | None = None):
         self.config = config or GulpsConfig()
         self._key = PRNGKey(rng_seed or 0)
 
+        # --- Build solver components ---
         solve_makhlin_probe = _make_gn_restart_loop(
-            _makhlin_residual,
+            _makhlin_residual_fused,
             maxiter=self.config.makhlin_maxiter,
             max_restarts=self._MAKHLIN_PROBE,
             solver_tol=self.config.segment_solver_tol,
         )
-
         solve_weyl_polish = _make_lm_warmstart_loop(
             _weyl_residual,
             maxiter=self.config.weyl_maxiter,
@@ -355,8 +269,6 @@ class JaxLMSegmentSolver(SegmentSolver):
             solver_tol=self.config.segment_solver_tol,
             perturb_scale=self.config.weyl_perturb_scale,
         )
-
-        # Quick LM: 2-restart attempt to salvage near-miss Makhlin probes.
         solve_weyl_quick = _make_lm_warmstart_loop(
             _weyl_residual,
             maxiter=self.config.weyl_maxiter,
@@ -364,26 +276,34 @@ class JaxLMSegmentSolver(SegmentSolver):
             solver_tol=self.config.segment_solver_tol,
             perturb_scale=self.config.weyl_perturb_scale,
         )
-
         solve_weyl_direct = _make_gn_restart_loop(
             _weyl_residual,
             maxiter=self.config.makhlin_maxiter,
             max_restarts=self.config.makhlin_restarts,
             solver_tol=self.config.segment_solver_tol,
         )
+        solve_makhlin_full = _make_gn_restart_loop(
+            _makhlin_residual_fused,
+            maxiter=self.config.makhlin_maxiter,
+            max_restarts=self.config.makhlin_restarts,
+            solver_tol=self.config.segment_solver_tol,
+        )
 
+        # --- Primary solve: Makhlin probe -> graduated Weyl refinement ---
         @jit
         def _primary_solve(
             key, prefix_op, basis_gate, target_mat, makhlin_tol, weyl_tol
         ):
-            """Makhlin probe → graduated Weyl refinement (single JIT)."""
-            target_makhlin, target_weyl = _compute_target_invariants(target_mat)
-
+            target_makhlin = makhlin_invariants(target_mat)
+            target_weyl = weyl_coordinates(target_mat)
+            prefix_magic, magic_basis, target_packed = _precompute_makhlin_args(
+                prefix_op, basis_gate, target_makhlin
+            )
             makhlin_params, makhlin_res = solve_makhlin_probe(
                 key,
-                prefix_op,
-                basis_gate,
-                target_makhlin,
+                prefix_magic,
+                magic_basis,
+                target_packed,
                 makhlin_tol,
             )
 
@@ -432,24 +352,21 @@ class JaxLMSegmentSolver(SegmentSolver):
 
         self._primary_solve = _primary_solve
 
-        solve_makhlin_full = _make_gn_restart_loop(
-            _makhlin_residual,
-            maxiter=self.config.makhlin_maxiter,
-            max_restarts=self.config.makhlin_restarts,
-            solver_tol=self.config.segment_solver_tol,
-        )
-
+        # --- Fallback: full Makhlin (256) -> Weyl polish ---
         @jit
         def _fallback_solve(
             key, prefix_op, basis_gate, target_mat, makhlin_tol, weyl_tol
         ):
-            """Full Makhlin (256) → Weyl polish (separate JIT, safety net)."""
-            target_makhlin, target_weyl = _compute_target_invariants(target_mat)
+            target_makhlin = makhlin_invariants(target_mat)
+            target_weyl = weyl_coordinates(target_mat)
+            prefix_magic, magic_basis, target_packed = _precompute_makhlin_args(
+                prefix_op, basis_gate, target_makhlin
+            )
             makhlin_params, _ = solve_makhlin_full(
                 key,
-                prefix_op,
-                basis_gate,
-                target_makhlin,
+                prefix_magic,
+                magic_basis,
+                target_packed,
                 makhlin_tol,
             )
             return _warm_polish(
@@ -464,9 +381,7 @@ class JaxLMSegmentSolver(SegmentSolver):
 
         self._fallback_solve = _fallback_solve
 
-        # Eagerly compile both traces so the first real invocation
-        # doesn't pay ~1s of JIT overhead.  Running on identity is nearly
-        # instantaneous (converges in 1 restart).
+        # Eagerly compile both traces (identity converges in 1 restart).
         _dummy = jnp.eye(4, dtype=jnp.complex128)
         _primary_solve(self._key, _dummy, _dummy, _dummy, 1e-9, 1e-5)
         _fallback_solve(self._key, _dummy, _dummy, _dummy, 1e-9, 1e-5)
@@ -480,11 +395,7 @@ class JaxLMSegmentSolver(SegmentSolver):
         step: int | None = 0,
         rng_seed: int | None = None,
     ) -> SegmentSolution:
-        """Solve one segment via adaptive Makhlin/Weyl dispatch.
-
-        Returns a SegmentSolution (always succeeds or raises RuntimeError).
-        Uses ``rng_seed`` to diversify restart sequences across calls.
-        """
+        """Solve one segment via adaptive Makhlin/Weyl dispatch."""
         start_time = time.perf_counter()
 
         key = self._key
@@ -503,7 +414,6 @@ class JaxLMSegmentSolver(SegmentSolver):
             self.config.makhlin_conv_tol,
             self.config.weyl_conv_tol,
         )
-
         weyl_res_py = float(weyl_res)
 
         # Safety-net fallback: full Makhlin + Weyl polish
@@ -519,14 +429,11 @@ class JaxLMSegmentSolver(SegmentSolver):
             weyl_res_py = float(weyl_res_fb)
 
             if weyl_res_py > self.config.weyl_conv_tol:
-                makhlin_res_py = float(makhlin_res)
                 raise RuntimeError(
-                    f"Optimization failed: Stage 1 residual {makhlin_res_py:.2e}, "
+                    f"Optimization failed: Stage 1 residual {float(makhlin_res):.2e}, "
                     f"Stage 2 residual {weyl_res_py:.2e}"
                 )
 
-        # Convert to numpy once (avoids repeated JAX device→host transfers
-        # when u0/u1 are used in downstream numpy operations)
         return SegmentSolution(
             u0=np.asarray(u0),
             u1=np.asarray(u1),

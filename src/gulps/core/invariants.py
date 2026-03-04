@@ -48,12 +48,19 @@ class GateInvariants:
         self._weyl = None
         self._makhlin = None
         self._canonical_matrix = None
+        self._strength = None
 
     @classmethod
     def from_unitary(
         cls, gate: Gate | np.ndarray, enforce_alcove=False, name: Optional[str] = None
     ) -> "GateInvariants":
-        U = Operator(gate).data
+        # Fast-path: extract numpy array without redundant Operator validation
+        if isinstance(gate, np.ndarray):
+            U = gate
+        elif isinstance(gate, Operator):
+            U = gate.data
+        else:
+            U = Operator(gate).data
         if not isinstance(gate, UnitaryGate):
             gate = UnitaryGate(U, label=name)
         if enforce_alcove:
@@ -141,7 +148,9 @@ class GateInvariants:
 
     @property
     def strength(self) -> np.float64:
-        return min(sum(self.monodromy), sum(self.rho_reflect.monodromy))
+        if self._strength is None:
+            self._strength = min(sum(self.monodromy), sum(self.rho_reflect.monodromy))
+        return self._strength
 
     @property
     def rho_reflect(self) -> "GateInvariants":
@@ -168,7 +177,8 @@ class GateInvariants:
 
     @property
     def is_identity(self) -> bool:
-        return all(np.isclose(x, 0.0) for x in self.monodromy)
+        m = self._monodromy
+        return abs(m[0]) < 1e-8 and abs(m[1]) < 1e-8 and abs(m[2]) < 1e-8
 
     def __str__(self) -> str:
         return self.name

@@ -7,8 +7,6 @@ from qiskit.transpiler.passes import Collect2qBlocks, ConsolidateBlocks
 
 from gulps.gulps_decomposer import GulpsDecomposer
 
-# FIXME TODO, hash/cache for the decomposer? avoid constructing it at runtime
-
 
 class GulpsDecompositionPass(TransformationPass):
     def __init__(self, decomposer: GulpsDecomposer, **kwargs) -> None:

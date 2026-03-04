@@ -1,0 +1,159 @@
+"""JAX primitives for two-qubit gate invariants and residual evaluation.
+
+Constants, differentiable invariant functions, parameterization helpers,
+and residual functions used by the Gauss-Newton / LM solver in jax_lm.py.
+"""
+
+import jax.numpy as jnp
+import numpy as np
+from jax import jit
+from qiskit.quantum_info import Operator
+
+NUM_PARAMS = 8
+
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+
+MAGIC = jnp.array(
+    [[1, 0, 0, 1j], [0, 1j, 1, 0], [0, 1j, -1, 0], [1, 0, 0, -1j]],
+    dtype=jnp.complex128,
+) / jnp.sqrt(2)
+MAGIC_DAG = MAGIC.conj().T
+
+_SYSY = jnp.array(  # σ_y ⊗ σ_y
+    [[0, 0, 0, -1], [0, 0, 1, 0], [0, 1, 0, 0], [-1, 0, 0, 0]],
+    dtype=jnp.complex128,
+)
+
+_M = jnp.array([[1, 1, 0], [1, 0, 1], [0, 1, 1]], dtype=jnp.float64)
+
+
+# ---------------------------------------------------------------------------
+# Differentiable invariant functions
+# ---------------------------------------------------------------------------
+
+
+@jit
+def makhlin_invariants(U):
+    """Makhlin invariants [Re(G1), Im(G1), Re(G2)] of a 4x4 unitary."""
+    Um = MAGIC_DAG @ U @ MAGIC
+    det_um = jnp.linalg.det(Um)
+    det_um = det_um / jnp.abs(det_um)
+    M = Um.T @ Um
+    t1 = jnp.trace(M)
+    t1s = t1 * t1
+    g1 = t1s / (16.0 * det_um)
+    g2 = (t1s - jnp.trace(M @ M)) / (4.0 * det_um)
+    return jnp.array([jnp.real(g1), jnp.imag(g1), jnp.real(g2)], dtype=jnp.float64)
+
+
+@jit
+def weyl_coordinates(U):
+    """Weyl chamber coordinates (c1, c2, c3) in units of pi.
+
+    Folded to canonical Weyl chamber: c1 >= c2 >= c3 >= 0, c1 <= 0.5.
+    """
+    U = U * jnp.exp(-0.25 * jnp.log(jnp.linalg.det(U)))  # SU(4) project
+    U_tilde = _SYSY @ U.T @ _SYSY
+    ev = jnp.linalg.eigvals(U @ U_tilde)
+    two_S = jnp.angle(ev) / jnp.pi
+    two_S = jnp.where(two_S < -0.5 + 1e-12, two_S + 2.0, two_S)
+    S = jnp.sort(two_S / 2.0)[::-1]
+    n = jnp.round(jnp.sum(S)).astype(jnp.int32)
+    S = S - (jnp.arange(4, dtype=jnp.int32) < n).astype(jnp.float64)
+    S = jnp.roll(S, -n)
+    c = _M @ S[:3]
+    c1, c2, c3 = c[0], c[1], c[2]
+    c1 = jnp.where(c3 < 0, 1.0 - c1, c1)
+    c3 = jnp.where(c3 < 0, -c3, c3)
+    return jnp.array([c1, jnp.maximum(c2, 0), jnp.maximum(c3, 0)], dtype=jnp.float64)
+
+
+# ---------------------------------------------------------------------------
+# JAX matrix helper
+# ---------------------------------------------------------------------------
+
+
+def _get_jax_matrix(inv):
+    """Return a JAX 4x4 unitary for a GateInvariants, creating it on first call."""
+    try:
+        return inv._jax_matrix
+    except AttributeError:
+        mat = np.asarray(Operator(inv.unitary).data, dtype=np.complex128)
+        inv._jax_matrix = jnp.asarray(mat, dtype=jnp.complex128)
+        return inv._jax_matrix
+
+
+# ---------------------------------------------------------------------------
+# Parameterization: 8D quaternion pairs -> SU(2) x SU(2)
+# ---------------------------------------------------------------------------
+
+
+def _params_to_unitaries(params):
+    """8D quaternion params -> two SU(2) matrices (u0, u1)."""
+    eps = 1e-12
+
+    def quat_to_su2(q):
+        q = q / jnp.maximum(jnp.linalg.norm(q), eps)
+        w, x, y, z = q
+        a = w + 1j * z
+        b = x + 1j * y
+        return jnp.array([[a, b], [-jnp.conj(b), jnp.conj(a)]], dtype=jnp.complex128)
+
+    return quat_to_su2(params[:4]), quat_to_su2(params[4:])
+
+
+def _kron_2x2(u0, u1):
+    """Kronecker product of two 2x2 matrices."""
+    return jnp.block([[u0[0, 0] * u1, u0[0, 1] * u1], [u0[1, 0] * u1, u0[1, 1] * u1]])
+
+
+# ---------------------------------------------------------------------------
+# Residual functions
+# ---------------------------------------------------------------------------
+
+
+@jit
+def _weyl_residual(x, prefix_op, basis_gate, target_inv):
+    """Weyl-coordinate residual (used for polish stage)."""
+    u0, u1 = _params_to_unitaries(x)
+    U = basis_gate @ _kron_2x2(u1, u0) @ prefix_op
+    return target_inv - weyl_coordinates(U)
+
+
+@jit
+def _makhlin_residual_fused(x, prefix_magic, magic_basis, target_packed):
+    """Fused Makhlin residual with precomputed magic-basis transforms.
+
+    Eliminates 2 matmuls + 1 det per eval by absorbing MAGIC into
+    the constant prefix/basis and precomputing the determinant phase.
+    target_packed = [Re(G1), Im(G1), Re(G2), Re(det_phase), Im(det_phase)].
+    """
+    target_inv = target_packed[:3]
+    det_phase = target_packed[3] + 1j * target_packed[4]
+    u0, u1 = _params_to_unitaries(x)
+    Um = magic_basis @ _kron_2x2(u1, u0) @ prefix_magic
+    M = Um.T @ Um
+    t1 = jnp.trace(M)
+    t1s = t1 * t1
+    g1 = t1s / (16.0 * det_phase)
+    g2 = (t1s - jnp.trace(M @ M)) / (4.0 * det_phase)
+    inv = jnp.array([jnp.real(g1), jnp.imag(g1), jnp.real(g2)], dtype=jnp.float64)
+    return target_inv - inv
+
+
+@jit
+def _precompute_makhlin_args(prefix_op, basis_gate, target_makhlin):
+    """Precompute fused matrices + constant det phase for Makhlin solver."""
+    magic_basis = MAGIC_DAG @ basis_gate
+    prefix_magic = prefix_op @ MAGIC
+    det_um = jnp.linalg.det(magic_basis @ prefix_magic)
+    det_phase = det_um / jnp.maximum(jnp.abs(det_um), 1e-30)
+    return (
+        prefix_magic,
+        magic_basis,
+        jnp.concatenate(
+            [target_makhlin, jnp.array([jnp.real(det_phase), jnp.imag(det_phase)])]
+        ),
+    )
