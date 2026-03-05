@@ -15,21 +15,23 @@ class GulpsConfig:
         lp_feasibility_tol: Linear program primal/dual feasibility tolerance.
             Used in scipy linprog solver. Default: 1e-10
         makhlin_conv_tol: Stage 1 (Makhlin) convergence tolerance.
-            Maximum residual in Makhlin invariant space. Default: 1e-9
+            Maximum residual in Makhlin invariant space for the restart
+            loop's early-exit condition. Default: 1e-9
         weyl_conv_tol: Stage 2 (Weyl) convergence tolerance.
-            Maximum residual in Weyl coordinate space. Default: 5e-5
-        segment_solver_tol: Linear solver tolerance for Newton steps.
-            Controls numerical precision of internal linear algebra. Default: 1e-11
+            Maximum residual in Weyl coordinate space for the restart
+            loop's early-exit condition. Default: 1e-5
+        makhlin_solver_tol: Inner-loop convergence tolerance for Makhlin
+            Gauss-Newton iterations. Controls when a single restart's
+            iteration loop terminates. Default: 1e-10
+        weyl_solver_tol: Inner-loop convergence tolerance for Weyl
+            Levenberg-Marquardt iterations. Controls when a single restart's
+            iteration loop terminates. Default: 1e-10
         equiv_recovery_tol: Local equivalence matching tolerance.
             Used when comparing Weyl coordinates in recovery. Default: 1e-5
 
     Solver Attributes:
-        makhlin_probe_restarts: Number of random restarts for the cheap Makhlin
-            probe that decides warm-path vs cold-path dispatch.  Higher values
-            reduce cold-path frequency at negligible cost (early-exit on
-            convergence).  Default: 8
         makhlin_restarts: Number of random restarts for Stage 1 (Makhlin) optimization.
-            More restarts improve robustness but increase runtime. Default: 128
+            More restarts improve robustness but increase runtime. Default: 256
         makhlin_maxiter: Maximum iterations per Stage 1 restart.
             Controls when to give up on a single optimization attempt. Default: 256
         weyl_restarts: Number of restarts for Stage 2 (Weyl) polishing.
@@ -47,12 +49,11 @@ class GulpsConfig:
     lp_feasibility_tol: float = 1e-10
     makhlin_conv_tol: float = 1e-9
     weyl_conv_tol: float = 1e-5
-    segment_solver_tol: float = 1e-10
-    equiv_recovery_tol: float = 1e-5
+    makhlin_solver_tol: float = 1e-10
+    weyl_solver_tol: float = 1e-10
+    equiv_recovery_tol: float = 2e-5
 
     # Solver parameters
-    # TODO, are we using both probe_restarts and restarts?
-    makhlin_probe_restarts: int = 8
     makhlin_restarts: int = 256
     makhlin_maxiter: int = 256
     weyl_restarts: int = 128

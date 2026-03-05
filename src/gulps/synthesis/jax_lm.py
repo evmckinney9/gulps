@@ -1,7 +1,8 @@
-"""Adaptive Makhlin/Weyl segment solver (Gauss-Newton + Levenberg-Marquardt).
+"""Two-stage Makhlin/Weyl segment solver (Gauss-Newton + Levenberg-Marquardt).
 
-Orchestration logic: restart loops, dispatch strategy, and the public
-JaxLMSegmentSolver class.  All JAX math primitives live in jax_primitives.py.
+Stage 1 (Makhlin GN) finds the basin; Stage 2 (Weyl LM) polishes to
+high accuracy.  Restart loop factories and the public JaxLMSegmentSolver
+class live here.  All JAX math primitives live in jax_primitives.py.
 """
 
 import time
@@ -238,15 +239,14 @@ def _warm_polish(solver, params, key, prefix_op, basis_gate, target_weyl, tol):
 
 
 class JaxLMSegmentSolver(SegmentSolver):
-    """Adaptive Makhlin/Weyl segment solver.
+    """Two-stage Makhlin/Weyl segment solver.
 
     Single JIT dispatch:
-      1. Makhlin GN probe (4 restarts) -- basin-finding.
-      2. Converged -> branch detect -> Weyl LM polish.
-      3. Near-miss -> quick Weyl LM (2 restarts).
-      4. Both fail -> cold Weyl GN (full budget).
+      1. Makhlin GN (random restarts, early-exit) -- basin-finding.
+      2. Branch detect -> Weyl LM polish (warm-started from Makhlin result).
 
-    Python-level fallback with separate JIT as safety net.
+    The Weyl polish prevents residual accumulation across subsequent segments,
+    even in cases where the Makhlin solution is already close.
     """
 
     def __init__(self, config: GulpsConfig | None = None, rng_seed: int | None = None):
@@ -254,121 +254,37 @@ class JaxLMSegmentSolver(SegmentSolver):
         self._key = PRNGKey(rng_seed or 0)
 
         # --- Build solver components ---
-        solve_makhlin_probe = _make_gn_restart_loop(
+        solve_makhlin = _make_gn_restart_loop(
             _makhlin_residual_fused,
             maxiter=self.config.makhlin_maxiter,
-            max_restarts=self.config.makhlin_probe_restarts,
-            solver_tol=self.config.segment_solver_tol,
+            max_restarts=self.config.makhlin_restarts,
+            solver_tol=self.config.makhlin_solver_tol,
         )
-        solve_weyl_polish = _make_lm_warmstart_loop(
+        solve_weyl = _make_lm_warmstart_loop(
             _weyl_residual,
             maxiter=self.config.weyl_maxiter,
             max_restarts=self.config.weyl_restarts,
-            solver_tol=self.config.segment_solver_tol,
+            solver_tol=self.config.weyl_solver_tol,
             perturb_scale=self.config.weyl_perturb_scale,
-        )
-        solve_weyl_quick = _make_lm_warmstart_loop(
-            _weyl_residual,
-            maxiter=self.config.weyl_maxiter,
-            max_restarts=2,
-            solver_tol=self.config.segment_solver_tol,
-            perturb_scale=self.config.weyl_perturb_scale,
-        )
-        solve_weyl_direct = _make_gn_restart_loop(
-            _weyl_residual,
-            maxiter=self.config.makhlin_maxiter,
-            max_restarts=self.config.makhlin_restarts,
-            solver_tol=self.config.segment_solver_tol,
-        )
-        solve_makhlin_full = _make_gn_restart_loop(
-            _makhlin_residual_fused,
-            maxiter=self.config.makhlin_maxiter,
-            max_restarts=self.config.makhlin_restarts,
-            solver_tol=self.config.segment_solver_tol,
         )
 
-        # --- Primary solve: Makhlin probe -> graduated Weyl refinement ---
+        # --- Makhlin -> warm Weyl polish ---
         @jit
-        def _primary_solve(
-            key, prefix_op, basis_gate, target_mat, makhlin_tol, weyl_tol
-        ):
+        def _solve(key, prefix_op, basis_gate, target_mat, makhlin_tol, weyl_tol):
             target_makhlin = makhlin_invariants(target_mat)
             target_weyl = weyl_coordinates(target_mat)
             prefix_magic, magic_basis, target_packed = _precompute_makhlin_args(
                 prefix_op, basis_gate, target_makhlin
             )
-            makhlin_params, makhlin_res = solve_makhlin_probe(
+            makhlin_params, makhlin_res = solve_makhlin(
                 key,
                 prefix_magic,
                 magic_basis,
                 target_packed,
                 makhlin_tol,
             )
-
-            def warm_path(_):
-                return _warm_polish(
-                    solve_weyl_polish,
-                    makhlin_params,
-                    key,
-                    prefix_op,
-                    basis_gate,
-                    target_weyl,
-                    weyl_tol,
-                )
-
-            def cold_path(_):
-                u0_q, u1_q, res_q = _warm_polish(
-                    solve_weyl_quick,
-                    makhlin_params,
-                    key,
-                    prefix_op,
-                    basis_gate,
-                    target_weyl,
-                    weyl_tol,
-                )
-
-                def quick_done(_):
-                    return u0_q, u1_q, res_q
-
-                def gn_fallback(_):
-                    p, r = solve_weyl_direct(
-                        key,
-                        prefix_op,
-                        basis_gate,
-                        target_weyl,
-                        weyl_tol,
-                    )
-                    u0, u1 = _params_to_unitaries(p)
-                    return u0, u1, r
-
-                return lax.cond(res_q <= weyl_tol, quick_done, gn_fallback, None)
-
-            u0, u1, weyl_res = lax.cond(
-                makhlin_res <= makhlin_tol, warm_path, cold_path, None
-            )
-            return u0, u1, weyl_res, makhlin_res
-
-        self._primary_solve = _primary_solve
-
-        # --- Fallback: full Makhlin (256) -> Weyl polish ---
-        @jit
-        def _fallback_solve(
-            key, prefix_op, basis_gate, target_mat, makhlin_tol, weyl_tol
-        ):
-            target_makhlin = makhlin_invariants(target_mat)
-            target_weyl = weyl_coordinates(target_mat)
-            prefix_magic, magic_basis, target_packed = _precompute_makhlin_args(
-                prefix_op, basis_gate, target_makhlin
-            )
-            makhlin_params, _ = solve_makhlin_full(
-                key,
-                prefix_magic,
-                magic_basis,
-                target_packed,
-                makhlin_tol,
-            )
-            return _warm_polish(
-                solve_weyl_polish,
+            u0, u1, weyl_res = _warm_polish(
+                solve_weyl,
                 makhlin_params,
                 key,
                 prefix_op,
@@ -376,13 +292,13 @@ class JaxLMSegmentSolver(SegmentSolver):
                 target_weyl,
                 weyl_tol,
             )
+            return u0, u1, weyl_res, makhlin_res
 
-        self._fallback_solve = _fallback_solve
+        self._solve = _solve
 
-        # Eagerly compile both traces (identity converges in 1 restart).
+        # Eagerly compile (identity converges in 1 restart).
         _dummy = jnp.eye(4, dtype=jnp.complex128)
-        _primary_solve(self._key, _dummy, _dummy, _dummy, 1e-9, 1e-5)
-        _fallback_solve(self._key, _dummy, _dummy, _dummy, 1e-9, 1e-5)
+        _solve(self._key, _dummy, _dummy, _dummy, 1e-9, 1e-5)
 
     def try_solve(
         self,
@@ -393,7 +309,7 @@ class JaxLMSegmentSolver(SegmentSolver):
         step: int | None = 0,
         rng_seed: int | None = None,
     ) -> SegmentSolution:
-        """Solve one segment via adaptive Makhlin/Weyl dispatch."""
+        """Solve one segment via Makhlin -> warm Weyl polish."""
         start_time = time.perf_counter()
 
         key = self._key
@@ -404,7 +320,7 @@ class JaxLMSegmentSolver(SegmentSolver):
         j_gate = _get_jax_matrix(basis_inv)
         j_target = _get_jax_matrix(target_inv)
 
-        u0, u1, weyl_res, makhlin_res = self._primary_solve(
+        u0, u1, weyl_res, makhlin_res = self._solve(
             key,
             j_prefix,
             j_gate,
@@ -414,23 +330,11 @@ class JaxLMSegmentSolver(SegmentSolver):
         )
         weyl_res_py = float(weyl_res)
 
-        # Safety-net fallback: full Makhlin + Weyl polish
         if weyl_res_py > self.config.weyl_conv_tol:
-            u0, u1, weyl_res_fb = self._fallback_solve(
-                key,
-                j_prefix,
-                j_gate,
-                j_target,
-                self.config.makhlin_conv_tol,
-                self.config.weyl_conv_tol,
+            raise RuntimeError(
+                f"Optimization failed: Stage 1 residual {float(makhlin_res):.2e}, "
+                f"Stage 2 residual {weyl_res_py:.2e}"
             )
-            weyl_res_py = float(weyl_res_fb)
-
-            if weyl_res_py > self.config.weyl_conv_tol:
-                raise RuntimeError(
-                    f"Optimization failed: Stage 1 residual {float(makhlin_res):.2e}, "
-                    f"Stage 2 residual {weyl_res_py:.2e}"
-                )
 
         return SegmentSolution(
             u0=np.asarray(u0),

@@ -74,7 +74,7 @@ def bench(decompose_fn, name, n):
     return times, fidelities, failures
 
 
-def print_rich_stats(name, times, fidelities, n, file=sys.stderr):
+def print_rich_stats(name, times, fidelities, failures, n, file=sys.stderr):
     """Print detailed human-readable stats to the given file handle."""
     times_ms = np.array(times) * 1000
     fids = np.array(fidelities)
@@ -84,7 +84,7 @@ def print_rich_stats(name, times, fidelities, n, file=sys.stderr):
         f"median={np.median(times_ms):6.1f} ms  "
         f"p95={np.percentile(times_ms, 95):6.1f} ms  "
         f"max={np.max(times_ms):7.1f} ms  "
-        f"({n}/{n} ok, "
+        f"({n - failures}/{n} ok, "
         f"fid_min={np.min(fids):.8f})",
         file=file,
     )
@@ -157,13 +157,14 @@ def main():
 
         # Rich stats to stderr
         print_rich_stats(
-            f"{isa_name}/XXDecomposer", xx_times, xx_fids, args.n - xx_failures
+            f"{isa_name}/XXDecomposer", xx_times, xx_fids, xx_failures, args.n
         )
         print_rich_stats(
             f"{isa_name}/GulpsDecomposer",
             gulps_times,
             gulps_fids,
-            args.n - gulps_failures,
+            gulps_failures,
+            args.n,
         )
 
         xx_med = statistics.median(xx_times)

@@ -71,7 +71,7 @@ def bench(decomposer, name, n):
     return times, fidelities, failures
 
 
-def print_rich_stats(name, times, fidelities, n, file=sys.stderr):
+def print_rich_stats(name, times, fidelities, failures, n, file=sys.stderr):
     """Print detailed human-readable stats to the given file handle."""
     times_ms = np.array(times) * 1000
     fids = np.array(fidelities) if fidelities else np.array([0.0])
@@ -81,7 +81,7 @@ def print_rich_stats(name, times, fidelities, n, file=sys.stderr):
         f"median={np.median(times_ms):6.1f} ms  "
         f"p95={np.percentile(times_ms, 95):6.1f} ms  "
         f"max={np.max(times_ms):7.1f} ms  "
-        f"({n}/{n} ok, "
+        f"({n - failures}/{n} ok, "
         f"fid_min={np.min(fids):.8f})",
         file=file,
     )
@@ -137,7 +137,7 @@ def main():
         median_s = statistics.median(times)
 
         # Rich stats to stderr
-        print_rich_stats(display_name, times, fidelities, args.n - failures)
+        print_rich_stats(display_name, times, fidelities, failures, args.n)
         # Collect for JSON (keys stay isa1/isa2/isa3 for backlog CSV compat)
         json_result[isa_key] = round(median_s, 6)
         all_medians_ms.append(median_s * 1000)
