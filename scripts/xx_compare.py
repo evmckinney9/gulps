@@ -133,6 +133,7 @@ def main():
         "isa1": [sq4],
         "isa2": [sq3, sq4],
         "isa3": [sq4, sq3, sq2],
+        "isa4": [sq2],  # this one has been tricky for outliers
     }
 
     print(
