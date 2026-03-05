@@ -68,17 +68,36 @@ def _build_cold_start_basis(n_stages: int) -> np.ndarray:
     )
 
 
-# --- Solver cache and interface ---
+# --- Solver cache ---
 
 _solver_cache: dict[tuple[int, float], DualRevisedSimplex] = {}
 
 
 def _get_solver(n_gates: int, tol: float) -> DualRevisedSimplex:
-    """Get or create a cached dual-simplex solver for sentence length *n_gates*."""
+    """Return the shared dual-simplex solver for *n_gates* gates.
+
+    One solver instance is cached per ``(n_gates, tol)`` pair and
+    re-used across all LP solves with the same sentence length.
+    Warm-starting from the previous solve's basis is safe because the
+    objective perturbation below breaks LP degeneracy, making the
+    optimum unique regardless of starting basis.
+
+    The objective has a tiny asymmetric perturbation (O(1e-8)) on the
+    m1 vs m2 monodromy coordinates.  Since ``c1 − c2 = m1 − m2`` in
+    Weyl space, this steers the LP away from the c1 = c2 symmetry line
+    where the Makhlin Jacobian is rank-deficient and segment synthesis
+    is slow.
+    """
     key = (n_gates, tol)
     if key not in _solver_cache:
         A = _build_constraint_matrix(n_gates)
-        c = -np.ones(A.shape[1])
+        n_cols = A.shape[1]
+        n_stages = n_cols // _d
+        eps = 1e-8
+        c = -np.ones(n_cols)
+        for k in range(n_stages):
+            c[_d * k + 1] -= eps  # m1: push c1 > c2
+            c[_d * k + 2] += eps  # m2: pull c2 down slightly
         basis = _build_cold_start_basis(n_gates - 2)
         _solver_cache[key] = DualRevisedSimplex(A, c, basis, tol=tol)
     return _solver_cache[key]

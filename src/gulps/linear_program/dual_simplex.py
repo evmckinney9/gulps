@@ -82,11 +82,17 @@ class DualRevisedSimplex:
         initial_basis: np.ndarray,
         tol: float = 1e-10,
     ) -> None:
+        """Store constraint data and set up the initial basis."""
         self._A = np.ascontiguousarray(A, dtype=np.float64)
         self._c = c.astype(np.float64)
         self._n = A.shape[1]
         self._tol = tol
-        self._basis = initial_basis.copy()
+        self._initial_basis = initial_basis.copy()
+        self._basis = self._initial_basis.copy()
+
+    def reset(self) -> None:
+        """Reset to cold-start basis (deterministic across solve calls)."""
+        self._basis = self._initial_basis.copy()
 
     def solve(self, b: np.ndarray) -> tuple[np.ndarray | None, bool]:
         """Solve for a given b vector.  Returns ``(x, feasible)``."""
