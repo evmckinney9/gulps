@@ -37,7 +37,11 @@ from gulps.synthesis.segments_abc import SegmentSolution, SegmentSolver
 # Restart loop factories
 # ---------------------------------------------------------------------------
 def _gn_step(residual_fn, x, prefix_op, basis_gate, target_inv, damping):
-    """Single damped Gauss-Newton step -> (x_new, residual_norm)."""
+    """Single damped Gauss-Newton step -> (x_new, residual_norm).
+
+    Args:
+        damping: ridge regularization added to J^T J.
+    """
     r = residual_fn(x, prefix_op, basis_gate, target_inv)
     J = jacrev(residual_fn, argnums=0)(x, prefix_op, basis_gate, target_inv)
     gram = J @ J.T + damping * jnp.eye(J.shape[0], dtype=jnp.float64)
@@ -52,16 +56,17 @@ def _make_gn_restart_loop(
     maxiter: int,
     max_restarts: int,
     solver_tol: float,
-    stagnation_window: int = 32,
-    progress_ratio: float = 0.5,
+    stagnation_window: int,
+    progress_ratio: float,
     restart_patience: int = 0,
+    damping: float = 1e-14,
 ):
     """Build a JIT'd random-restart GN solver with rate-based stagnation.
 
     A snapshot of the residual is taken whenever it improves by progress_ratio
     (halves by default).  A restart is abandoned if stagnation_window iterations
     pass without crossing the next threshold.  This lets slow-converging
-    restarts at rank-deficient symmetry points (c1 ≈ c2) run to completion.
+    restarts at rank-deficient symmetry points (c1 ~= c2) run to completion.
 
     If restart_patience > 0, the restart loop exits early when
     restart_patience consecutive restarts fail to improve the global best.
@@ -96,7 +101,7 @@ def _make_gn_restart_loop(
             def gn_body(inner):
                 j, x, _, init_n, snap_norm, snap_j = inner
                 x_new, new_norm = _gn_step(
-                    residual_fn, x, prefix_op, basis_gate, target_inv, 1e-14
+                    residual_fn, x, prefix_op, basis_gate, target_inv, damping
                 )
                 finite = jnp.all(jnp.isfinite(x_new)) & jnp.isfinite(new_norm)
                 out_norm = jnp.where(finite, new_norm, jnp.inf)
@@ -165,8 +170,13 @@ def _make_lm_warmstart_loop(
     max_restarts: int,
     solver_tol: float,
     perturb_scale: float,
+    init_lambda: float = 1e-3,
 ):
-    """Build a JIT'd warm-start LM solver with adaptive damping."""
+    """Build a JIT'd warm-start LM solver with adaptive damping.
+
+    Args:
+        init_lambda: Initial LM damping parameter.
+    """
 
     @jit
     def run_until_success(key, prefix_op, basis_gate, target_inv, tol, warm_start):
@@ -215,7 +225,9 @@ def _make_lm_warmstart_loop(
                 r0 = residual_fn(init, prefix_op, basis_gate, target_inv)
                 init_norm = jnp.max(jnp.abs(r0))
                 _, final_x, final_res, _ = lax.while_loop(
-                    lm_cond, lm_body, (jnp.int32(0), init, init_norm, jnp.float64(1e-3))
+                    lm_cond,
+                    lm_body,
+                    (jnp.int32(0), init, init_norm, jnp.float64(init_lambda)),
                 )
                 return final_x, final_res
 
@@ -291,7 +303,10 @@ class JaxLMSegmentSolver(SegmentSolver):
             maxiter=self.config.makhlin_maxiter,
             max_restarts=self.config.makhlin_restarts,
             solver_tol=self.config.makhlin_solver_tol,
+            stagnation_window=self.config.makhlin_stagnation_window,
+            progress_ratio=self.config.makhlin_progress_ratio,
             restart_patience=self.config.makhlin_restart_patience,
+            damping=self.config.makhlin_damping,
         )
         solve_weyl = _make_lm_warmstart_loop(
             _weyl_residual,
@@ -299,6 +314,7 @@ class JaxLMSegmentSolver(SegmentSolver):
             max_restarts=self.config.weyl_restarts,
             solver_tol=self.config.weyl_solver_tol,
             perturb_scale=self.config.weyl_perturb_scale,
+            init_lambda=self.config.weyl_lm_init_lambda,
         )
 
         # --- Makhlin -> warm Weyl polish ---

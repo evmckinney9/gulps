@@ -73,31 +73,43 @@ def _build_cold_start_basis(n_stages: int) -> np.ndarray:
 _solver_cache: dict[tuple[int, float], DualRevisedSimplex] = {}
 
 
-def _get_solver(n_gates: int, tol: float) -> DualRevisedSimplex:
+def _get_solver(n_gates: int, tol: float, config: GulpsConfig) -> DualRevisedSimplex:
     """Return the shared dual-simplex solver for *n_gates* gates.
 
-    One solver instance is cached per ``(n_gates, tol)`` pair and
-    re-used across all LP solves with the same sentence length.
+    One solver instance is cached per ``(n_gates, tol, objective)`` triple
+    and re-used across all LP solves with the same sentence length.
     Warm-starting from the previous solve's basis is safe because the
-    objective perturbation below breaks LP degeneracy, making the
+    asymmetric objective below breaks LP degeneracy, making the
     optimum unique regardless of starting basis.
 
-    The objective has a tiny asymmetric perturbation to steer the LP away
-    from the c1 = c2 symmetry line where the Makhlin Jacobian is rank-deficient
-    and segment synthesis is slow.
+    Objective design (per stage, variables ``m0, m1, m2``):
+
+    * **m1/m2 asymmetry** - steers intermediates toward ``m1 > m2``
+      (equivalently ``c1 > c2``).  This avoids both the ``c1 = c2``
+      Makhlin Jacobian rank-deficiency (Gauss-Newton stalls) and the
+      ``c1 + c2 ~= 1`` boundary.
+    * **m0 weight** - preserving full vertex-seeking behaviour which
+      benefits deep sentences and caching.
+
+    Only the objective vector changes; the constraint matrix is
+    untouched, so the LP feasible region and gate-count optimality
+    are preserved.
     """
-    key = (n_gates, tol)
+    w0, w1, w2 = config.lp_objective_bias
+    key = (n_gates, tol, w0, w1, w2)
     if key not in _solver_cache:
         A = _build_constraint_matrix(n_gates)
         n_cols = A.shape[1]
         n_stages = n_cols // _d
-        eps = 1e-8
-        c = -np.ones(n_cols)
+        c = np.empty(n_cols)
         for k in range(n_stages):
-            c[_d * k + 1] -= eps  # m1: push c1 > c2
-            c[_d * k + 2] += eps  # m2: pull c2 down slightly
+            c[_d * k + 0] = w0
+            c[_d * k + 1] = w1
+            c[_d * k + 2] = w2
         basis = _build_cold_start_basis(n_gates - 2)
-        _solver_cache[key] = DualRevisedSimplex(A, c, basis, tol=tol)
+        _solver_cache[key] = DualRevisedSimplex(
+            A, c, basis, tol=tol, max_pivots=config.lp_max_pivots
+        )
     return _solver_cache[key]
 
 
@@ -133,7 +145,7 @@ class MinimalOrderedISAConstraints(ISAConstraints):
         n = len(isa_sequence)
         self._sequence = isa_sequence
         tol = self._config.lp_feasibility_tol
-        self._solver = _get_solver(n, tol) if n > 2 else None
+        self._solver = _get_solver(n, tol, self._config) if n > 2 else None
         self._b = self._build_base_rhs(isa_sequence)
         self._last_target_contrib = np.zeros(len_qlr)
 
