@@ -34,6 +34,10 @@ class GulpsConfig:
             Default: 64
         makhlin_maxiter: Maximum iterations per Stage 1 restart.
             Controls when to give up on a single optimization attempt. Default: 256
+        makhlin_restart_patience: Stop the restart loop after this many consecutive
+            non-improving restarts.  Prevents wasting time on hard segments where
+            the Gauss-Newton residual plateaus above makhlin_conv_tol.
+            Set to 0 to disable.  Default: 12
         weyl_restarts: Number of restarts for Stage 2 (Weyl) polishing.
             Warm-started from Makhlin; typically converges on restart 0.
             Default: 16
@@ -57,6 +61,7 @@ class GulpsConfig:
     # Solver parameters
     makhlin_restarts: int = 64
     makhlin_maxiter: int = 256
+    makhlin_restart_patience: int = 12
     weyl_restarts: int = 16
     weyl_maxiter: int = 64
     weyl_perturb_scale: float = 1e-4

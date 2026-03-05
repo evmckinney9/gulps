@@ -54,6 +54,7 @@ def _make_gn_restart_loop(
     solver_tol: float,
     stagnation_window: int = 32,
     progress_ratio: float = 0.5,
+    restart_patience: int = 0,
 ):
     """Build a JIT'd random-restart GN solver with rate-based stagnation.
 
@@ -61,6 +62,9 @@ def _make_gn_restart_loop(
     (halves by default).  A restart is abandoned if stagnation_window iterations
     pass without crossing the next threshold.  This lets slow-converging
     restarts at rank-deficient symmetry points (c1 ≈ c2) run to completion.
+
+    If restart_patience > 0, the restart loop exits early when
+    restart_patience consecutive restarts fail to improve the global best.
     """
 
     @jit
@@ -74,11 +78,12 @@ def _make_gn_restart_loop(
         init_max=jnp.pi / 2,
     ):
         def cond_fn(carry):
-            i, _, _, best_res, done = carry
-            return (i < max_restarts) & (~done)
+            i, _, _, best_res, done, stale_count = carry
+            exhausted = (restart_patience > 0) & (stale_count >= restart_patience)
+            return (i < max_restarts) & (~done) & (~exhausted)
 
         def body_fn(carry):
-            i, key, best_params, best_res, done = carry
+            i, key, best_params, best_res, done, stale_count = carry
             init = uniform(
                 fold_in(key, i), shape=(NUM_PARAMS,), minval=init_min, maxval=init_max
             )
@@ -125,6 +130,7 @@ def _make_gn_restart_loop(
             params_finite = jnp.all(jnp.isfinite(final_x))
             improved = (final_res < best_res) & params_finite
             safe_params = jnp.where(params_finite, final_x, init)
+            new_stale = jnp.where(improved, jnp.int32(0), stale_count + 1)
 
             return (
                 i + 1,
@@ -132,9 +138,10 @@ def _make_gn_restart_loop(
                 jnp.where(improved, safe_params, best_params),
                 jnp.where(improved, final_res, best_res),
                 done | (final_res <= tol),
+                new_stale,
             )
 
-        _, _, best_params, best_res, _ = lax.while_loop(
+        _, _, best_params, best_res, _, _ = lax.while_loop(
             cond_fn,
             body_fn,
             (
@@ -143,6 +150,7 @@ def _make_gn_restart_loop(
                 jnp.zeros((NUM_PARAMS,), dtype=jnp.float64),
                 jnp.array(jnp.inf, dtype=jnp.float64),
                 jnp.array(False),
+                jnp.int32(0),
             ),
         )
         return best_params, best_res
@@ -273,6 +281,7 @@ class JaxLMSegmentSolver(SegmentSolver):
     """
 
     def __init__(self, config: GulpsConfig | None = None, rng_seed: int | None = None):
+        """Initialize the two-stage Makhlin→Weyl segment solver."""
         self.config = config or GulpsConfig()
         self._key = PRNGKey(rng_seed or 0)
 
@@ -282,6 +291,7 @@ class JaxLMSegmentSolver(SegmentSolver):
             maxiter=self.config.makhlin_maxiter,
             max_restarts=self.config.makhlin_restarts,
             solver_tol=self.config.makhlin_solver_tol,
+            restart_patience=self.config.makhlin_restart_patience,
         )
         solve_weyl = _make_lm_warmstart_loop(
             _weyl_residual,
