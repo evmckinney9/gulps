@@ -1,6 +1,5 @@
-from typing import List
+"""Qiskit transpiler pass that wraps GulpsDecomposer."""
 
-from qiskit.circuit import Gate
 from qiskit.dagcircuit import DAGCircuit
 from qiskit.transpiler.basepasses import TransformationPass
 from qiskit.transpiler.passes import Collect2qBlocks, ConsolidateBlocks
@@ -9,12 +8,16 @@ from gulps.gulps_decomposer import GulpsDecomposer
 
 
 class GulpsDecompositionPass(TransformationPass):
+    """Replace all two-qubit blocks with GULPS-synthesized circuits."""
+
     def __init__(self, decomposer: GulpsDecomposer, **kwargs) -> None:
+        """Wrap decomposer as a Qiskit transformation pass."""
         super().__init__()
         self.requires = [Collect2qBlocks(), ConsolidateBlocks(force_consolidate=True)]
         self._decomposer = decomposer
 
     def run(self, dag: DAGCircuit) -> DAGCircuit:
+        """Decompose every two-qubit node in dag."""
         for node in dag.op_nodes():
             # ignore operations on which the algorithm cannot run
             if (

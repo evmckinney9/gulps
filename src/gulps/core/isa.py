@@ -1,3 +1,5 @@
+"""ISA data structures: ContinuousISA, DiscreteISA, and their generators."""
+
 import heapq
 import itertools
 import logging
@@ -9,7 +11,6 @@ import numpy as np
 from qiskit.circuit import Gate
 
 from gulps import GateInvariants
-from gulps.core.coverage import isa_to_coverage
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +54,7 @@ class ContinuousISA(ISAInvariants):
 
     @property
     def is_single_family(self) -> bool:
+        """Return True when the ISA uses exactly one base gate family."""
         return len(self.gate_set) == 1
 
     @classmethod
@@ -66,8 +68,8 @@ class ContinuousISA(ISAInvariants):
 
         Args:
             base_gate: Base gate unitary or Qiskit Gate.
-            k_lb: Minimum nonzero k value (gates with k < k_lb are pruned).
             name: Optional name for the base gate.
+            single_qubit_cost: Cost offset per gate to prioritise shorter circuits.
 
         Returns:
             ContinuousISA instance.
@@ -97,6 +99,7 @@ class DiscreteISA(ISAInvariants):
         precompute_polytopes: bool = False,
         single_qubit_cost: float = ISAInvariants.MIN_COST_1Q,
     ):
+        """Initialise DiscreteISA from gates, costs, and optional names."""
         if not gate_set:
             raise ValueError("gate_set can't be empty.")
         if len(gate_set) != len(costs):
@@ -120,6 +123,8 @@ class DiscreteISA(ISAInvariants):
             self.single_qubit_cost = self.MIN_COST_1Q
         self._precompute_polytopes = precompute_polytopes
         if precompute_polytopes:
+            from gulps.core.coverage import isa_to_coverage
+
             self.coverage_set = isa_to_coverage(self)
 
     def enumerate(self, max_depth: int) -> Generator[List[GateInvariants], None, None]:

@@ -17,6 +17,7 @@ class LinearWeylSolver(SegmentSolver):
     """
 
     def __init__(self, tolerance: float = 1e-6):
+        """Set match tolerance for linear-Weyl detection."""
         self.tolerance = tolerance
 
     def try_solve(

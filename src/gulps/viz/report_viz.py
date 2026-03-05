@@ -1,3 +1,5 @@
+"""Summary report visualizations comparing synthesis results."""
+
 from collections import Counter
 
 import lovelyplots

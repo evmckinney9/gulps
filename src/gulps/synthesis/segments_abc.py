@@ -1,3 +1,5 @@
+"""Abstract base class and data types for segment solvers."""
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Optional
@@ -10,6 +12,8 @@ if TYPE_CHECKING:
 
 @dataclass
 class SegmentSolution:
+    """Result of a single segment solve (local unitaries and diagnostics)."""
+
     u0: Optional[np.ndarray]  # 2x2 or None if failure
     u1: Optional[np.ndarray]  # 2x2 or None if failure
     max_residual: float  # worst-case residual component (L∞ norm)

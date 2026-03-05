@@ -1,4 +1,3 @@
-# gulps/logging_config.py
 import logging
 
 logger = logging.getLogger("gulps")

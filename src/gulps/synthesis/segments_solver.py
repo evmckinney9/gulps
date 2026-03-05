@@ -1,3 +1,5 @@
+"""Segment-wise synthesis orchestrator with circuit stitching."""
+
 import logging
 from typing import List
 
@@ -25,6 +27,7 @@ class SegmentSynthesizer:
     """
 
     def __init__(self, config: GulpsConfig | None = None):
+        """Initialise solvers and cache from config."""
         self.config = config or GulpsConfig()
         self._cache = SegmentCache(max_entries_per_step=self.config.segment_cache_size)
         self._jax_lm_solver = JaxLMSegmentSolver(config=self.config)

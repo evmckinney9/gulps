@@ -11,18 +11,13 @@ description = "compile arbitrary two-qubit unitaries"
 version = "0.1.10"
 authors = [{ name = "evm9" }]
 requires-python = ">=3.9"
-dependencies = [
-    "qiskit",
-    # wait for this to merge https://github.com/qiskit-community/monodromy/pull/18
-    "monodromy @ git+https://github.com/evmckinney9/monodromy.git@fix-setup",
-    # avoid pypi because I don't want the numpy<2.0 restriction
-    "weylchamber @ git+https://github.com/evmckinney9/weylchamber",
-    "qutip",
-    "numpy",
-    "jax",
-]
+dependencies = ["qiskit", "numpy", "jax"]
 [project.optional-dependencies]
 cplex = ["qiskit-optimization[cplex]"]
+monodromy = [
+    # wait for this to merge https://github.com/qiskit-community/monodromy/pull/18
+    "monodromy @ git+https://github.com/evmckinney9/monodromy.git@fix-setup",
+]
 dev = [
     "matplotlib",
     "SciencePlots",
@@ -33,17 +28,25 @@ dev = [
     "tqdm",
     "snakeviz",
     "ipywidgets",
+    "qutip",
 ]
 format = ["pre-commit", "ruff"]
 test = ["pytest"]
 
 [tool.ruff]
-target-version = "py310"
+target-version = "py312"
 fix = true
 extend-include = ["*.ipynb"]
 
 [tool.ruff.lint]
 select = ["D"]
+ignore = ["D105"] # magic methods like __init__ don't need docstrings
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/**" = ["D"]
+"src/tests/**/*.py" = ["D1"]
+"src/gulps/comparisons/**" = ["D"] # third-party driver wrappers
+"**/*.ipynb" = ["D"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"

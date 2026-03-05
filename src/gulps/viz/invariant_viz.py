@@ -1,8 +1,9 @@
+"""Weyl-chamber scatter plots for gate invariants."""
+
 from typing import List, Optional, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
-from weylchamber import WeylChamber
 
 from gulps.core.invariants import GateInvariants
 from gulps.core.isa import ContinuousISA, ISAInvariants
@@ -11,6 +12,7 @@ from gulps.viz.legend_helpers import (
     add_discrete_legend,
     build_color_map_from_isa,
 )
+from gulps.viz.weyl_chamber import WeylChamber
 
 
 def scatter_plot(invariant_list: List[GateInvariants]):

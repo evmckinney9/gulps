@@ -4,15 +4,15 @@ import logging
 from typing import Optional, Tuple
 
 import numpy as np
-from monodromy.coordinates import (
-    positive_canonical_to_monodromy_coordinate,
-    unitary_to_monodromy_coordinate,
-)
 from qiskit._accelerate.two_qubit_decompose import two_qubit_local_invariants as tqli_rs
-from qiskit._accelerate.two_qubit_decompose import weyl_coordinates
 from qiskit.circuit import Gate
 from qiskit.circuit.library import UnitaryGate
 from qiskit.quantum_info import Operator
+
+from gulps.core.monodromy_coords import (
+    positive_canonical_to_monodromy_coordinate,
+    unitary_to_monodromy_coordinate,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +29,7 @@ class GateInvariants:
         unitary: Optional[np.ndarray] = None,
         rho_reflect: Optional["GateInvariants"] = None,
     ):
+        """Create from a 3- or 4-element logspec tuple."""
         # if logspec is a np.ndarray, convert to tuple
         if isinstance(logspec, np.ndarray):
             logspec = tuple(logspec.tolist())
@@ -54,6 +55,7 @@ class GateInvariants:
     def from_unitary(
         cls, gate: Gate | np.ndarray, enforce_alcove=False, name: Optional[str] = None
     ) -> "GateInvariants":
+        """Construct from a Qiskit Gate or 4x4 unitary matrix."""
         # Fast-path: extract numpy array without redundant Operator validation
         if isinstance(gate, np.ndarray):
             U = gate
@@ -81,6 +83,7 @@ class GateInvariants:
     ) -> Tuple[np.float64, np.float64, np.float64, np.float64]:
         return tuple(unitary_to_monodromy_coordinate(U))
         # NOTE, backup conventon. the above used to give some unexplained precision issues
+        # from qiskit._accelerate.two_qubit_decompose import weyl_coordinates
         # a, b, c = positive_canonical_to_monodromy_coordinate(*weyl_coordinates(U))
         # return (a, b, c, -1.0 * (a + b + c))
 
@@ -148,6 +151,7 @@ class GateInvariants:
 
     @property
     def strength(self) -> np.float64:
+        """Minimum total monodromy weight of this gate or its rho-reflect."""
         if self._strength is None:
             self._strength = min(sum(self.monodromy), sum(self.rho_reflect.monodromy))
         return self._strength
@@ -177,6 +181,7 @@ class GateInvariants:
 
     @property
     def is_identity(self) -> bool:
+        """Return True when this gate is locally equivalent to the identity."""
         m = self._monodromy
         return abs(m[0]) < 1e-8 and abs(m[1]) < 1e-8 and abs(m[2]) < 1e-8
 
@@ -193,6 +198,7 @@ class GateInvariants:
         return hash(self._key)
 
     def plot(self):
+        """Scatter this gate in a 3-D Weyl chamber plot."""
         from gulps.viz.invariant_viz import scatter_plot
 
         return scatter_plot([self])
@@ -200,9 +206,9 @@ class GateInvariants:
 
 if __name__ == "__main__":
     from qiskit.circuit.library import iSwapGate
-    from weylchamber import c1c2c3, g1g2g3
 
     u = iSwapGate().power(1 / 2).to_matrix()
     g = GateInvariants.from_unitary(u)
-    assert np.allclose(g1g2g3(u), g.makhlin)
-    assert np.allclose(c1c2c3(u), g.weyl)
+    print("monodromy:", g.monodromy)
+    print("weyl:", g.weyl)
+    print("makhlin:", g.makhlin)

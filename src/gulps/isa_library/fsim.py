@@ -1,6 +1,7 @@
-import numpy as np
+"""fSim gate factory for use as a GULPS ISA base gate."""
+
 from qiskit import QuantumCircuit
-from qiskit.circuit.library import CXGate, SwapGate, XXPlusYYGate, iSwapGate
+from qiskit.circuit.library import XXPlusYYGate
 
 
 def fsim(theta, phi):

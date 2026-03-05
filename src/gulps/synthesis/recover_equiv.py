@@ -4,8 +4,7 @@ import logging
 from typing import Tuple
 
 import numpy as np
-from qiskit._accelerate import two_qubit_decompose
-from qiskit.circuit.library import UnitaryGate, XGate, YGate, ZGate
+from qiskit.circuit.library import XGate, YGate, ZGate
 from qiskit.exceptions import QiskitError
 from qiskit.quantum_info import Operator
 from qiskit.synthesis.two_qubit import TwoQubitWeylDecomposition
@@ -51,11 +50,7 @@ def recover_local_equivalence(
         from scipy.linalg import svd
 
         def closest_unitary(A):
-            """Calculate the unitary matrix U that is closest with respect to the
-            operator norm distance to the general matrix A.
-
-            Return U as a numpy matrix.
-            """
+            """Return the unitary matrix U closest to general matrix A under the operator norm."""
             V, __, Wh = svd(A)
             U = np.matrix(V.dot(Wh))
             return U

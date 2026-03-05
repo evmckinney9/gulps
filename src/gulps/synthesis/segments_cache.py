@@ -1,8 +1,8 @@
+"""LFU segment cache for reusing numeric solutions."""
+
 import logging
 from dataclasses import dataclass
 from typing import Optional
-
-import numpy as np
 
 from gulps.core.invariants import GateInvariants
 from gulps.synthesis.segments_abc import SegmentSolution, SegmentSolver
@@ -25,6 +25,7 @@ class SegmentCache(SegmentSolver):
     """Cache-based segment solver with LFU eviction."""
 
     def __init__(self, max_entries_per_step: int = 2):
+        """Create a cache with at most max_entries_per_step entries per step."""
         self._entries: dict[int, list[SegmentCacheEntry]] = {}
         self._max_entries = max_entries_per_step
         self.hits = 0

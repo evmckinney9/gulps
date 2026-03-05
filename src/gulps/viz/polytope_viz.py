@@ -1,9 +1,12 @@
+"""3-D polytope visualization for monodromy coverage sets."""
+
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy.spatial as ss
 from monodromy.coordinates import monodromy_to_positive_canonical_polytope
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
-from weylchamber import WeylChamber
+
+from gulps.viz.weyl_chamber import WeylChamber
 
 # Maximum columns in subplot grid
 MAX_COLS = 5

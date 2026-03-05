@@ -1,3 +1,5 @@
+"""CPLEX-based LP constraints for continuous ISA gate sequences."""
+
 try:
     import docplex  # or the precise submodule you need
 except ModuleNotFoundError as exc:
@@ -47,6 +49,7 @@ class ContinuousISAConstraints(ISAConstraints):
         single_qubit_cost: float = 1e-8,
         config: GulpsConfig | None = None,
     ):
+        """Build the CPLEX model for a continuous single-family ISA."""
         self.N = max_sequence_length
         if self.N < 2:
             raise ValueError("sequence_length must be at least 2")
@@ -103,6 +106,7 @@ class ContinuousISAConstraints(ISAConstraints):
         return result if result.cost <= rho_result.cost else rho_result
 
     def solve_single(self, log_output: bool = False) -> ConstraintSolution:
+        """Solve the LP once (current target orientation) and extract results."""
         sol = self.model.solve(log_output=log_output)
         if not sol:
             return ConstraintSolution(success=False)

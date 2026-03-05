@@ -1,23 +1,38 @@
-# from monodromy.coverage import gates_to_coverage
-# NOTE, previously we had modified CircuitPolytope to include instruction metadata.
-# now, we won't modify monodromy.coverage.build_coverage_set
-# instead, we will hold a str->Instruction mapping, handling lookup in gulps
+"""Weyl-chamber coverage computation and sampling for ISA gate sets.
+
+This module requires the optional ``monodromy`` package.  All heavy imports
+are guarded so that the rest of GULPS can be used without it.
+"""
+
+from __future__ import annotations
+
 from fractions import Fraction
-from typing import List
+from typing import TYPE_CHECKING, List
 
 import numpy as np
-from monodromy.coordinates import unitary_to_monodromy_coordinate
-from monodromy.coverage import (
-    CircuitPolytope,
-    build_coverage_set,
-    deduce_qlr_consequences,
-)
-from monodromy.haar import distance_polynomial_integrals
-from monodromy.static.examples import everything_polytope, exactly, identity_polytope
 from numpy import ndarray
 
-# from gulps.core.isa import ISAInvariants
-from gulps.viz.polytope_viz import plot_coverage_set
+try:
+    from monodromy.coordinates import unitary_to_monodromy_coordinate
+    from monodromy.coverage import (
+        CircuitPolytope,
+        build_coverage_set,
+        deduce_qlr_consequences,
+    )
+    from monodromy.haar import distance_polynomial_integrals
+    from monodromy.static.examples import (
+        everything_polytope,
+        exactly,
+        identity_polytope,
+    )
+except ModuleNotFoundError as _exc:
+    raise ImportError(
+        "Coverage computation requires the 'monodromy' extra. "
+        "Install with `pip install gulps[monodromy]`."
+    ) from _exc
+
+if TYPE_CHECKING:
+    from gulps.core.isa import ISAInvariants
 
 
 def _operation_to_circuit_polytope(
@@ -144,6 +159,8 @@ def coverage_report(coverage_set, chatty=False):
         dict: Coverage analysis containing volume_info, expected_cost,
             expected_depth, expected_index, and total_coverage.
     """
+    from gulps.viz.polytope_viz import plot_coverage_set
+
     report = compute_coverage_statistics(coverage_set, chatty=chatty)
 
     # Plot
@@ -163,12 +180,10 @@ def coverage_report(coverage_set, chatty=False):
     return report
 
 
-import numpy as np
-
-
 def weyl_linspace(N):
-    """Iterable of N (x,y,z) points in the tetrahedron with vertices:
-      v0=(0,0,0), v1=(1,0,0), v2=(0.5,0.5,0), v3=(0.5,0.5,0.5)
+    """Generate N spread (x,y,z) sample points inside the Weyl-chamber tetrahedron.
+
+    Vertices: v0=(0,0,0), v1=(1,0,0), v2=(0.5,0.5,0), v3=(0.5,0.5,0.5).
 
     Construction:
       1) 4 vertices

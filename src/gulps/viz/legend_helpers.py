@@ -12,7 +12,7 @@ from matplotlib.legend_handler import HandlerBase
 from matplotlib.lines import Line2D
 from matplotlib.patches import Rectangle
 
-from gulps.core.isa import ContinuousISA, DiscreteISA, ISAInvariants
+from gulps.core.isa import ContinuousISA, ISAInvariants
 
 # Define color palette for basis gates (used for discrete ISAs)
 COLOR_PALETTE = [

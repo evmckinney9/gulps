@@ -40,7 +40,12 @@ def _gn_step(residual_fn, x, prefix_op, basis_gate, target_inv, damping):
     """Single damped Gauss-Newton step -> (x_new, residual_norm).
 
     Args:
-        damping: ridge regularization added to J^T J.
+        residual_fn: Callable computing the residual vector.
+        x: Current parameter vector.
+        prefix_op: Prefix operator matrix.
+        basis_gate: Basis gate matrix.
+        target_inv: Target invariants to match.
+        damping: Ridge regularization added to J^T J.
     """
     r = residual_fn(x, prefix_op, basis_gate, target_inv)
     J = jacrev(residual_fn, argnums=0)(x, prefix_op, basis_gate, target_inv)
@@ -175,6 +180,11 @@ def _make_lm_warmstart_loop(
     """Build a JIT'd warm-start LM solver with adaptive damping.
 
     Args:
+        residual_fn: Callable computing the residual vector.
+        maxiter: Maximum LM iterations per restart.
+        max_restarts: Maximum number of perturbed restarts.
+        solver_tol: Convergence tolerance on max residual.
+        perturb_scale: Scale of uniform perturbation for restarts.
         init_lambda: Initial LM damping parameter.
     """
 
