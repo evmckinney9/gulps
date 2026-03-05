@@ -3,6 +3,12 @@
 Stage 1 (Makhlin GN) finds the basin; Stage 2 (Weyl LM) polishes to
 high accuracy.  Restart loop factories and the public JaxLMSegmentSolver
 class live here.  All JAX math primitives live in jax_primitives.py.
+
+The Makhlin invariants symmetry is causes the Jacobian to become nearly
+rank-deficient at the symmetry line c1 = c2.  GN convergence is steady
+but slow there (~40-60 iters vs ~10 typical); the stagnation detector
+uses a rate-based criterion (no halving in N iters) rather than an
+absolute-improvement threshold to avoid killing these restarts early.
 """
 
 import time
@@ -46,10 +52,16 @@ def _make_gn_restart_loop(
     maxiter: int,
     max_restarts: int,
     solver_tol: float,
-    stagnation_iters: int = 32,
-    stagnation_factor: float = 0.1,
+    stagnation_window: int = 32,
+    progress_ratio: float = 0.5,
 ):
-    """Build a JIT'd random-restart GN solver with stagnation early-exit."""
+    """Build a JIT'd random-restart GN solver with rate-based stagnation.
+
+    A snapshot of the residual is taken whenever it improves by progress_ratio
+    (halves by default).  A restart is abandoned if stagnation_window iterations
+    pass without crossing the next threshold.  This lets slow-converging
+    restarts at rank-deficient symmetry points (c1 ≈ c2) run to completion.
+    """
 
     @jit
     def run_until_success(
@@ -72,31 +84,42 @@ def _make_gn_restart_loop(
             )
 
             def gn_cond(inner):
-                j, _, prev_norm, init_n = inner
-                stagnated = (
-                    (j >= stagnation_iters)
-                    & (prev_norm > init_n * stagnation_factor)
-                    & (prev_norm > 1e-3)
-                )
+                j, _, prev_norm, _init_n, _snap_norm, snap_j = inner
+                stagnated = ((j - snap_j) >= stagnation_window) & (prev_norm > 1e-3)
                 return (j < maxiter) & (prev_norm > solver_tol) & (~stagnated)
 
             def gn_body(inner):
-                j, x, _, init_n = inner
+                j, x, _, init_n, snap_norm, snap_j = inner
                 x_new, new_norm = _gn_step(
                     residual_fn, x, prefix_op, basis_gate, target_inv, 1e-14
                 )
                 finite = jnp.all(jnp.isfinite(x_new)) & jnp.isfinite(new_norm)
+                out_norm = jnp.where(finite, new_norm, jnp.inf)
+                progressed = finite & (out_norm < snap_norm * progress_ratio)
+                new_snap_norm = jnp.where(progressed, out_norm, snap_norm)
+                new_snap_j = jnp.where(progressed, j + 1, snap_j)
                 return (
                     j + 1,
                     jnp.where(finite, x_new, x),
-                    jnp.where(finite, new_norm, jnp.inf),
+                    out_norm,
                     init_n,
+                    new_snap_norm,
+                    new_snap_j,
                 )
 
             r0 = residual_fn(init, prefix_op, basis_gate, target_inv)
             init_norm = jnp.max(jnp.abs(r0))
-            _, final_x, final_res, _ = lax.while_loop(
-                gn_cond, gn_body, (jnp.int32(0), init, init_norm, init_norm)
+            _, final_x, final_res, _, _, _ = lax.while_loop(
+                gn_cond,
+                gn_body,
+                (
+                    jnp.int32(0),
+                    init,
+                    init_norm,
+                    init_norm,
+                    init_norm,
+                    jnp.int32(0),
+                ),
             )
 
             params_finite = jnp.all(jnp.isfinite(final_x))
