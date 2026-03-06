@@ -120,7 +120,7 @@ def _style_axes(ax, *, date_fmt: str, locator) -> None:
 
 
 def make_plot() -> None:
-    pruned = _read_csv(DATA_DIR / "prune.csv")
+    pruned = _read_csv(DATA_DIR / "pruned_log.csv")
     backlog = _read_csv(DATA_DIR / "backlog.csv")
     recent = backlog[-N_RECENT:]
 

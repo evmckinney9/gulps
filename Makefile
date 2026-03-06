@@ -38,6 +38,7 @@ clean:
 ab:
 	.venv/bin/python ./scripts/simple_speed.py
 	.venv/bin/python ./scripts/xx_compare.py
+	.venv/bin/python ./scripts/weyl_speed.py
 
 test:
 	@$(PIP) install -e .[test] --quiet

@@ -64,6 +64,7 @@ def _make_gn_restart_loop(
     stagnation_window: int,
     progress_ratio: float,
     restart_patience: int = 0,
+    patience_ratio: float = 0.9,
     damping: float = 1e-14,
 ):
     """Build a JIT'd random-restart GN solver with rate-based stagnation.
@@ -74,7 +75,10 @@ def _make_gn_restart_loop(
     restarts at rank-deficient symmetry points (c1 ~= c2) run to completion.
 
     If restart_patience > 0, the restart loop exits early when
-    restart_patience consecutive restarts fail to improve the global best.
+    restart_patience consecutive restarts fail to improve the global best
+    by at least a factor of patience_ratio.  This prevents marginal
+    improvements (e.g., 1e-6 -> 9.9e-7) from resetting the counter and
+    burning the entire restart budget on boundary-case segments.
     """
 
     @jit
@@ -139,8 +143,9 @@ def _make_gn_restart_loop(
 
             params_finite = jnp.all(jnp.isfinite(final_x))
             improved = (final_res < best_res) & params_finite
+            sig_improved = improved & (final_res < best_res * patience_ratio)
             safe_params = jnp.where(params_finite, final_x, init)
-            new_stale = jnp.where(improved, jnp.int32(0), stale_count + 1)
+            new_stale = jnp.where(sig_improved, jnp.int32(0), stale_count + 1)
 
             return (
                 i + 1,
@@ -316,6 +321,7 @@ class JaxLMSegmentSolver(SegmentSolver):
             stagnation_window=self.config.makhlin_stagnation_window,
             progress_ratio=self.config.makhlin_progress_ratio,
             restart_patience=self.config.makhlin_restart_patience,
+            patience_ratio=self.config.makhlin_patience_ratio,
             damping=self.config.makhlin_damping,
         )
         solve_weyl = _make_lm_warmstart_loop(

@@ -12,7 +12,7 @@ ______
 ### Getting Started
 
 - `pip install gulps@git+https://github.com/evmckinney9/gulps`
--  For usage examples, see: `src/gulps/notebooks/main.ipynb`.
+-  For usage examples, see: `src/gulps/notebooks/00_main.ipynb`.
 -  Report issues: [Github issue tracker](https://github.com/ajavadia/hetero_isas/issues/4)
 
 To begin, define your instruction set architecture (ISA) to configure the decomposer. Alternatively, if the instruction set is specified in the properties of a Qiskit `Target`, you can use GULPS as a `UnitarySynthesis` plugin.

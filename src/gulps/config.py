@@ -39,6 +39,11 @@ class GulpsConfig:
             non-improving restarts.  Prevents wasting time on hard segments where
             the Gauss-Newton residual plateaus above makhlin_conv_tol.
             Set to 0 to disable.  Default: 12
+        makhlin_patience_ratio: Factor by which the residual must improve to
+            reset the patience counter.  Prevents marginal gains from
+            keeping the restart loop alive on boundary-case segments.
+            1.0 means any improvement resets patience (old behaviour);
+            0.9 means the residual must drop by ≥ 10%.  Default: 0.9
         makhlin_stagnation_window: Number of GN iterations without progress_ratio
             improvement before a restart is abandoned.  Prevents hanging on
             nearly-converged restarts near rank-deficient symmetry points.
@@ -88,6 +93,7 @@ class GulpsConfig:
     makhlin_restarts: int = 64
     makhlin_maxiter: int = 256
     makhlin_restart_patience: int = 12
+    makhlin_patience_ratio: float = 0.9
     makhlin_stagnation_window: int = 32
     makhlin_progress_ratio: float = 0.5
     makhlin_damping: float = 1e-14
@@ -95,7 +101,6 @@ class GulpsConfig:
     weyl_maxiter: int = 64
     weyl_perturb_scale: float = 1e-4
     weyl_lm_init_lambda: float = 1e-3
-    strict_convergence_checks: bool = False
 
     # LP parameters
     lp_objective_bias: Tuple[float, float, float] = (-1.0, -1.5, -0.5)
