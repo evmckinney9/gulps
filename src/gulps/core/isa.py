@@ -69,7 +69,7 @@ class ContinuousISA(ISAInvariants):
         Args:
             base_gate: Base gate unitary or Qiskit Gate.
             name: Optional name for the base gate.
-            single_qubit_cost: Cost offset per gate to prioritise shorter circuits.
+            single_qubit_cost: Cost offset per gate to prioritize shorter circuits.
 
         Returns:
             ContinuousISA instance.
@@ -99,7 +99,7 @@ class DiscreteISA(ISAInvariants):
         precompute_polytopes: bool = False,
         single_qubit_cost: float = ISAInvariants.MIN_COST_1Q,
     ):
-        """Initialise DiscreteISA from gates, costs, and optional names."""
+        """Initialize DiscreteISA from gates, costs, and optional names."""
         if not gate_set:
             raise ValueError("gate_set can't be empty.")
         if len(gate_set) != len(costs):

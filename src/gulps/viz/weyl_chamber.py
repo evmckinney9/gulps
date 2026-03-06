@@ -54,7 +54,7 @@ class WeylChamber:
     """
 
     def __init__(self):
-        """Initialise default label positions and rendering options."""
+        """Initialize default label positions and rendering options."""
         self.ax = None
         self.labels: dict = {
             "A_1": _WEYL_POINTS["A1"] + np.array((-0.03, 0.04, 0.00)),

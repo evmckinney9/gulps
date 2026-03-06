@@ -316,9 +316,7 @@ class GulpsDecomposer:
         if flag > 0 and self.last_timing["total"] > flag:
             warnings.warn(
                 f"Decomposition took {self.last_timing['total']:.4f}s "
-                f"(threshold: {flag:.4f}s). "
-                f"Tweak GulpsConfig settings (e.g. makhlin_restarts, "
-                f"lp_objective_bias), suppress this warning with "
+                f"(threshold: {flag:.4f}s). Suppress with "
                 f"GulpsConfig(flag_duration=0), or raise an issue at "
                 f"https://github.com/evmckinney9/gulps/issues",
                 stacklevel=2,

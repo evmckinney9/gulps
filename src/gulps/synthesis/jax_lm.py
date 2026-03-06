@@ -3,12 +3,6 @@
 Stage 1 (Makhlin GN) finds the basin; Stage 2 (Weyl LM) polishes to
 high accuracy.  Restart loop factories and the public JaxLMSegmentSolver
 class live here.  All JAX math primitives live in jax_primitives.py.
-
-The Makhlin invariants symmetry is causes the Jacobian to become nearly
-rank-deficient at the symmetry line c1 = c2.  GN convergence is steady
-but slow there (~40-60 iters vs ~10 typical); the stagnation detector
-uses a rate-based criterion (no halving in N iters) rather than an
-absolute-improvement threshold to avoid killing these restarts early.
 """
 
 import time
@@ -61,25 +55,10 @@ def _make_gn_restart_loop(
     maxiter: int,
     max_restarts: int,
     solver_tol: float,
-    stagnation_window: int,
-    progress_ratio: float,
-    restart_patience: int = 0,
-    patience_ratio: float = 0.9,
-    damping: float = 1e-14,
+    stagnation_iters: int = 32,
+    stagnation_factor: float = 0.1,
 ):
-    """Build a JIT'd random-restart GN solver with rate-based stagnation.
-
-    A snapshot of the residual is taken whenever it improves by progress_ratio
-    (halves by default).  A restart is abandoned if stagnation_window iterations
-    pass without crossing the next threshold.  This lets slow-converging
-    restarts at rank-deficient symmetry points (c1 ~= c2) run to completion.
-
-    If restart_patience > 0, the restart loop exits early when
-    restart_patience consecutive restarts fail to improve the global best
-    by at least a factor of patience_ratio.  This prevents marginal
-    improvements (e.g., 1e-6 -> 9.9e-7) from resetting the counter and
-    burning the entire restart budget on boundary-case segments.
-    """
+    """Build a JIT'd random-restart GN solver with stagnation early-exit."""
 
     @jit
     def run_until_success(
@@ -92,60 +71,46 @@ def _make_gn_restart_loop(
         init_max=jnp.pi / 2,
     ):
         def cond_fn(carry):
-            i, _, _, best_res, done, stale_count = carry
-            exhausted = (restart_patience > 0) & (stale_count >= restart_patience)
-            return (i < max_restarts) & (~done) & (~exhausted)
+            i, _, _, best_res, done = carry
+            return (i < max_restarts) & (~done)
 
         def body_fn(carry):
-            i, key, best_params, best_res, done, stale_count = carry
+            i, key, best_params, best_res, done = carry
             init = uniform(
                 fold_in(key, i), shape=(NUM_PARAMS,), minval=init_min, maxval=init_max
             )
 
             def gn_cond(inner):
-                j, _, prev_norm, _init_n, _snap_norm, snap_j = inner
-                stagnated = ((j - snap_j) >= stagnation_window) & (prev_norm > 1e-3)
+                j, _, prev_norm, init_n = inner
+                stagnated = (
+                    (j >= stagnation_iters)
+                    & (prev_norm > init_n * stagnation_factor)
+                    & (prev_norm > 1e-3)
+                )
                 return (j < maxiter) & (prev_norm > solver_tol) & (~stagnated)
 
             def gn_body(inner):
-                j, x, _, init_n, snap_norm, snap_j = inner
+                j, x, _, init_n = inner
                 x_new, new_norm = _gn_step(
-                    residual_fn, x, prefix_op, basis_gate, target_inv, damping
+                    residual_fn, x, prefix_op, basis_gate, target_inv, 1e-14
                 )
                 finite = jnp.all(jnp.isfinite(x_new)) & jnp.isfinite(new_norm)
-                out_norm = jnp.where(finite, new_norm, jnp.inf)
-                progressed = finite & (out_norm < snap_norm * progress_ratio)
-                new_snap_norm = jnp.where(progressed, out_norm, snap_norm)
-                new_snap_j = jnp.where(progressed, j + 1, snap_j)
                 return (
                     j + 1,
                     jnp.where(finite, x_new, x),
-                    out_norm,
+                    jnp.where(finite, new_norm, jnp.inf),
                     init_n,
-                    new_snap_norm,
-                    new_snap_j,
                 )
 
             r0 = residual_fn(init, prefix_op, basis_gate, target_inv)
             init_norm = jnp.max(jnp.abs(r0))
-            _, final_x, final_res, _, _, _ = lax.while_loop(
-                gn_cond,
-                gn_body,
-                (
-                    jnp.int32(0),
-                    init,
-                    init_norm,
-                    init_norm,
-                    init_norm,
-                    jnp.int32(0),
-                ),
+            _, final_x, final_res, _ = lax.while_loop(
+                gn_cond, gn_body, (jnp.int32(0), init, init_norm, init_norm)
             )
 
             params_finite = jnp.all(jnp.isfinite(final_x))
             improved = (final_res < best_res) & params_finite
-            sig_improved = improved & (final_res < best_res * patience_ratio)
             safe_params = jnp.where(params_finite, final_x, init)
-            new_stale = jnp.where(sig_improved, jnp.int32(0), stale_count + 1)
 
             return (
                 i + 1,
@@ -153,10 +118,9 @@ def _make_gn_restart_loop(
                 jnp.where(improved, safe_params, best_params),
                 jnp.where(improved, final_res, best_res),
                 done | (final_res <= tol),
-                new_stale,
             )
 
-        _, _, best_params, best_res, _, _ = lax.while_loop(
+        _, _, best_params, best_res, _ = lax.while_loop(
             cond_fn,
             body_fn,
             (
@@ -165,7 +129,6 @@ def _make_gn_restart_loop(
                 jnp.zeros((NUM_PARAMS,), dtype=jnp.float64),
                 jnp.array(jnp.inf, dtype=jnp.float64),
                 jnp.array(False),
-                jnp.int32(0),
             ),
         )
         return best_params, best_res
@@ -180,7 +143,6 @@ def _make_lm_warmstart_loop(
     max_restarts: int,
     solver_tol: float,
     perturb_scale: float,
-    init_lambda: float = 1e-3,
 ):
     """Build a JIT'd warm-start LM solver with adaptive damping.
 
@@ -190,7 +152,6 @@ def _make_lm_warmstart_loop(
         max_restarts: Maximum number of perturbed restarts.
         solver_tol: Convergence tolerance on max residual.
         perturb_scale: Scale of uniform perturbation for restarts.
-        init_lambda: Initial LM damping parameter.
     """
 
     @jit
@@ -240,9 +201,7 @@ def _make_lm_warmstart_loop(
                 r0 = residual_fn(init, prefix_op, basis_gate, target_inv)
                 init_norm = jnp.max(jnp.abs(r0))
                 _, final_x, final_res, _ = lax.while_loop(
-                    lm_cond,
-                    lm_body,
-                    (jnp.int32(0), init, init_norm, jnp.float64(init_lambda)),
+                    lm_cond, lm_body, (jnp.int32(0), init, init_norm, jnp.float64(1e-3))
                 )
                 return final_x, final_res
 
@@ -308,7 +267,7 @@ class JaxLMSegmentSolver(SegmentSolver):
     """
 
     def __init__(self, config: GulpsConfig | None = None, rng_seed: int | None = None):
-        """Initialize the two-stage Makhlin→Weyl segment solver."""
+        """Initialize solvers and cache from config."""
         self.config = config or GulpsConfig()
         self._key = PRNGKey(rng_seed or 0)
 
@@ -318,11 +277,6 @@ class JaxLMSegmentSolver(SegmentSolver):
             maxiter=self.config.makhlin_maxiter,
             max_restarts=self.config.makhlin_restarts,
             solver_tol=self.config.makhlin_solver_tol,
-            stagnation_window=self.config.makhlin_stagnation_window,
-            progress_ratio=self.config.makhlin_progress_ratio,
-            restart_patience=self.config.makhlin_restart_patience,
-            patience_ratio=self.config.makhlin_patience_ratio,
-            damping=self.config.makhlin_damping,
         )
         solve_weyl = _make_lm_warmstart_loop(
             _weyl_residual,
@@ -330,7 +284,6 @@ class JaxLMSegmentSolver(SegmentSolver):
             max_restarts=self.config.weyl_restarts,
             solver_tol=self.config.weyl_solver_tol,
             perturb_scale=self.config.weyl_perturb_scale,
-            init_lambda=self.config.weyl_lm_init_lambda,
         )
 
         # --- Makhlin -> warm Weyl polish ---

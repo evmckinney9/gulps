@@ -80,7 +80,7 @@ class GulpsSynthesisPlugin(UnitarySynthesisPlugin):
         return None
 
     def run(self, unitary: np.ndarray, **options) -> DAGCircuit:
-        """Synthesise a two-qubit unitary using GULPS."""
+        """Synthesize a two-qubit unitary using GULPS."""
         # basis_gates = options.get("basis_gates", None)
         target = options.get("target")
         if target is None:

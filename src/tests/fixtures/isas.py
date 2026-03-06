@@ -23,7 +23,7 @@ def get_slim_isas(**isa_kwargs) -> list[DiscreteISA]:
         DiscreteISA(
             [CXGate().power(1 / 2), iSwapGate().power(1 / 3)],
             [0.5, 1 / 3],
-            ["sq2cx", "cb3iswap"],
+            ["sq2cx", "sq3iswap"],
             **isa_kwargs,
         ),
     ]
@@ -51,21 +51,9 @@ def get_all_test_isas(**isa_kwargs) -> list[DiscreteISA]:
             **isa_kwargs,
         ),
         DiscreteISA(
-            [CXGate().power(1 / 2), iSwapGate().power(1 / 3)],
-            [0.5, 1 / 3],
-            ["sq2cx", "sq3iswap"],
-            **isa_kwargs,
-        ),
-        DiscreteISA(
             [fsim(np.pi / 2, np.pi / 6), iSwapGate().power(1 / 4)],
             [1.0, 0.25],
             ["fsim_pi2_pi6", "sq4iswap"],
-            **isa_kwargs,
-        ),
-        DiscreteISA(
-            [CXGate(), iSwapGate().power(1 / 2), SwapGate()],
-            [1.0, 0.5, 0.0],
-            ["cx", "sq2iswap", "swap"],
             **isa_kwargs,
         ),
         DiscreteISA(

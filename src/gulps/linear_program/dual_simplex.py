@@ -57,8 +57,8 @@ def build_cold_start_basis(
     return basis
 
 
-# Default safety cap on iterations (overridable via constructor)
-DEFAULT_MAX_PIVOTS: int = 50
+# Safety cap on iterations
+MAX_PIVOTS: int = 50
 
 
 class DualRevisedSimplex:
@@ -73,9 +73,6 @@ class DualRevisedSimplex:
             Row indices into A forming an initial dual-feasible basis (dual multipliers >= 0).
         tol : float
             Feasibility tolerance for constraint violations.
-        max_pivots : int
-            Maximum simplex pivots before declaring infeasible.  Sourced from
-            ``GulpsConfig.lp_max_pivots``.
     """
 
     def __init__(
@@ -84,20 +81,13 @@ class DualRevisedSimplex:
         c: np.ndarray,
         initial_basis: np.ndarray,
         tol: float = 1e-10,
-        max_pivots: int = DEFAULT_MAX_PIVOTS,
     ) -> None:
-        """Store constraint data and set up the initial basis."""
+        """Initialize the solver with fixed A, c, and initial basis."""
         self._A = np.ascontiguousarray(A, dtype=np.float64)
         self._c = c.astype(np.float64)
         self._n = A.shape[1]
         self._tol = tol
-        self._max_pivots = max_pivots
-        self._initial_basis = initial_basis.copy()
-        self._basis = self._initial_basis.copy()
-
-    def reset(self) -> None:
-        """Reset to cold-start basis (deterministic across solve calls)."""
-        self._basis = self._initial_basis.copy()
+        self._basis = initial_basis.copy()
 
     def solve(self, b: np.ndarray) -> tuple[np.ndarray | None, bool]:
         """Solve for a given b vector.  Returns ``(x, feasible)``."""
@@ -105,7 +95,7 @@ class DualRevisedSimplex:
         basis = self._basis.copy()
         B_inv = np.linalg.inv(A[basis])
 
-        for _ in range(self._max_pivots):
+        for _ in range(MAX_PIVOTS):
             x = B_inv @ b[basis]
 
             # Which constraint is most violated?
