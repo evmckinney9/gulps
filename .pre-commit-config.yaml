@@ -45,12 +45,4 @@ repos:
     hooks:
       - id: black-jupyter
         language_version: python3.12
-        files: \.ipynb$  # ruff-format handles .py; restrict black to notebooks only
-
-  # temporarily broken, see https://github.com/PyCQA/docformatter/issues/293
-  # - repo: https://github.com/PyCQA/docformatter
-  #   rev: v1.7.5
-  #   hooks:
-  #     - id: docformatter
-  #       additional_dependencies: [tomli]
-  #       args: [--in-place]
+        files: \.ipynb$ # ruff-format handles .py; restrict black to notebooks only

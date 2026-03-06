@@ -13,7 +13,7 @@ ______
 
 - `pip install gulps@git+https://github.com/evmckinney9/gulps`
 -  For usage examples, see: `src/gulps/notebooks/00_main.ipynb`.
--  Report issues: [Github issue tracker](https://github.com/ajavadia/hetero_isas/issues/4)
+-  Report issues: [Github issue tracker](https://github.com/ajavadia/hetero_isas/issues/)
 
 To begin, define your instruction set architecture (ISA) to configure the decomposer. Alternatively, if the instruction set is specified in the properties of a Qiskit `Target`, you can use GULPS as a `UnitarySynthesis` plugin.
 
@@ -129,6 +129,8 @@ decomposer._local_synthesis.synthesize_segments(
 
 ___
 See more:
+ - https://quantum-journal.org/papers/q-2020-03-26-247/
+ - https://quantum-journal.org/papers/q-2022-04-27-696/
  - https://threeplusone.com/pubs/on_gates.pdf
  - https://chromotopy.org/latex/papers/xx-synthesis.pdf
  - https://github.com/qiskit-advocate/qamp-spring-23/issues/33

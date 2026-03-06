@@ -4,12 +4,11 @@ import pytest
 from qiskit.circuit.random import random_circuit
 from qiskit.quantum_info import Operator, average_gate_fidelity
 from qiskit.transpiler import PassManager
-from qiskit.transpiler.passes import Optimize1qGatesDecomposition
 
 from gulps import GateInvariants, GulpsDecomposer, GulpsDecompositionPass
 from gulps.config import GulpsConfig
 from gulps.core.coverage import weyl_linspace
-from tests.fixtures.isas import get_random_circuit_isas
+from tests.fixtures.isas import get_all_test_isas
 
 FIDELITY_TOL = 1 - 1e-8
 N_SEEDS = 5
@@ -19,10 +18,12 @@ N_WEYL = 64
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
-@pytest.fixture(params=get_random_circuit_isas())
+@pytest.fixture(params=get_all_test_isas())
 def gulps_pm(request):
     """PassManager wrapping GulpsDecomposer for each random-circuit ISA."""
-    decomposer = GulpsDecomposer(isa=request.param, config_options=GulpsConfig())
+    decomposer = GulpsDecomposer(
+        isa=request.param, config_options=GulpsConfig(max_depth=12)
+    )
     return PassManager(
         [
             GulpsDecompositionPass(decomposer),
@@ -30,10 +31,10 @@ def gulps_pm(request):
     )
 
 
-@pytest.fixture(params=get_random_circuit_isas())
+@pytest.fixture(params=get_all_test_isas())
 def decomposer(request):
     """Raw GulpsDecomposer for each random-circuit ISA."""
-    return GulpsDecomposer(isa=request.param, config_options=GulpsConfig())
+    return GulpsDecomposer(isa=request.param, config_options=GulpsConfig(max_depth=12))
 
 
 def test_random_circuit(gulps_pm):

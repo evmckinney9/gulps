@@ -128,7 +128,7 @@ class DiscreteISA(ISAInvariants):
             self.coverage_set = isa_to_coverage(self)
 
     def enumerate(self, max_depth: int) -> Generator[List[GateInvariants], None, None]:
-        """Generate all ordered gate sequences up to max_depth."""
+        """Generate all ordered gate sequences up to max_depth (inclusive)."""
         counter = itertools.count()  # acts as cost tie-breaker
         # (cost, unique_index, sequence)
         priority_queue = [(self.single_qubit_cost, next(counter), [])]
@@ -136,20 +136,20 @@ class DiscreteISA(ISAInvariants):
         while priority_queue:
             cost, _, sequence = heapq.heappop(priority_queue)
 
-            if len(sequence) == max_depth:
-                continue
-
-            for gate in self.gate_set:
-                # skip if trying to reuse a zero-cost gate already in the sequence
-                # used for example with SWAP-mirrors, cost 0.0 basis gates
-                if self.cost_dict[gate] == 0.0 and gate in sequence:
-                    continue
-                # enforce monotonic sequence cost order
-                if sequence and self.cost_dict[gate] < self.cost_dict[sequence[-1]]:
-                    continue
-                new_sequence = sequence + [gate]
-                new_cost = cost + self.cost_dict[gate] + self.single_qubit_cost
-                heapq.heappush(priority_queue, (new_cost, next(counter), new_sequence))
+            if len(sequence) < max_depth:
+                for gate in self.gate_set:
+                    # skip if trying to reuse a zero-cost gate already in the sequence
+                    # used for example with SWAP-mirrors, cost 0.0 basis gates
+                    if self.cost_dict[gate] == 0.0 and gate in sequence:
+                        continue
+                    # enforce monotonic sequence cost order
+                    if sequence and self.cost_dict[gate] < self.cost_dict[sequence[-1]]:
+                        continue
+                    new_sequence = sequence + [gate]
+                    new_cost = cost + self.cost_dict[gate] + self.single_qubit_cost
+                    heapq.heappush(
+                        priority_queue, (new_cost, next(counter), new_sequence)
+                    )
 
             if len(sequence) >= 1:
                 yield sequence

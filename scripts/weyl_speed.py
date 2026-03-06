@@ -21,6 +21,8 @@ import time
 
 import numpy as np
 
+from gulps.config import GulpsConfig
+
 
 def bench_weyl(decomposer, name, grid_points):
     """Benchmark a decomposer on weyl_linspace grid points.
@@ -139,7 +141,8 @@ def main():
         label = "+".join(g.name for g in isa.gate_set)
         display_name = f"{isa_key}/{label}"
 
-        decomposer = GulpsDecomposer(isa=isa)
+        # sq4cx needs depth 12 to reach the full Weyl chamber.
+        decomposer = GulpsDecomposer(isa=isa, config_options=GulpsConfig(max_depth=12))
         times, fidelities, failures = bench_weyl(decomposer, display_name, grid_points)
 
         if not times:

@@ -5,6 +5,7 @@ import pytest
 from qiskit.circuit.library import iSwapGate
 from qiskit.quantum_info import Operator, average_gate_fidelity, random_unitary
 
+from gulps.config import GulpsConfig
 from gulps.core.isa import DiscreteISA
 from gulps.gulps_decomposer import GulpsDecomposer
 from tests.fixtures.isas import get_all_test_isas, get_slim_isas
@@ -23,7 +24,7 @@ def decomposer(request):
 
 @pytest.fixture(params=get_all_test_isas())
 def decomposer_no_precompute(request):
-    return GulpsDecomposer(isa=request.param)
+    return GulpsDecomposer(isa=request.param, config_options=GulpsConfig(max_depth=12))
 
 
 # ---------------------------------------------------------------------------
