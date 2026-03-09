@@ -5,6 +5,14 @@ The two public functions :func:`unitary_to_monodromy_coordinate` and
 by ``monodromy.coordinates``.  They are reproduced here so that the core
 GULPS decomposition path has no runtime dependency on the ``monodromy``
 package (which is now an optional extra).
+
+References:
+    Peterson, Crooks, Smith, "Fixed-Depth Two-Qubit Circuits and the Monodromy
+    Polytope", Quantum 4, 247 (2020). https://doi.org/10.22331/q-2020-03-26-247
+
+    Agnihotri, Woodward, "Eigenvalues of products of unitary matrices and quantum
+    Schubert calculus", Math. Res. Lett. 5(6), 817-836 (1998).
+    https://doi.org/10.4310/MRL.1998.v5.n6.a10
 """
 
 from functools import reduce

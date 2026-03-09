@@ -17,7 +17,7 @@ from gulps._internal.logging_config import logger
 from gulps.config import GulpsConfig
 from gulps.core.isa import ContinuousISA, DiscreteISA, ISAInvariants
 from gulps.linear_program.lp_abc import ConstraintSolution
-from gulps.linear_program.scipy_lp import MinimalOrderedISAConstraints
+from gulps.linear_program.scipy_lp import LPSolverCache, MinimalOrderedISAConstraints
 from gulps.synthesis.recover_equiv import recover_local_equivalence
 from gulps.synthesis.segments_solver import SegmentSynthesizer
 
@@ -41,6 +41,23 @@ class GulpsDecomposer:
         isa: ISAInvariants object containing gate set, costs, and polytope coverage.
         last_timing: Dict with timing breakdown of last decomposition (lp_sentence, segments).
             Units are seconds. Only populated after a successful decomposition.
+
+    References:
+        Peterson, Crooks, Smith, "Fixed-Depth Two-Qubit Circuits and the Monodromy
+        Polytope", Quantum 4, 247 (2020). https://doi.org/10.22331/q-2020-03-26-247
+
+        Zhang et al., "Geometric theory of nonlocal two-qubit operations",
+        Phys. Rev. A 67, 042313 (2003). https://doi.org/10.1103/PhysRevA.67.042313
+
+        Zhang et al., "Exact Two-Qubit Universal Quantum Circuit",
+        Phys. Rev. Lett. 91, 027903 (2003). https://doi.org/10.1103/PhysRevLett.91.027903
+
+        Makhlin, "Nonlocal properties of two-qubit gates and mixed states",
+        Quantum Inf. Process. 1, 243-252 (2002).
+        https://doi.org/10.1023/A:1022144002391
+
+        Tucci, "An Introduction to Cartan's KAK Decomposition for QC Programmers",
+        arXiv:quant-ph/0507171 (2005). https://arxiv.org/abs/quant-ph/0507171
     """
 
     def __init__(
@@ -95,6 +112,7 @@ class GulpsDecomposer:
         self._is_continuous = isinstance(self.isa, ContinuousISA)
         self.config = config_options or GulpsConfig()
 
+        self._lp_cache = LPSolverCache()
         self._local_synthesis = SegmentSynthesizer(config=self.config)
 
     def _eval_edge_case(
@@ -153,7 +171,9 @@ class GulpsDecomposer:
                     f"The target may lie outside all polytope coverage. "
                     f"Try disabling precompute_polytopes or expanding the gate set."
                 )
-            constraints = MinimalOrderedISAConstraints(sentence, config=self.config)
+            constraints = MinimalOrderedISAConstraints(
+                sentence, config=self.config, solver_cache=self._lp_cache
+            )
             return constraints.solve(target, log_output=log_output)
 
         # Priority queue enumeration
@@ -164,7 +184,9 @@ class GulpsDecomposer:
                 < target.strength - self.config.lp_feasibility_tol
             ):
                 continue
-            constraints = MinimalOrderedISAConstraints(sentence, config=self.config)
+            constraints = MinimalOrderedISAConstraints(
+                sentence, config=self.config, solver_cache=self._lp_cache
+            )
             result = constraints.solve(target, log_output=log_output)
             if result.success:
                 return result

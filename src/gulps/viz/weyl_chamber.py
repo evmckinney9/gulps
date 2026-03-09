@@ -1,6 +1,16 @@
 """Minimal Weyl-chamber 3-D renderer inlined from the ``weylchamber`` package.
 
 Original source: https://github.com/qucontrol/weylchamber
+
+References:
+    Goerz et al., "Optimizing for an arbitrary perfect entangler. II. Application",
+    Phys. Rev. A 91, 062307 (2015). https://doi.org/10.1103/PhysRevA.91.062307
+
+    Watts et al., "Optimizing for an arbitrary perfect entangler: I. Functionals",
+    Phys. Rev. A 91, 062306 (2015). https://doi.org/10.1103/PhysRevA.91.062306
+
+    Zhang et al., "Geometric theory of nonlocal two-qubit operations",
+    Phys. Rev. A 67, 042313 (2003). https://doi.org/10.1103/PhysRevA.67.042313
 """
 
 import numpy as np

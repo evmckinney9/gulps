@@ -9,6 +9,10 @@ where A and c are fixed, and b changes between solves.
 
 Uses warm-starting: the previous basis is reused, which is efficient when only b changes. The initial basis must be dual-feasible (dual multipliers >= 0).
 
+References:
+    Nocedal, Wright, "Numerical Optimization", 2nd ed., §13.5 (Springer, 2006).
+    Maros, "Computational Techniques of the Simplex Method", §5 (Springer, 2003).
+
 Example:
     solver = DualRevisedSimplex(A, c, initial_basis)
     x, ok = solver.solve(b1)  # cold start

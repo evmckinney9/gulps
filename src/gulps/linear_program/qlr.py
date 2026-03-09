@@ -13,6 +13,14 @@ Generated from:
     _gi_block = -1.0 * _qlr[:, 4:7]
     _ciplus1_block = -1.0 * _qlr[:, 7:10]
     _bi = _qlr[:, 0].reshape(72,)
+
+References:
+    Agnihotri, Woodward, "Eigenvalues of products of unitary matrices and quantum
+    Schubert calculus", Math. Res. Lett. 5(6), 817-836 (1998).
+    https://doi.org/10.4310/MRL.1998.v5.n6.a10
+
+    Peterson, Crooks, Smith, "Fixed-Depth Two-Qubit Circuits and the Monodromy
+    Polytope", Quantum 4, 247 (2020). https://doi.org/10.22331/q-2020-03-26-247
 """
 
 import numpy as np

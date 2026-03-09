@@ -70,18 +70,29 @@ def _build_cold_start_basis(n_stages: int) -> np.ndarray:
 
 # --- Solver cache and interface ---
 
-_solver_cache: dict[tuple[int, float], DualRevisedSimplex] = {}
 
+class LPSolverCache:
+    """Instance-owned cache for dual-simplex solvers, keyed by (n_gates, tol).
 
-def _get_solver(n_gates: int, tol: float) -> DualRevisedSimplex:
-    """Get or create a cached dual-simplex solver for sentence length *n_gates*."""
-    key = (n_gates, tol)
-    if key not in _solver_cache:
-        A = _build_constraint_matrix(n_gates)
-        c = -np.ones(A.shape[1])
-        basis = _build_cold_start_basis(n_gates - 2)
-        _solver_cache[key] = DualRevisedSimplex(A, c, basis, tol=tol)
-    return _solver_cache[key]
+    The constraint matrix A depends only on sentence length (block-tridiagonal
+    QLR structure), so solvers are safely shared across different ISAs and
+    targets. Gate- and target-specific data enter through the RHS vector b,
+    which is rebuilt per-solve in MinimalOrderedISAConstraints.
+    """
+
+    def __init__(self) -> None:
+        """Initialize an empty cache."""
+        self._cache: dict[tuple[int, float], DualRevisedSimplex] = {}
+
+    def get(self, n_gates: int, tol: float) -> DualRevisedSimplex:
+        """Get or create a cached solver for sentence length *n_gates*."""
+        key = (n_gates, tol)
+        if key not in self._cache:
+            A = _build_constraint_matrix(n_gates)
+            c = -np.ones(A.shape[1])
+            basis = _build_cold_start_basis(n_gates - 2)
+            self._cache[key] = DualRevisedSimplex(A, c, basis, tol=tol)
+        return self._cache[key]
 
 
 # --- Public interface ---
@@ -104,10 +115,12 @@ class MinimalOrderedISAConstraints(ISAConstraints):
         self,
         isa_sequence: list[GateInvariants],
         config: GulpsConfig | None = None,
+        solver_cache: LPSolverCache | None = None,
     ) -> None:
         """Initialize constraints for a fixed gate sentence."""
         self._config = config or GulpsConfig()
         self._sentence = tuple(isa_sequence)
+        self._solver_cache = solver_cache or LPSolverCache()
 
         # Pad 1-gate sentences so the QLR block math stays uniform.
         if len(isa_sequence) == 1:
@@ -116,7 +129,7 @@ class MinimalOrderedISAConstraints(ISAConstraints):
         n = len(isa_sequence)
         self._sequence = isa_sequence
         tol = self._config.lp_feasibility_tol
-        self._solver = _get_solver(n, tol) if n > 2 else None
+        self._solver = self._solver_cache.get(n, tol) if n > 2 else None
         self._b = self._build_base_rhs(isa_sequence)
         self._last_target_contrib = np.zeros(len_qlr)
 

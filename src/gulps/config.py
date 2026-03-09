@@ -20,14 +20,11 @@ class GulpsConfig:
         weyl_conv_tol: Stage 2 (Weyl) convergence tolerance.
             Maximum residual in Weyl coordinate space for the restart
             loop's early-exit condition. Default: 1e-5
-        makhlin_solver_tol: Inner-loop convergence tolerance for Makhlin
-            Gauss-Newton iterations. Controls when a single restart's
-            iteration loop terminates. Default: 1e-10
         weyl_solver_tol: Inner-loop convergence tolerance for Weyl
             Levenberg-Marquardt iterations. Controls when a single restart's
             iteration loop terminates. Default: 1e-10
         equiv_recovery_tol: Local equivalence matching tolerance.
-            Used when comparing Weyl coordinates in recovery. Default: 1e-5
+            Used when comparing Weyl coordinates in recovery. Default: 2e-5
 
     Solver Attributes:
         makhlin_restarts: Number of random restarts for Stage 1 (Makhlin) optimization.

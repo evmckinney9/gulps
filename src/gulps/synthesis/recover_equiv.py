@@ -27,9 +27,26 @@ def recover_local_equivalence(
     U_basis: np.ndarray,
     config: GulpsConfig | None = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, float]:
-    """Find single-qubit corrections k1, k2, k3, k4 and a global phase so that:.
+    """Promote local equivalence to unitary equality by finding local corrections.
 
-        U_target ~= (k1 x k2) · U_basis · (k3 x k4) · exp(i * global_phase).
+    Find single-qubit corrections k1, k2, k3, k4 and a global phase so that:
+
+    .. code-block:: none
+
+        U_target ~= (k1 x k2) · U_basis · (k3 x k4) · exp(i * global_phase)
+
+    Uses the KAK / Weyl decomposition via Qiskit's ``TwoQubitWeylDecomposition``.
+    The rho-reflection branch handles the Weyl-chamber symmetry (a, b, c) <->
+    (pi/2 - a, b, -c), which arises at degenerate faces.
+
+    References:
+        Tucci, "An Introduction to Cartan's KAK Decomposition for QC Programmers",
+        arXiv:quant-ph/0507171 (2005). https://arxiv.org/abs/quant-ph/0507171
+
+        Qiskit TwoQubitWeylDecomposition:
+        https://github.com/Qiskit/qiskit/blob/main/qiskit/synthesis/two_qubit/two_qubit_decompose.py
+
+        See GulpsDecomposer for Weyl-chamber and KAK references.
 
     Cases:
       1) exact Weyl match         -> identity corrections

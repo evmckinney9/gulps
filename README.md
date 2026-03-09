@@ -8,6 +8,9 @@ Most existing compilers only target CNOT gates. Analytical rules exist for a few
 
 #### 📌 Read the preprint: [Two-Qubit Gate Synthesis via Linear Programming for Heterogeneous Instruction Sets](https://arxiv.org/abs/2505.00543)
 
+> [!IMPORTANT]
+> GULPS is designed for arbitrary instruction sets, but if your ISA has known analytical decomposition rules, use those first. GULPS is a general-purpose fallback — special-case solvers will always be faster and potentially more accurate for the gates they target.
+
 ______
 ### Getting Started
 
