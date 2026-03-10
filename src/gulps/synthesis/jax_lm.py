@@ -65,8 +65,6 @@ def _make_gn_restart_loop(
         weyl_gate,
         weyl_target,
         weyl_tol,
-        init_min=-jnp.pi / 2,
-        init_max=jnp.pi / 2,
     ):
         def _weyl_check(params):
             """Weyl-coordinate error for params, checking both branches."""
@@ -88,13 +86,15 @@ def _make_gn_restart_loop(
         def body_fn(carry):
             i, key, best_params, best_res, done = carry
             init = uniform(
-                fold_in(key, i), shape=(NUM_PARAMS,), minval=init_min, maxval=init_max
+                fold_in(key, i), shape=(NUM_PARAMS,), minval=-0.1, maxval=0.1
             )
 
             def gn_cond(inner):
                 j, _, prev_norm, _, _ = inner
-                stagnated = ((j >= 16) & (prev_norm > 5e-2)) | (
-                    (j >= 32) & (prev_norm > 1e-3)
+                stagnated = (
+                    ((j >= 8) & (prev_norm > 3e-1))
+                    | ((j >= 16) & (prev_norm > 5e-2))
+                    | ((j >= 32) & (prev_norm > 1e-3))
                 )
                 return (j < maxiter) & (prev_norm > tol) & (~stagnated)
 
