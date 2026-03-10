@@ -1,7 +1,7 @@
 """JAX primitives for two-qubit gate invariants and residual evaluation.
 
 Constants, differentiable invariant functions, parameterization helpers,
-and residual functions used by the Gauss-Newton / LM solver in jax_lm.py.
+and residual functions used by the Gauss-Newton solver in jax_lm.py.
 """
 
 import jax.numpy as jnp

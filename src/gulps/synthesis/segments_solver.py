@@ -1,8 +1,5 @@
 """Segment-wise synthesis orchestrator with circuit stitching."""
 
-import logging
-from typing import List
-
 import numpy as np
 from qiskit import QuantumCircuit
 from qiskit.circuit.library import UnitaryGate
@@ -14,8 +11,6 @@ from gulps.core.invariants import GateInvariants
 from gulps.synthesis.jax_lm import JaxLMSegmentSolver
 from gulps.synthesis.recover_equiv import recover_local_equivalence
 from gulps.synthesis.segments_cache import SegmentCache
-
-logger = logging.getLogger(__name__)
 
 
 class SegmentSynthesizer:
@@ -34,8 +29,8 @@ class SegmentSynthesizer:
 
     def synthesize_segments(
         self,
-        gate_list: List[GateInvariants],
-        invariant_list: List[GateInvariants],
+        gate_list: list[GateInvariants],
+        invariant_list: list[GateInvariants],
         target: GateInvariants,
         *,
         return_dag: bool = False,

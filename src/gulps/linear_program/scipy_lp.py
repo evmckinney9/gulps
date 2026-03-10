@@ -89,8 +89,9 @@ class LPSolverCache:
         key = (n_gates, tol)
         if key not in self._cache:
             A = _build_constraint_matrix(n_gates)
+            n_stages = n_gates - 2
             c = -np.ones(A.shape[1])
-            basis = _build_cold_start_basis(n_gates - 2)
+            basis = _build_cold_start_basis(n_stages)
             self._cache[key] = DualRevisedSimplex(A, c, basis, tol=tol)
         return self._cache[key]
 
@@ -207,6 +208,7 @@ class MinimalOrderedISAConstraints(ISAConstraints):
         lp_intermediates = [
             GateInvariants(tuple(x[i : i + _d])) for i in range(0, len(x), _d)
         ]
+
         return ConstraintSolution(
             success=True,
             sentence=self._sentence,

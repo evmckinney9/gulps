@@ -1,13 +1,9 @@
 """LFU segment cache for reusing numeric solutions."""
 
-import logging
 from dataclasses import dataclass
-from typing import Optional
 
 from gulps.core.invariants import GateInvariants
 from gulps.synthesis.segments_abc import SegmentSolution, SegmentSolver
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -39,7 +35,7 @@ class SegmentCache(SegmentSolver):
         *,
         step: int,
         rng_seed: int | None = None,
-    ) -> Optional[SegmentSolution]:
+    ) -> SegmentSolution | None:
         """Return cached solution if available, None otherwise."""
         return self._lookup(step, prefix_inv, basis_inv, target_inv)
 
@@ -49,7 +45,7 @@ class SegmentCache(SegmentSolver):
         prefix_inv: GateInvariants,
         basis_inv: GateInvariants,
         target_inv: GateInvariants,
-    ) -> Optional[SegmentSolution]:
+    ) -> SegmentSolution | None:
         """Lookup cached solution using fast _key comparison."""
         entries = self._entries.get(step)
         if entries is None:

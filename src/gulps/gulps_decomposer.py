@@ -34,7 +34,7 @@ class GulpsDecomposer:
     The decomposition process:
         1. Find the cheapest valid gate sentence using polytope lookup or enumeration
         2. Solve a linear program to determine intermediate invariant targets
-        3. Synthesize each segment using numerical optimization (Levenberg-Marquardt)
+        3. Synthesize each segment using numerical optimization (Gauss-Newton)
         4. Stitch segments together and recover full unitary equivalence
 
     Attributes:

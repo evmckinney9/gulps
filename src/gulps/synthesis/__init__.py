@@ -1,1 +1,1 @@
-"""Segment-wise numerical synthesis via JAX Levenberg-Marquardt."""
+"""Segment-wise numerical synthesis via JAX Gauss-Newton."""

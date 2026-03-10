@@ -1,32 +1,32 @@
-"""Gate invariants utilities for two-qubit gates (monodromy, Makhlin, Weyl, etc.)."""
+"""Local equivalence recovery via Weyl/KAK decomposition."""
 
 import logging
-from typing import Tuple
 
 import numpy as np
-from qiskit.circuit.library import XGate, YGate, ZGate
 from qiskit.exceptions import QiskitError
-from qiskit.quantum_info import Operator
 from qiskit.synthesis.two_qubit import TwoQubitWeylDecomposition
 
 from gulps.config import GulpsConfig
 
 logger = logging.getLogger(__name__)
 
-# TODO, this works great and is general enough and robust
-# but might be over-calculating some parts by reusing TwoQubitWeylDecomposition
-# because we already know the Cartan KAK invariants...
-# maybe there is something more efficient if we purely need the exterior locals?
-P0 = YGate().to_matrix()  # pre on qubit 0
-Q0 = XGate().to_matrix()  # post on qubit 0
-Q1 = ZGate().to_matrix()  # post on qubit 1
+# Pauli matrices used for rho-reflection corrections
+P0 = np.array([[0, -1j], [1j, 0]], dtype=np.complex128)  # Y
+Q0 = np.array([[0, 1], [1, 0]], dtype=np.complex128)  # X
+Q1 = np.array([[1, 0], [0, -1]], dtype=np.complex128)  # Z
+
+
+def _closest_unitary(A: np.ndarray) -> np.ndarray:
+    """Closest unitary to A via polar decomposition (SVD)."""
+    V, _, Wh = np.linalg.svd(A)
+    return V @ Wh
 
 
 def recover_local_equivalence(
     U_target: np.ndarray,
     U_basis: np.ndarray,
     config: GulpsConfig | None = None,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, float]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, float]:
     """Promote local equivalence to unitary equality by finding local corrections.
 
     Find single-qubit corrections k1, k2, k3, k4 and a global phase so that:
@@ -59,20 +59,11 @@ def recover_local_equivalence(
     tol = config.equiv_recovery_tol
 
     # Weyl decompose both unitaries
-    spec = None
-    T = TwoQubitWeylDecomposition(U_target, fidelity=1.0, _specialization=spec)
+    T = TwoQubitWeylDecomposition(U_target, fidelity=1.0)
     try:
-        B = TwoQubitWeylDecomposition(U_basis, fidelity=1.0, _specialization=spec)
-    except QiskitError as e:
-        from scipy.linalg import svd
-
-        def closest_unitary(A):
-            """Return the unitary matrix U closest to general matrix A under the operator norm."""
-            V, __, Wh = svd(A)
-            U = np.matrix(V.dot(Wh))
-            return U
-
-        U_basis_closest = closest_unitary(U_basis)
+        B = TwoQubitWeylDecomposition(U_basis, fidelity=1.0)
+    except QiskitError:
+        U_basis_closest = _closest_unitary(U_basis)
         B = TwoQubitWeylDecomposition(U_basis_closest, fidelity=1.0)
 
     a1, b1, c1 = T.a, T.b, T.c
@@ -97,7 +88,45 @@ def recover_local_equivalence(
         k1 = B.K2r.conj().T @ Q0 @ T.K2r
         return k1, k2, k3, k4, (T.global_phase - B.global_phase)
 
-    # 3) cannot recover
+    # 3) Frobenius-error fallback: try both branches, pick lowest
+    #    reconstruction error. Needed when a ≈ π/4 makes the branches
+    #    indistinguishable from Weyl coordinates alone.
+    def _direct_corrections():
+        k4 = T.K1l @ B.K1l.conj().T
+        k3 = T.K1r @ B.K1r.conj().T
+        k2 = B.K2l.conj().T @ T.K2l
+        k1 = B.K2r.conj().T @ T.K2r
+        return k1, k2, k3, k4, (T.global_phase - B.global_phase)
+
+    def _rho_corrections():
+        k4 = T.K1l @ P0 @ B.K1l.conj().T
+        k3 = T.K1r @ B.K1r.conj().T
+        k2 = B.K2l.conj().T @ Q1 @ T.K2l
+        k1 = B.K2r.conj().T @ Q0 @ T.K2r
+        return k1, k2, k3, k4, (T.global_phase - B.global_phase)
+
+    def _recon_error(k1, k2, k3, k4, gphase):
+        recon = np.exp(1j * gphase) * np.kron(k4, k3) @ U_basis @ np.kron(k2, k1)
+        return np.linalg.norm(U_target - recon, ord="fro")
+
+    direct = _direct_corrections()
+    rho = _rho_corrections()
+    err_d = _recon_error(*direct)
+    err_r = _recon_error(*rho)
+
+    best = direct if err_d <= err_r else rho
+    best_err = min(err_d, err_r)
+
+    # Only accept if the best branch actually reconstructs well
+    if best_err < 0.1:
+        logger.debug(
+            "Fallback branch selection: direct_err=%.2e, rho_err=%.2e (chose %s)",
+            err_d,
+            err_r,
+            "direct" if err_d <= err_r else "rho",
+        )
+        return best
+
     raise ValueError(f"Cannot recover local equivalence; Weyl differences {diffs}")
 
 

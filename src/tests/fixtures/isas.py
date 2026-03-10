@@ -12,12 +12,7 @@ from gulps.isa_library.fsim import fsim
 
 
 def get_slim_isas(**isa_kwargs) -> list[DiscreteISA]:
-    """Small diverse set for fast A/B speed benchmarking.
-
-    Stresses different code paths to avoid over-optimizing for one ISA:
-      - Single weak gate  → moderate depth, simple LP
-      - CX + iSwap family → richer LP, different Weyl region
-    """
+    """Small ISA set for fast benchmarking."""
     return [
         DiscreteISA([iSwapGate().power(1 / 4)], [0.25], ["sq4iswap"], **isa_kwargs),
         DiscreteISA(
@@ -30,13 +25,7 @@ def get_slim_isas(**isa_kwargs) -> list[DiscreteISA]:
 
 
 def get_all_test_isas(**isa_kwargs) -> list[DiscreteISA]:
-    """All ISAs: slim + random-circuit + mirror (zero-cost SWAP).
-
-    Covers every distinct code path:
-      slim        → single weak gate, mixed family
-      random_circ → full-strength iSwap, full-strength CX, mixed CX/iSwap
-      extras      → fSim (nonzero c₃), mirror (zero-cost SWAP)
-    """
+    """Full ISA set: slim + random-circuit + mirror (zero-cost SWAP)."""
     return get_slim_isas(**isa_kwargs) + [
         DiscreteISA(
             [iSwapGate(), iSwapGate().power(1 / 2), iSwapGate().power(1 / 3)],
