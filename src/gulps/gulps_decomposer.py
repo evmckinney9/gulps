@@ -14,7 +14,6 @@ from qiskit.converters import circuit_to_dag, dag_to_circuit
 from qiskit.dagcircuit import DAGCircuit
 
 from gulps import GateInvariants
-from gulps._internal.logging_config import logger
 from gulps.config import GulpsConfig
 from gulps.core.isa import ContinuousISA, DiscreteISA, ISAInvariants
 from gulps.linear_program.lp_abc import ConstraintSolution
@@ -138,7 +137,6 @@ class GulpsDecomposer:
             k1, k2, k3, k4, gphase = recover_local_equivalence(
                 target.unitary,
                 np.eye(4),
-                config=self.config,
             )
             dag = circuit_to_dag(QuantumCircuit(2, global_phase=gphase))
             qreg = dag.qregs["q"]
@@ -302,7 +300,7 @@ class GulpsDecomposer:
             Timing information for the last decomposition is stored in self.last_timing
             with keys 'lp_sentence' and 'segments' (in seconds).
         """
-        alcove_target = GateInvariants.from_unitary(target, enforce_alcove=True)
+        alcove_target = GateInvariants.from_unitary(target)
 
         edge_output = self._eval_edge_case(alcove_target, return_dag)
         if edge_output is not None:

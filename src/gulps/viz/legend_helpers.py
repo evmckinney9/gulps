@@ -4,8 +4,6 @@ This module contains utilities for creating consistent, visually appealing legen
 for both discrete and continuous ISA decomposition visualizations.
 """
 
-from typing import Dict, List
-
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 from matplotlib.legend_handler import HandlerBase
@@ -98,7 +96,7 @@ class GradientLineHandler(HandlerBase):
 
 def build_color_map_from_isa(
     isa: ISAInvariants,
-) -> tuple[Dict[str, any], List[str]]:
+) -> tuple[dict[str, any], list[str]]:
     """Build consistent color mapping from ISA gate set.
 
     Args:
@@ -129,7 +127,7 @@ def build_color_map_from_isa(
     return color_map, legend_labels
 
 
-def add_continuous_legend(ax, gate_color_map: Dict[str, any], legend_labels: List[str]):
+def add_continuous_legend(ax, gate_color_map: dict[str, any], legend_labels: list[str]):
     """Add legend for continuous ISA families using horizontal gradient bars.
 
     Creates a legend with horizontal gradient bars that visually match the style
@@ -170,7 +168,7 @@ def add_continuous_legend(ax, gate_color_map: Dict[str, any], legend_labels: Lis
     legend.get_frame().set_linewidth(0.8)
 
 
-def add_discrete_legend(ax, gate_color_map: Dict[str, str], legend_labels: List[str]):
+def add_discrete_legend(ax, gate_color_map: dict[str, str], legend_labels: list[str]):
     """Add legend for discrete ISA with solid color lines.
 
     Args:

@@ -9,24 +9,23 @@ import numpy as np
 from jax import jit
 from qiskit.quantum_info import Operator
 
+from gulps.core.coordinates import M_WEYL as _M_WEYL_NP
+from gulps.core.coordinates import MAGIC as _MAGIC_NP
+from gulps.core.coordinates import MAGIC_DAG as _MAGIC_DAG_NP
+from gulps.core.coordinates import SYSY as _SYSY_NP
+
 NUM_PARAMS = 8
 
 # ---------------------------------------------------------------------------
-# Constants
+# Constants -- JAX versions of the numpy originals in coordinates.py
 # ---------------------------------------------------------------------------
 
-MAGIC = jnp.array(
-    [[1, 0, 0, 1j], [0, 1j, 1, 0], [0, 1j, -1, 0], [1, 0, 0, -1j]],
-    dtype=jnp.complex128,
-) / jnp.sqrt(2)
-MAGIC_DAG = MAGIC.conj().T
+MAGIC = jnp.asarray(_MAGIC_NP)
+MAGIC_DAG = jnp.asarray(_MAGIC_DAG_NP)
 
-_SYSY = jnp.array(  # σ_y ⊗ σ_y
-    [[0, 0, 0, -1], [0, 0, 1, 0], [0, 1, 0, 0], [-1, 0, 0, 0]],
-    dtype=jnp.complex128,
-)
+_SYSY = jnp.asarray(_SYSY_NP)  # sy kron sy
 
-_M = jnp.array([[1, 1, 0], [1, 0, 1], [0, 1, 1]], dtype=jnp.float64)
+_M = jnp.asarray(_M_WEYL_NP)  # monodromy -> Weyl linear transform
 
 
 # ---------------------------------------------------------------------------

@@ -16,7 +16,7 @@ class SegmentSolution:
 
     u0: np.ndarray | None  # 2x2 or None if failure
     u1: np.ndarray | None  # 2x2 or None if failure
-    max_residual: float  # worst-case residual component (L∞ norm)
+    max_residual: float  # worst-case residual component (Linf norm)
     success: bool
     metadata: dict[str, Any]  # e.g. {"nfev": nfev, "label": "easy", "attempt": 3}
 
@@ -27,7 +27,7 @@ class SegmentSolver(ABC):
     Given prefix_op C, basis_gate G, and a target canonical representative,
     solves for single-qubit unitaries u0, u1 such that
 
-        U ≈ G · (u1 ⊗ u0) · C
+        U ~= G * (u1 kron u0) * C
 
     is locally equivalent to the target (up to invariants).
 

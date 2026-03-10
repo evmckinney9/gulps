@@ -1,7 +1,5 @@
 """Gate invariants utilities for two-qubit gates (monodromy, Makhlin, Weyl, etc.)."""
 
-import logging
-
 import numpy as np
 from qiskit._accelerate.two_qubit_decompose import two_qubit_local_invariants as tqli_rs
 from qiskit.circuit import Gate
@@ -12,8 +10,6 @@ from gulps.core.monodromy_coords import (
     positive_canonical_to_monodromy_coordinate,
     unitary_to_monodromy_coordinate,
 )
-
-logger = logging.getLogger(__name__)
 
 LEN_GATE_INVARIANTS = 3
 
@@ -52,7 +48,7 @@ class GateInvariants:
 
     @classmethod
     def from_unitary(
-        cls, gate: Gate | np.ndarray, enforce_alcove=False, name: str | None = None
+        cls, gate: Gate | np.ndarray, name: str | None = None
     ) -> "GateInvariants":
         """Construct from a Qiskit Gate or 4x4 unitary matrix."""
         # Fast-path: extract numpy array without redundant Operator validation
@@ -64,10 +60,7 @@ class GateInvariants:
             U = Operator(gate).data
         if not isinstance(gate, UnitaryGate):
             gate = UnitaryGate(U, label=name)
-        if enforce_alcove:
-            coords = tuple(unitary_to_monodromy_coordinate(U))
-        else:
-            coords = cls._unitary_to_mono_coordinates(U)
+        coords = tuple(unitary_to_monodromy_coordinate(U))
         return cls(logspec=coords, name=name, unitary=gate)
 
     @classmethod
@@ -75,16 +68,6 @@ class GateInvariants:
         """Create from weyl coordinates."""
         positive_canonical = np.pi / 2 * np.array(coords)
         return cls(positive_canonical_to_monodromy_coordinate(*positive_canonical))
-
-    @staticmethod
-    def _unitary_to_mono_coordinates(
-        U,
-    ) -> tuple[np.float64, np.float64, np.float64, np.float64]:
-        return tuple(unitary_to_monodromy_coordinate(U))
-        # NOTE, backup conventon. the above used to give some unexplained precision issues
-        # from qiskit._accelerate.two_qubit_decompose import weyl_coordinates
-        # a, b, c = positive_canonical_to_monodromy_coordinate(*weyl_coordinates(U))
-        # return (a, b, c, -1.0 * (a + b + c))
 
     @property
     def unitary(self) -> UnitaryGate:
@@ -201,13 +184,3 @@ class GateInvariants:
         from gulps.viz.invariant_viz import scatter_plot
 
         return scatter_plot([self])
-
-
-if __name__ == "__main__":
-    from qiskit.circuit.library import iSwapGate
-
-    u = iSwapGate().power(1 / 2).to_matrix()
-    g = GateInvariants.from_unitary(u)
-    print("monodromy:", g.monodromy)
-    print("weyl:", g.weyl)
-    print("makhlin:", g.makhlin)

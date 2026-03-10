@@ -1,7 +1,5 @@
 """Weyl-chamber scatter plots for gate invariants."""
 
-from typing import List, Optional, Tuple
-
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -15,7 +13,7 @@ from gulps.viz.legend_helpers import (
 from gulps.viz.weyl_chamber import WeylChamber
 
 
-def scatter_plot(invariant_list: List[GateInvariants]):
+def scatter_plot(invariant_list: list[GateInvariants]):
     """Scatter plot of a list of GateInvariants in the Weyl chamber."""
     fig = plt.figure()
     ax = fig.add_subplot(111, projection="3d", computed_zorder=False)
@@ -82,8 +80,8 @@ def _add_depth_indicators(
 
 
 def _render_path(
-    traj_points: List[Tuple[float, float, float]],
-    colors: List[str],
+    traj_points: list[tuple[float, float, float]],
+    colors: list[str],
     ax,
 ):
     """Low-level path rendering function.
@@ -153,11 +151,11 @@ def _render_path(
 
 
 def plot_decomposition(
-    intermediates: List[GateInvariants],
-    sentence: Optional[List[GateInvariants]] = None,
-    isa: Optional[ISAInvariants] = None,
-    parameters: Optional[List[float]] = None,
-    ax: Optional[plt.Axes] = None,
+    intermediates: list[GateInvariants],
+    sentence: list[GateInvariants] | None = None,
+    isa: ISAInvariants | None = None,
+    parameters: list[float] | None = None,
+    ax: plt.Axes | None = None,
 ):
     """Visualize the decomposition path in the Weyl chamber with colored segments.
 

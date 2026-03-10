@@ -171,10 +171,10 @@ def coverage_report(coverage_set, chatty=False):
     print("Coverage Set Statistics (Haar-averaged over SU(4))")
     print("=" * 60)
     print(f"Expected Cost:  {report['expected_cost']:.6f}")
-    print(f"  → Average cost per random 2-qubit unitary")
+    print(f"  Average cost per random 2-qubit unitary")
     print()
     print(f"Expected Depth: {report['expected_depth']:.6f}")
-    print(f"  → Average number of 2-qubit gates")
+    print(f"  Average number of 2-qubit gates")
     print("=" * 60)
 
     return report

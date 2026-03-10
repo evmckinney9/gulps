@@ -35,7 +35,7 @@ class ISAInvariants(ABC):
 
 @dataclass
 class ContinuousISA(ISAInvariants):
-    """ISA with continuous gate families G(k) = k * base, k ∈ [k_lb, 1].
+    """ISA with continuous gate families G(k) = k * base, k in [k_lb, 1].
 
     For single-family ISA, gate_set contains one base gate.
     For heterogeneous ISA (future), gate_set contains multiple base gates.
@@ -159,7 +159,7 @@ class DiscreteISA(ISAInvariants):
 
         Args:
             target: Alcove-normalized target gate invariants. The caller is responsible
-                for ensuring the target is in the alcove (enforce_alcove=True), which
+                for ensuring the target is in the alcove, which
                 eliminates the need to check rho-reflected variants here.
 
         Returns:

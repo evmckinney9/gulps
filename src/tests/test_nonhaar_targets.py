@@ -12,7 +12,7 @@ from tests.fixtures.isas import get_all_test_isas
 
 FIDELITY_TOL = 1 - 1e-8
 N_SEEDS = 5
-N_WEYL = 64
+N_WEYL = 128
 
 
 # ---------------------------------------------------------------------------

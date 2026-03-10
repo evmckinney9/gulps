@@ -19,8 +19,7 @@ class GulpsConfig:
         weyl_conv_tol: Weyl coordinate convergence tolerance.
             Maximum residual for Weyl-based early-exit and inline
             polish. Default: 1e-5
-        equiv_recovery_tol: Local equivalence matching tolerance.
-            Used when comparing Weyl coordinates in recovery. Default: 2e-5
+
 
     Solver Attributes:
         makhlin_restarts: Number of random restarts for Makhlin GN.
@@ -39,8 +38,6 @@ class GulpsConfig:
     lp_feasibility_tol: float = 1e-10
     makhlin_conv_tol: float = 1e-9
     weyl_conv_tol: float = 1e-5
-    equiv_recovery_tol: float = 2e-5
-
     # Solver parameters
     makhlin_restarts: int = 256
     makhlin_maxiter: int = 512

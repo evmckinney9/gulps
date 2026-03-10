@@ -7,6 +7,7 @@ from qiskit.converters import circuit_to_dag, dag_to_circuit
 from qiskit.dagcircuit import DAGCircuit
 
 from gulps.config import GulpsConfig
+from gulps.core.coordinates import kron_2x2 as _kron_2x2
 from gulps.core.invariants import GateInvariants
 from gulps.synthesis.jax_lm import JaxLMSegmentSolver
 from gulps.synthesis.recover_equiv import recover_local_equivalence
@@ -63,9 +64,7 @@ class SegmentSynthesizer:
         P = self._synthesize_batch(dag, qreg, gate_list, invariant_list)
 
         # Final recovery to true target
-        k1, k2, k3, k4, gphase = recover_local_equivalence(
-            target.unitary, P, config=self.config
-        )
+        k1, k2, k3, k4, gphase = recover_local_equivalence(target.unitary, P)
         dag.global_phase += gphase
         dag.apply_operation_front(UnitaryGate(k1, check_input=False), [qreg[0]])
         dag.apply_operation_front(UnitaryGate(k2, check_input=False), [qreg[1]])
@@ -127,26 +126,18 @@ class SegmentSynthesizer:
 
             # Update accumulated unitary
             u1u0 = np.empty((4, 4), dtype=np.complex128)
-            u1u0[0:2, 0:2] = u1[0, 0] * u0
-            u1u0[0:2, 2:4] = u1[0, 1] * u0
-            u1u0[2:4, 0:2] = u1[1, 0] * u0
-            u1u0[2:4, 2:4] = u1[1, 1] * u0
+            _kron_2x2(u1, u0, u1u0)
             P = np.asarray(basis_inv.unitary, dtype=np.complex128) @ u1u0 @ P
 
             # Intermediate recovery (skip for final segment)
             if i < num_segments - 1:
                 Ci = np.asarray(target_inv.canonical_matrix, dtype=np.complex128)
-                _, _, k3, k4, gphase = recover_local_equivalence(
-                    Ci, P, config=self.config
-                )
+                _, _, k3, k4, gphase = recover_local_equivalence(Ci, P)
                 dag.global_phase += gphase
                 dag.apply_operation_back(UnitaryGate(k3, check_input=False), [qreg[0]])
                 dag.apply_operation_back(UnitaryGate(k4, check_input=False), [qreg[1]])
                 k4k3 = np.empty((4, 4), dtype=np.complex128)
-                k4k3[0:2, 0:2] = k4[0, 0] * k3
-                k4k3[0:2, 2:4] = k4[0, 1] * k3
-                k4k3[2:4, 0:2] = k4[1, 0] * k3
-                k4k3[2:4, 2:4] = k4[1, 1] * k3
+                _kron_2x2(k4, k3, k4k3)
                 P = k4k3 @ P
 
         return P

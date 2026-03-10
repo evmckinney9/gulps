@@ -29,7 +29,7 @@ from gulps.linear_program.lp_abc import ConstraintSolution, ISAConstraints
 from gulps.linear_program.qlr import len_qlr, qlr_inequalities
 
 _ci_block, _gi_block, _ciplus1_block, _bi = qlr_inequalities
-_d = LEN_GATE_INVARIANTS  # 3 — dimension of each stage's invariant vector
+_d = LEN_GATE_INVARIANTS  # 3 -- dimension of each stage's invariant vector
 
 
 # --- Constraint matrix assembly ---
@@ -107,7 +107,7 @@ class MinimalOrderedISAConstraints(ISAConstraints):
     Parameters
     ----------
     isa_sequence : list[GateInvariants]
-        Ordered gate invariants forming the sentence (length ≥ 1).
+        Ordered gate invariants forming the sentence (length >= 1).
     config : GulpsConfig, optional
         Solver configuration (tolerance, etc.).
     """
@@ -134,7 +134,7 @@ class MinimalOrderedISAConstraints(ISAConstraints):
         self._b = self._build_base_rhs(isa_sequence)
         self._last_target_contrib = np.zeros(len_qlr)
 
-    # ── RHS construction ──────────────────────────────────────────────
+    # -- RHS construction --
 
     @staticmethod
     def _build_base_rhs(sequence: list[GateInvariants]) -> np.ndarray:
@@ -155,7 +155,7 @@ class MinimalOrderedISAConstraints(ISAConstraints):
         self._b[-len_qlr:] += self._last_target_contrib - ct
         self._last_target_contrib = ct
 
-    # ── solve ─────────────────────────────────────────────────────────
+    # -- solve --
 
     def solve(
         self,

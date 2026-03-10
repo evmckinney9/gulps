@@ -6,14 +6,15 @@ import numpy as np
 from qiskit.exceptions import QiskitError
 from qiskit.synthesis.two_qubit import TwoQubitWeylDecomposition
 
-from gulps.config import GulpsConfig
+from gulps.core.coordinates import PAULI_X, PAULI_Y, PAULI_Z
 
 logger = logging.getLogger(__name__)
 
-# Pauli matrices used for rho-reflection corrections
-P0 = np.array([[0, -1j], [1j, 0]], dtype=np.complex128)  # Y
-Q0 = np.array([[0, 1], [1, 0]], dtype=np.complex128)  # X
-Q1 = np.array([[1, 0], [0, -1]], dtype=np.complex128)  # Z
+# Tolerance for Weyl coordinate matching in branch selection.
+# This is a mathematical constant (not user-tunable): the solver's
+# weyl_conv_tol is 1e-5 and accumulated segment error stays well
+# below 2e-5 for the direct/rho branches to be distinguishable.
+_WEYL_MATCH_TOL = 2e-5
 
 
 def _closest_unitary(A: np.ndarray) -> np.ndarray:
@@ -25,7 +26,6 @@ def _closest_unitary(A: np.ndarray) -> np.ndarray:
 def recover_local_equivalence(
     U_target: np.ndarray,
     U_basis: np.ndarray,
-    config: GulpsConfig | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, float]:
     """Promote local equivalence to unitary equality by finding local corrections.
 
@@ -33,30 +33,16 @@ def recover_local_equivalence(
 
     .. code-block:: none
 
-        U_target ~= (k1 x k2) · U_basis · (k3 x k4) · exp(i * global_phase)
+        U_target ~= (k4 x k3) . U_basis . (k2 x k1) . exp(i * global_phase)
 
-    Uses the KAK / Weyl decomposition via Qiskit's ``TwoQubitWeylDecomposition``.
-    The rho-reflection branch handles the Weyl-chamber symmetry (a, b, c) <->
-    (pi/2 - a, b, -c), which arises at degenerate faces.
+    Uses Qiskit's ``TwoQubitWeylDecomposition`` (KAK).  Three cases:
 
-    References:
-        Tucci, "An Introduction to Cartan's KAK Decomposition for QC Programmers",
-        arXiv:quant-ph/0507171 (2005). https://arxiv.org/abs/quant-ph/0507171
-
-        Qiskit TwoQubitWeylDecomposition:
-        https://github.com/Qiskit/qiskit/blob/main/qiskit/synthesis/two_qubit/two_qubit_decompose.py
-
-        See GulpsDecomposer for Weyl-chamber and KAK references.
-
-    Cases:
-      1) exact Weyl match         -> identity corrections
-      2) target=(a,b,c) & basis=(pi/2 - a,b,-c)
-                                  -> insert X,Z before and I,Y after
-      3) otherwise                -> ValueError
+      1. Direct Weyl match: corrections are K-factor ratios.
+      2. Rho-reflected match: (a,b,c) vs (pi/2-a, b, -c), inserts Paulis.
+      3. Frobenius fallback: computes both branches, picks lowest error.
+         Needed when a ~ pi/4 makes the branches indistinguishable.
     """
-    if config is None:
-        config = GulpsConfig()
-    tol = config.equiv_recovery_tol
+    tol = _WEYL_MATCH_TOL
 
     # Weyl decompose both unitaries
     T = TwoQubitWeylDecomposition(U_target, fidelity=1.0)
@@ -82,14 +68,14 @@ def recover_local_equivalence(
     if np.allclose([a1, b1, c1], [np.pi / 2 - a2, b2, -c2], atol=tol):
         logger.debug("Detected rho reflect; inserting Pauli corrections.")
 
-        k4 = T.K1l @ P0 @ B.K1l.conj().T
+        k4 = T.K1l @ PAULI_Y @ B.K1l.conj().T
         k3 = T.K1r @ B.K1r.conj().T
-        k2 = B.K2l.conj().T @ Q1 @ T.K2l
-        k1 = B.K2r.conj().T @ Q0 @ T.K2r
+        k2 = B.K2l.conj().T @ PAULI_Z @ T.K2l
+        k1 = B.K2r.conj().T @ PAULI_X @ T.K2r
         return k1, k2, k3, k4, (T.global_phase - B.global_phase)
 
     # 3) Frobenius-error fallback: try both branches, pick lowest
-    #    reconstruction error. Needed when a ≈ π/4 makes the branches
+    #    reconstruction error. Needed when a ~= pi/4 makes the branches
     #    indistinguishable from Weyl coordinates alone.
     def _direct_corrections():
         k4 = T.K1l @ B.K1l.conj().T
@@ -99,10 +85,10 @@ def recover_local_equivalence(
         return k1, k2, k3, k4, (T.global_phase - B.global_phase)
 
     def _rho_corrections():
-        k4 = T.K1l @ P0 @ B.K1l.conj().T
+        k4 = T.K1l @ PAULI_Y @ B.K1l.conj().T
         k3 = T.K1r @ B.K1r.conj().T
-        k2 = B.K2l.conj().T @ Q1 @ T.K2l
-        k1 = B.K2r.conj().T @ Q0 @ T.K2r
+        k2 = B.K2l.conj().T @ PAULI_Z @ T.K2l
+        k1 = B.K2r.conj().T @ PAULI_X @ T.K2r
         return k1, k2, k3, k4, (T.global_phase - B.global_phase)
 
     def _recon_error(k1, k2, k3, k4, gphase):
@@ -128,23 +114,3 @@ def recover_local_equivalence(
         return best
 
     raise ValueError(f"Cannot recover local equivalence; Weyl differences {diffs}")
-
-
-if __name__ == "__main__":
-    from qiskit import QuantumCircuit
-    from qiskit.circuit.library import CXGate, CZGate, UnitaryGate
-    from qiskit.quantum_info import Operator, average_gate_fidelity
-
-    target_gate = CXGate()
-    basis_gate = CZGate()
-    print(average_gate_fidelity(target_gate, basis_gate))
-
-    k1, k2, k3, k4, gphase = recover_local_equivalence(target_gate, basis_gate)
-    qc = QuantumCircuit(2, global_phase=gphase)
-    qc.append(UnitaryGate(k1), [0])
-    qc.append(UnitaryGate(k2), [1])
-    qc.append(basis_gate, [0, 1])
-    qc.append(UnitaryGate(k3), [0])
-    qc.append(UnitaryGate(k4), [1])
-    print(average_gate_fidelity(target_gate, Operator(qc)))
-    print(qc.draw())

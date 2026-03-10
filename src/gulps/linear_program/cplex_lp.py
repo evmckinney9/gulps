@@ -26,7 +26,7 @@ class ContinuousISAConstraints(ISAConstraints):
     """LP constraints for a single yet continuous ISA sequence.
 
     Continuous ordered-ISA constraints with a single base gate:
-    g_i = k_i * base.monodromy,  k_i ∈ [0,1].
+    g_i = k_i * base.monodromy,  k_i in [0,1].
 
     This is a variation of the original CPLEX implementation
     https://github.com/ajavadia/hetero_isas/blob/main/src/hetero_isas/monodromy_lp/lp_constraints/docplex_constraints.py
@@ -60,8 +60,8 @@ class ContinuousISAConstraints(ISAConstraints):
         self.single_qubit_cost = single_qubit_cost
         self.config = config or GulpsConfig()
         self.model = self._create_model()
-        self._target_def: Optional[np.ndarray] = None
-        self._target_cts: List = []  # holds the 3 equality constraints for c_N
+        self._target_def: np.ndarray | None = None
+        self._target_cts: list = []  # holds the 3 equality constraints for c_N
 
     def set_target(self, target: GateInvariants) -> None:
         """Set the target gate invariants for the constraint RHS."""
@@ -195,7 +195,7 @@ class ContinuousISAConstraints(ISAConstraints):
         self._qlr_constraints(m)
 
         # STEP 4. OBJECTIVE FUNCTION
-        # Primary objective: minimize total cost = ∑ k_i + single_qubit_cost * (∑ y_i + 1)
+        # Primary objective: minimize total cost = sum(k_i) + single_qubit_cost * (sum(y_i) + 1)
         # This integrates depth penalty into the primary cost objective
         # Note: depth + 1 because single-qubit layers = two-qubit depth + 1
         obj_cost = m.sum(self.k_vars) + self.single_qubit_cost * (m.sum(self.y) + 1)

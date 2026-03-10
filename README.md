@@ -91,7 +91,7 @@ from gulps.core.invariants import GateInvariants
 from gulps.viz.invariant_viz import plot_decomposition
 
 example_input = random_unitary(4, seed=31)
-target_inv = GateInvariants.from_unitary(example_input, enforce_alcove=True)
+target_inv = GateInvariants.from_unitary(example_input)
 constraint_sol = decomposer._best_decomposition(target_inv=target_inv)
 plot_decomposition(
     constraint_sol.intermediates, constraint_sol.sentence, decomposer.isa

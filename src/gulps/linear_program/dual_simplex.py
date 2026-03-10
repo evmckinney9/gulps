@@ -10,8 +10,8 @@ where A and c are fixed, and b changes between solves.
 Uses warm-starting: the previous basis is reused, which is efficient when only b changes. The initial basis must be dual-feasible (dual multipliers >= 0).
 
 References:
-    Nocedal, Wright, "Numerical Optimization", 2nd ed., §13.5 (Springer, 2006).
-    Maros, "Computational Techniques of the Simplex Method", §5 (Springer, 2003).
+    Nocedal, Wright, "Numerical Optimization", 2nd ed., S13.5 (Springer, 2006).
+    Maros, "Computational Techniques of the Simplex Method", S5 (Springer, 2003).
 
 Example:
     solver = DualRevisedSimplex(A, c, initial_basis)
@@ -107,18 +107,18 @@ class DualRevisedSimplex:
             entering = int(np.argmax(violations))
             if violations[entering] <= tol:
                 self._basis = basis
-                return x, True  # all satisfied → optimal
+                return x, True  # all satisfied -- optimal
 
-            # Dual ratio test: pick the leaving variable that keeps λ ≥ 0.
+            # Dual ratio test: pick the leaving variable that keeps lambda >= 0.
             tau = B_inv.T @ A[entering]  # step direction in basis space
-            dual = -(B_inv.T @ c)  # dual multipliers  (KKT: A'λ = −c)
+            dual = -(B_inv.T @ c)  # dual multipliers  (KKT: A'lam = -c)
             leaving = _min_ratio(tau, dual, n, tol)
 
             if leaving < 0:
                 self._basis = basis
-                return None, False  # no valid pivot → infeasible
+                return None, False  # no valid pivot -- infeasible
 
-            # Swap basis element, update B^-1 via rank-1 (Sherman–Morrison).
+            # Swap basis element, update B^-1 via rank-1 (Sherman-Morrison).
             _update_basis(B_inv, basis, A, entering, leaving)
 
         self._basis = basis
