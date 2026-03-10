@@ -4,8 +4,8 @@ import heapq
 import itertools
 import logging
 from abc import ABC
+from collections.abc import Generator
 from dataclasses import dataclass, field
-from typing import Dict, Generator, List, Optional
 
 import numpy as np
 from qiskit.circuit import Gate
@@ -24,8 +24,8 @@ class ISAInvariants(ABC):
         single_qubit_cost: Cost offset per gate to prioritize shorter depth sequences.
     """
 
-    gate_set: List[GateInvariants]
-    cost_dict: Dict[GateInvariants, float]
+    gate_set: list[GateInvariants]
+    cost_dict: dict[GateInvariants, float]
     single_qubit_cost: float
     # NOTE this is useful for tiebreakers between fractional parts
     # example 2 iswaps versus 4 sqrtiswaps both cost 4
@@ -47,8 +47,8 @@ class ContinuousISA(ISAInvariants):
         single_qubit_cost: Cost offset per gate to prioritize shorter depth sequences.
     """
 
-    gate_set: List[GateInvariants]
-    cost_dict: Dict[GateInvariants, float] = field(default_factory=dict)
+    gate_set: list[GateInvariants]
+    cost_dict: dict[GateInvariants, float] = field(default_factory=dict)
     k_lb: float = 0.1
     single_qubit_cost: float = ISAInvariants.MIN_COST_1Q
 
@@ -61,7 +61,7 @@ class ContinuousISA(ISAInvariants):
     def from_base_gate(
         cls,
         base_gate: Gate | np.ndarray,
-        name: Optional[str] = None,
+        name: str | None = None,
         single_qubit_cost: float = ISAInvariants.MIN_COST_1Q,
     ) -> "ContinuousISA":
         """Create ContinuousISA from a single base gate.
@@ -93,9 +93,9 @@ class DiscreteISA(ISAInvariants):
 
     def __init__(
         self,
-        gate_set: List[Gate] | List[np.ndarray],
-        costs: List[float],
-        names: List[str] | None = None,
+        gate_set: list[Gate] | list[np.ndarray],
+        costs: list[float],
+        names: list[str] | None = None,
         precompute_polytopes: bool = False,
         single_qubit_cost: float = ISAInvariants.MIN_COST_1Q,
     ):
@@ -127,7 +127,7 @@ class DiscreteISA(ISAInvariants):
 
             self.coverage_set = isa_to_coverage(self)
 
-    def enumerate(self, max_depth: int) -> Generator[List[GateInvariants], None, None]:
+    def enumerate(self, max_depth: int) -> Generator[list[GateInvariants], None, None]:
         """Generate all ordered gate sequences up to max_depth (inclusive)."""
         counter = itertools.count()  # acts as cost tie-breaker
         # (cost, unique_index, sequence)
@@ -154,7 +154,7 @@ class DiscreteISA(ISAInvariants):
             if len(sequence) >= 1:
                 yield sequence
 
-    def polytope_lookup(self, target: GateInvariants) -> Optional[List[GateInvariants]]:
+    def polytope_lookup(self, target: GateInvariants) -> list[GateInvariants] | None:
         """Return a gate sentence that spans the target via convex polytope lookup.
 
         Args:

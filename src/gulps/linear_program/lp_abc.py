@@ -1,7 +1,7 @@
 """Base classes and types for LP constraint solvers."""
 
 from dataclasses import dataclass
-from typing import Optional, Protocol, Tuple
+from typing import Protocol
 
 from gulps.core.invariants import GateInvariants
 
@@ -23,10 +23,10 @@ class ConstraintSolution:
     """
 
     success: bool
-    sentence: Optional[Tuple[GateInvariants, ...]] = None
-    intermediates: Optional[Tuple[GateInvariants, ...]] = None
-    parameters: Optional[Tuple[float, ...]] = None
-    cost: Optional[float] = None
+    sentence: tuple[GateInvariants, ...] | None = None
+    intermediates: tuple[GateInvariants, ...] | None = None
+    parameters: tuple[float, ...] | None = None
+    cost: float | None = None
 
 
 class ISAConstraints(Protocol):

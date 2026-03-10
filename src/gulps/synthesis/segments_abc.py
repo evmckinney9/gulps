@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -14,8 +14,8 @@ if TYPE_CHECKING:
 class SegmentSolution:
     """Result of a single segment solve (local unitaries and diagnostics)."""
 
-    u0: Optional[np.ndarray]  # 2x2 or None if failure
-    u1: Optional[np.ndarray]  # 2x2 or None if failure
+    u0: np.ndarray | None  # 2x2 or None if failure
+    u1: np.ndarray | None  # 2x2 or None if failure
     max_residual: float  # worst-case residual component (L∞ norm)
     success: bool
     metadata: dict[str, Any]  # e.g. {"nfev": nfev, "label": "easy", "attempt": 3}
@@ -46,7 +46,7 @@ class SegmentSolver(ABC):
         *,
         step: int | None = 0,
         rng_seed: int | None = None,
-    ) -> Optional[SegmentSolution]:
+    ) -> SegmentSolution | None:
         """Try to solve this segment.
 
         Returns:

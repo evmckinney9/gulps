@@ -1,7 +1,6 @@
 """Gate invariants utilities for two-qubit gates (monodromy, Makhlin, Weyl, etc.)."""
 
 import logging
-from typing import Optional, Tuple
 
 import numpy as np
 from qiskit._accelerate.two_qubit_decompose import two_qubit_local_invariants as tqli_rs
@@ -24,10 +23,10 @@ class GateInvariants:
 
     def __init__(
         self,
-        logspec: Tuple[np.float64, np.float64, np.float64, np.float64],
-        name: Optional[str] = None,
-        unitary: Optional[np.ndarray] = None,
-        rho_reflect: Optional["GateInvariants"] = None,
+        logspec: tuple[np.float64, np.float64, np.float64, np.float64],
+        name: str | None = None,
+        unitary: np.ndarray | None = None,
+        rho_reflect: "GateInvariants | None" = None,
     ):
         """Create from a 3- or 4-element logspec tuple."""
         # if logspec is a np.ndarray, convert to tuple
@@ -53,7 +52,7 @@ class GateInvariants:
 
     @classmethod
     def from_unitary(
-        cls, gate: Gate | np.ndarray, enforce_alcove=False, name: Optional[str] = None
+        cls, gate: Gate | np.ndarray, enforce_alcove=False, name: str | None = None
     ) -> "GateInvariants":
         """Construct from a Qiskit Gate or 4x4 unitary matrix."""
         # Fast-path: extract numpy array without redundant Operator validation
@@ -72,7 +71,7 @@ class GateInvariants:
         return cls(logspec=coords, name=name, unitary=gate)
 
     @classmethod
-    def from_weyl(cls, coords: Tuple[np.float64, np.float64, np.float64]):
+    def from_weyl(cls, coords: tuple[np.float64, np.float64, np.float64]):
         """Create from weyl coordinates."""
         positive_canonical = np.pi / 2 * np.array(coords)
         return cls(positive_canonical_to_monodromy_coordinate(*positive_canonical))
@@ -80,7 +79,7 @@ class GateInvariants:
     @staticmethod
     def _unitary_to_mono_coordinates(
         U,
-    ) -> Tuple[np.float64, np.float64, np.float64, np.float64]:
+    ) -> tuple[np.float64, np.float64, np.float64, np.float64]:
         return tuple(unitary_to_monodromy_coordinate(U))
         # NOTE, backup conventon. the above used to give some unexplained precision issues
         # from qiskit._accelerate.two_qubit_decompose import weyl_coordinates
@@ -95,7 +94,7 @@ class GateInvariants:
         return self._unitary
 
     @property
-    def monodromy(self) -> Tuple[np.float64, np.float64, np.float64]:
+    def monodromy(self) -> tuple[np.float64, np.float64, np.float64]:
         """Monodromy invariants."""
         return self._monodromy
 

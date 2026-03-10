@@ -1,9 +1,10 @@
 """Gulps Decomposer module for two-qubit unitary synthesis."""
 
+from __future__ import annotations
+
 import logging
 import time
 import warnings
-from typing import List, Optional, Union
 
 import numpy as np
 from qiskit import QuantumCircuit
@@ -62,12 +63,12 @@ class GulpsDecomposer:
 
     def __init__(
         self,
-        gate_set: Optional[List[Gate]] = None,
-        costs: Optional[List[float]] = None,
-        names: Optional[List[str]] = None,
+        gate_set: list[Gate] | None = None,
+        costs: list[float] | None = None,
+        names: list[str] | None = None,
         precompute_polytopes: bool = False,
-        isa: Optional[ISAInvariants] = None,
-        config_options: Optional[GulpsConfig] = None,
+        isa: ISAInvariants | None = None,
+        config_options: GulpsConfig | None = None,
     ):
         """Initialize the GulpsDecomposer.
 
@@ -117,7 +118,7 @@ class GulpsDecomposer:
 
     def _eval_edge_case(
         self, target: GateInvariants, return_dag: bool
-    ) -> Optional[Union[QuantumCircuit, DAGCircuit]]:
+    ) -> QuantumCircuit | DAGCircuit | None:
         """Check if target is locally equivalent to identity.
 
         This fast path handles the edge case where the target can be synthesized
@@ -279,10 +280,10 @@ class GulpsDecomposer:
 
     def _run(
         self,
-        target: Union[np.ndarray, Gate],
+        target: np.ndarray | Gate,
         return_dag: bool = False,
         log_output: bool = False,
-    ) -> Union[QuantumCircuit, DAGCircuit]:
+    ) -> QuantumCircuit | DAGCircuit:
         """Core decomposition routine.
 
         Args:
@@ -348,10 +349,10 @@ class GulpsDecomposer:
 
     def __call__(
         self,
-        target: Union[np.ndarray, Gate],
+        target: np.ndarray | Gate,
         return_dag: bool = False,
         log_output: bool = False,
-    ) -> Union[QuantumCircuit, DAGCircuit]:
+    ) -> QuantumCircuit | DAGCircuit:
         """Decompose a two-qubit unitary into the configured instruction set.
 
         Args:

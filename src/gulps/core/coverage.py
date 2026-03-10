@@ -7,7 +7,7 @@ are guarded so that the rest of GULPS can be used without it.
 from __future__ import annotations
 
 from fractions import Fraction
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING
 
 import numpy as np
 from numpy import ndarray
@@ -64,7 +64,7 @@ def _operation_to_circuit_polytope(
 def isa_to_coverage(
     isa: "ISAInvariants",
     sort=True,
-) -> List[CircuitPolytope]:
+) -> list[CircuitPolytope]:
     """Calculates coverage given a basis gate set."""
     unitaries = [g.unitary for g in isa.gate_set]
     costs = [isa.cost_dict[g] for g in isa.gate_set]
