@@ -1,3 +1,5 @@
+# Adapted from https://github.com/qiskit-community/monodromy
+
 """Monodromy coordinate helpers inlined from the ``monodromy`` package.
 
 The two public functions :func:`unitary_to_monodromy_coordinate` and

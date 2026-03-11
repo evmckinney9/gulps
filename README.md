@@ -9,7 +9,7 @@ Most existing compilers only target CNOT gates. Analytical rules exist for a few
 #### 📌 Read the preprint: [Two-Qubit Gate Synthesis via Linear Programming for Heterogeneous Instruction Sets](https://arxiv.org/abs/2505.00543)
 
 > [!IMPORTANT]
-> GULPS is a general-purpose numerical method. If your ISA has a known analytical decomposition (e.g., Qiskit's `XXDecomposer` for CX/RZX families), prefer that — specialized solvers will always be faster and more precise for the gates they target. GULPS is for everything else.
+> GULPS is a general-purpose numerical method. If your ISA has a known analytical decomposition (e.g., Qiskit's `XXDecomposer` for CX/RZX families), prefer that - specialized solvers will always be faster and more precise for the gates they target. GULPS is for everything else.
 
 ______
 ### Getting Started
@@ -21,7 +21,7 @@ pip install gulps@git+https://github.com/evmckinney9/gulps
 **Optional extras:**
 | Extra | Install command | What it adds |
 |-------|----------------|--------------|
-| `monodromy` | `pip install "gulps[monodromy] @ git+..."` | Precomputes monodromy polytopes for direct coverage lookup, bypassing LP enumeration. Only worth it when the LP sentence search dominates — e.g., large ISAs with many small fractional gates. |
+| `monodromy` | `pip install "gulps[monodromy] @ git+..."` | Precomputes monodromy polytopes for direct coverage lookup, bypassing LP enumeration. Only worth it when the LP sentence search dominates - e.g., large ISAs with many small fractional gates. |
 | `cplex` | `pip install "gulps[cplex] @ git+..."` | CPLEX-based continuous LP solver. The continuous path works but is slower than the discrete path, which has been the optimization focus. |
 | `dev` | `pip install "gulps[dev] @ git+..."` | Development dependencies: plotting (`matplotlib`, `SciencePlots`), Jupyter, linting, etc. |
 | `test` | `pip install "gulps[test] @ git+..."` | Adds `pytest`. |
@@ -34,15 +34,16 @@ To begin, define your instruction set architecture (ISA) to configure the decomp
 Define an ISA as a list of Qiskit `Gate` objects, each with a cost and (optionally) a name. Names are only used in debug logs. Costs must be additive (affine cost model: each gate added to a sentence adds its cost) because that's what the LP enumeration and polytope coverage search assume. This is a good fit for durations or small-infidelity approximations where errors add linearly. I typically use normalized durations where fractional gates cost proportionally to their basis gate.
 
 ```python
-from qiskit.circuit.library import CXGate, iSwapGate
+from qiskit.circuit.library import iSwapGate
 from gulps import GulpsDecomposer
+from gulps.core.isa import DiscreteISA
 
-isa = [
-    (iSwapGate().power(1 / 2), 1 / 2, "sqrt2iswap"),
-    (iSwapGate().power(1 / 3), 1 / 3, "sqrt3iswap"),
-]
-gate_set, costs, names = zip(*isa)
-decomposer = GulpsDecomposer(gate_set=gate_set, costs=costs, names=names)
+isa = DiscreteISA(
+    gate_set=[iSwapGate().power(1 / 2), iSwapGate().power(1 / 3)],
+    costs=[1 / 2, 1 / 3],
+    names=["sqrt2iswap", "sqrt3iswap"],
+)
+decomposer = GulpsDecomposer(isa=isa)
 ```
 
 That's it. Once initialized, you can call the decomposer with either a Qiskit `Gate` or a 4x4 `np.ndarray` representing a two-qubit unitary:
@@ -150,3 +151,7 @@ See more:
  - https://github.com/qiskit-advocate/qamp-spring-23/issues/33
  - https://github.com/Qiskit/qiskit/pull/9375
  - https://weylchamber.readthedocs.io/en/latest/readme.html
+
+___
+> [!NOTE]
+> This software is provided as-is with no guarantee of support or maintenance. Bug reports and pull requests are welcome, but there is no commitment to respond or resolve issues on any timeline.

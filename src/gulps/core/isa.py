@@ -1,3 +1,17 @@
+# Copyright 2025-2026 Lev S. Bishop, Evan McKinney
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """ISA data structures: ContinuousISA, DiscreteISA, and their generators."""
 
 import heapq
@@ -122,11 +136,11 @@ class DiscreteISA(ISAInvariants):
         self.cost_dict = {g: c for g, c in zip(self.gate_set, costs)}
         self.single_qubit_cost = single_qubit_cost
         if self.single_qubit_cost <= 0.0:
-            logger.warning(
-                "Setting single_qubit_cost to zero may lead to unexpected behavior. "
-                "This offset is used to prioritize otherwise cost-equivalent gate sequences with fewer total segments. "
-                "For example, to prioritize 2 iswaps over 4 sqrtiswaps."
-            )
+            # logger.warning(
+            #     "Setting single_qubit_cost to zero may lead to unexpected behavior. "
+            #     "This offset is used to prioritize otherwise cost-equivalent gate sequences with fewer total segments. "
+            #     "For example, to prioritize 2 iswaps over 4 sqrtiswaps."
+            # )
             self.single_qubit_cost = self.MIN_COST_1Q
         self.max_sequence_length = max_sequence_length
         self._precompute_polytopes = precompute_polytopes

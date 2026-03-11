@@ -1,3 +1,17 @@
+# Copyright 2025-2026 Lev S. Bishop, Evan McKinney
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """Makhlin GN segment solver with Weyl-coordinate early-exit.
 
 Random-restart Gauss-Newton on Makhlin invariants, with early-exit: at
@@ -112,7 +126,7 @@ def _make_gn_restart_loop(residual_fn, *, maxiter, max_restarts):
                 is_best = curr_norm < best_norm
                 new_best_x = jnp.where(is_best, x, best_x)
                 new_best_norm = jnp.where(is_best, curr_norm, best_norm)
-                # GN step (no r_new evaluation — norm is taken at the
+                # GN step (no r_new evaluation - norm is taken at the
                 # TOP of the next iteration via CSE with jacrev).
                 gram = J @ J.T + 1e-14 * jnp.eye(3, dtype=jnp.float64)
                 x_new = x + J.T @ jnp.linalg.solve(gram, -r)

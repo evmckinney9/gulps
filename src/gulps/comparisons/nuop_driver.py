@@ -1,3 +1,5 @@
+# Adapted from https://github.com/prakashmurali/NuOp (Prakash Murali)
+
 # import math
 import multiprocessing as mp
 import time

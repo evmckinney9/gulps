@@ -1,3 +1,5 @@
+# Adapted from https://github.com/qucontrol/weylchamber
+
 """Minimal Weyl-chamber 3-D renderer inlined from the ``weylchamber`` package.
 
 Original source: https://github.com/qucontrol/weylchamber

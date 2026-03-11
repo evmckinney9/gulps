@@ -13,7 +13,7 @@ Caveats
 -------
 Machine-specificity:
   Results are only meaningful when compared across commits run on the same machine.
-  The benchmark assumes the machine is otherwise idle — heavy background load will
+  The benchmark assumes the machine is otherwise idle - heavy background load will
   inflate timings, especially at recent commits where decomposition is fast (~10ms)
   and OS jitter is a larger fraction of the measurement.
 
@@ -25,7 +25,7 @@ Error handling and old commits:
 
   Older commits tend to have higher error rates (sometimes 100+ per 1000 runs) due
   to numerical bugs that were fixed later. This makes their median timing higher than
-  it would be for a fully-correct implementation — the timing and the correctness
+  it would be for a fully-correct implementation - the timing and the correctness
   regression are two sides of the same bug.
 
   The progress line shows `errors=N` when failures occur, so you can see at a glance

@@ -3,9 +3,9 @@
 Non-Haar targets stress degenerate Weyl faces that random unitaries avoid.
 
 ISAs match ``tests.fixtures.isas.get_random_circuit_isas()``:
-  isa1: [iSwap, iSwap^(1/2), iSwap^(1/3)]       — pure iSwap family
-  isa2: [CX, CX^(1/2), CX^(1/4)]                — pure CX family
-  isa3: [CX^(1/2), iSwap^(1/3)]                  — mixed
+  isa1: [iSwap, iSwap^(1/2), iSwap^(1/3)]       - pure iSwap family
+  isa2: [CX, CX^(1/2), CX^(1/4)]                - pure CX family
+  isa3: [CX^(1/2), iSwap^(1/3)]                  - mixed
 
 Usage:
   python scripts/weyl_speed.py             # full run, N=64 grid

@@ -5,11 +5,11 @@ Machine-parseable JSON goes to stdout:
   {"isa1_xx": ..., "isa1_gulps": ..., "isa1_ratio": ..., "isa2_xx": ..., ...}
 
 ISAs (mirroring the iSwap tiers in simple_speed.py):
-  isa1: [CX^(1/4)]                            — strengths [pi/8]
-  isa2: [CX^(1/3), CX^(1/4)]                  — strengths [pi/6, pi/8]
-  isa3: [CX^(1/4), CX^(1/3), CX^(1/2)]       — strengths [pi/8, pi/6, pi/4]
+  isa1: [CX^(1/4)]                            - strengths [pi/8]
+  isa2: [CX^(1/3), CX^(1/4)]                  - strengths [pi/6, pi/8]
+  isa3: [CX^(1/4), CX^(1/3), CX^(1/2)]       - strengths [pi/8, pi/6, pi/4]
 
-Ratios are gulps_median / xx_median — values < 1 mean Gulps is faster.
+Ratios are gulps_median / xx_median - values < 1 mean Gulps is faster.
 
 Usage:
   python scripts/xx_compare.py           # full run, 1000 unitaries

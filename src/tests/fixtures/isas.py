@@ -7,8 +7,8 @@ All helpers return ``list[DiscreteISA]``.  Extra keyword arguments
 import numpy as np
 from qiskit.circuit.library import CXGate, SwapGate, iSwapGate
 
+from gulps.comparisons.isa_library.fsim import fsim
 from gulps.core.isa import DiscreteISA
-from gulps.isa_library.fsim import fsim
 
 
 def get_slim_isas(**isa_kwargs) -> list[DiscreteISA]:
