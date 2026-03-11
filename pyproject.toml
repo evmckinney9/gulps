@@ -51,9 +51,6 @@ ignore = ["D105"] # magic methods like __init__ don't need docstrings
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
-[tool.isort]
-profile = "black"
-
 # [[tool.setuptools-rust.ext-modules]]
 # # Private Rust extension module to be nested into the Python package
 # # https://github.com/PyO3/setuptools-rust?tab=readme-ov-file
