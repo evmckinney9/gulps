@@ -9,18 +9,29 @@ Most existing compilers only target CNOT gates. Analytical rules exist for a few
 #### 📌 Read the preprint: [Two-Qubit Gate Synthesis via Linear Programming for Heterogeneous Instruction Sets](https://arxiv.org/abs/2505.00543)
 
 > [!IMPORTANT]
-> GULPS is designed for arbitrary instruction sets, but if your ISA has known analytical decomposition rules, use those first. GULPS is a general-purpose fallback — special-case solvers will always be faster and potentially more accurate for the gates they target.
+> GULPS is a general-purpose numerical method. If your ISA has a known analytical decomposition (e.g., Qiskit's `XXDecomposer` for CX/RZX families), prefer that — specialized solvers will always be faster and more precise for the gates they target. GULPS is for everything else.
 
 ______
 ### Getting Started
 
-- `pip install gulps@git+https://github.com/evmckinney9/gulps`
--  For usage examples, see: `src/gulps/notebooks/00_main.ipynb`.
+```
+pip install gulps@git+https://github.com/evmckinney9/gulps
+```
+
+**Optional extras:**
+| Extra | Install command | What it adds |
+|-------|----------------|--------------|
+| `monodromy` | `pip install "gulps[monodromy] @ git+..."` | Precomputes monodromy polytopes for direct coverage lookup, bypassing LP enumeration. Only worth it when the LP sentence search dominates — e.g., large ISAs with many small fractional gates. |
+| `cplex` | `pip install "gulps[cplex] @ git+..."` | CPLEX-based continuous LP solver. The continuous path works but is slower than the discrete path, which has been the optimization focus. |
+| `dev` | `pip install "gulps[dev] @ git+..."` | Development dependencies: plotting (`matplotlib`, `SciencePlots`), Jupyter, linting, etc. |
+| `test` | `pip install "gulps[test] @ git+..."` | Adds `pytest`. |
+
+-  For usage examples, see the notebooks in `src/notebooks/`.
 -  Report issues: [Github issue tracker](https://github.com/ajavadia/hetero_isas/issues/)
 
-To begin, define your instruction set architecture (ISA) to configure the decomposer. Alternatively, if the instruction set is specified in the properties of a Qiskit `Target`, you can use GULPS as a `UnitarySynthesis` plugin.
+To begin, define your instruction set architecture (ISA) to configure the decomposer. Alternatively, if the instruction set is specified in the properties of a Qiskit `Target`, you can use GULPS as a transpiler `translation` plugin.
 
-In this example, we define an ISA as a list of Qiskit `Gate` objects, each with an associated cost and (optionally) a name. The name is only used in debugging logs. Costs are required to prioritize candidate circuit sentences and can be interpreted either as normalized durations or as fidelities. I typically use durations, where fractional gates incur a proportionally fractional cost relative to their basis gate, because currently the cost is taken to be additive.
+Define an ISA as a list of Qiskit `Gate` objects, each with a cost and (optionally) a name. Names are only used in debug logs. Costs must be additive (affine cost model: each gate added to a sentence adds its cost) because that's what the LP enumeration and polytope coverage search assume. This is a good fit for durations or small-infidelity approximations where errors add linearly. I typically use normalized durations where fractional gates cost proportionally to their basis gate.
 
 ```python
 from qiskit.circuit.library import CXGate, iSwapGate
@@ -47,7 +58,7 @@ v.draw()
 Alternatively, to compile a full `QuantumCircuit`, use the GULPS `TransformationPass`. Because GULPS leaves single-qubit gates unsimplified, I recommend appending `Optimize1qGatesDecomposition` to rewrite them into standard gate sets:
 
 ```python
-from gulps.qiskit_ext.synthesis_pass import GulpsDecompositionPass
+from gulps import GulpsDecompositionPass
 from qiskit.transpiler import PassManager
 from qiskit.transpiler.passes import Optimize1qGatesDecomposition
 from qiskit.circuit.random import random_circuit
@@ -108,7 +119,7 @@ Unlike other decomposition techniques, the linear program contains additional in
 |:------------------------:|:------------------------:|
 | Red(2)                   | Blue                     |
 
-We solve for the local one-qubit gates in each segment using a numerical root-finding routine:
+We solve for the local one-qubit gates in each segment using a numerical root-finding routine. The solver parameters (restart budgets, tolerances, stagnation thresholds) are tuned to work well across a broad range of ISAs, but there is no one-size-fits-all for every possible gate set, so edge-case performance may vary.
 ```python
 decomposer._local_synthesis._jax_lm_solver.try_solve(
     constraint_sol.sentence[0],

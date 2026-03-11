@@ -13,70 +13,87 @@ from gulps.viz.legend_helpers import (
 from gulps.viz.weyl_chamber import WeylChamber
 
 
-def scatter_plot(invariant_list: list[GateInvariants]):
-    """Scatter plot of a list of GateInvariants in the Weyl chamber."""
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection="3d", computed_zorder=False)
-    w = WeylChamber()
-    ax.set_proj_type("persp")
-    w.labels = {}
-    w.render(ax)
+def scatter_plot(
+    invariant_list: list[GateInvariants],
+    ax: plt.Axes | None = None,
+    **kwargs,
+):
+    """Scatter plot of a list of GateInvariants in the Weyl chamber.
+
+    Args:
+        invariant_list: Gate invariants to plot.
+        ax: Optional existing 3D axes for overlaying multiple scatter calls.
+        **kwargs: Passed through to ``ax.scatter`` (e.g. ``color``, ``s``, ``label``).
+    """
+    if ax is None:
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection="3d", computed_zorder=False)
+        ax.set_proj_type("persp")
+        w = WeylChamber()
+        w.labels = {}
+        w.render(ax)
+    else:
+        fig = ax.get_figure()
 
     points = np.array([abs(g.weyl) for g in invariant_list])
 
-    # Add depth indicators for each point
-    for point in points:
-        _add_depth_indicators(ax, point[0], point[1], point[2])
+    # Depth indicators (vectorized)
+    _add_depth_indicators_batch(ax, points)
 
-    ax.scatter(points[:, 0], points[:, 1], points[:, 2], zorder=1)
+    kwargs.setdefault("zorder", 1)
+    ax.scatter(points[:, 0], points[:, 1], points[:, 2], **kwargs)
     return fig, ax
 
 
-def _add_depth_indicators(
+def _add_depth_indicators_batch(
     ax,
-    x: float,
-    y: float,
-    z: float,
-    color: str = "gray",
+    points: np.ndarray,
+    color="gray",
     alpha: float = 0.25,
 ):
-    """Add subtle depth indicators to a 3D point for better spatial perception.
+    """Vectorized depth indicators for an array of 3D points.
 
-    Draws a faint dashed vertical line from the point down to z=0 and a shadow
-    on the z=0 plane to help visualize the 3D structure.
+    Draws vertical dashed lines to z=0 and shadow dots in two bulk calls.
 
     Args:
         ax: Matplotlib 3D axes to plot on.
-        x: X coordinate of the point.
-        y: Y coordinate of the point.
-        z: Z coordinate of the point.
-        color: Color for the depth indicators (default: "gray").
-        alpha: Opacity for the depth indicators (default: 0.25).
+        points: (N, 3) array of 3D coordinates.
+        color: Single color string/tuple or sequence of per-point colors.
+        alpha: Opacity for the depth indicators.
     """
-    # Vertical dashed line from point to z=0 plane
-    if z > 0:  # Only draw if point is above the plane
-        ax.plot(
-            [x, x],
-            [y, y],
-            [z, 0],
-            color=color,
-            linestyle="--",
-            linewidth=0.8,
-            alpha=alpha * 1.6,  # Slightly more visible than shadow
-            zorder=-10,
-        )
+    from mpl_toolkits.mplot3d.art3d import Line3DCollection
 
-    # Shadow on z=0 plane
+    # Shadows on z=0 plane (single scatter call)
     ax.scatter(
-        [x],
-        [y],
-        [0],
+        points[:, 0],
+        points[:, 1],
+        np.zeros(len(points)),
         color=color,
         s=15,
         alpha=alpha,
         zorder=-10,
         marker="o",
     )
+
+    # Vertical dashed lines from point to z=0 (single LineCollection)
+    above = points[:, 2] > 0
+    if above.any():
+        pts = points[above]
+        segments = [[(p[0], p[1], p[2]), (p[0], p[1], 0.0)] for p in pts]
+        # Filter colors to match the above-mask if per-point
+        if isinstance(color, (list, np.ndarray)):
+            line_colors = [c for c, a in zip(color, above) if a]
+        else:
+            line_colors = color
+        lc = Line3DCollection(
+            segments,
+            colors=line_colors,
+            linestyles="--",
+            linewidths=0.8,
+            alpha=alpha * 1.6,
+            zorder=-10,
+        )
+        ax.add_collection3d(lc)
 
 
 def _render_path(
@@ -97,17 +114,14 @@ def _render_path(
         pts[:, 0], pts[:, 1], pts[:, 2], zorder=-1, color="gray", s=20, alpha=0.5
     )
 
-    # Add depth indicators for all trajectory points with matching colors
-    first_color = colors[0] if colors else "gray"
-    # Origin gets the first segment color
-    _add_depth_indicators(
-        ax, traj_points[0][0], traj_points[0][1], traj_points[0][2], color=first_color
+    # Add depth indicators with per-point colors
+    # Origin gets first segment color; subsequent points get their segment color
+    point_colors = (
+        [colors[0]] + [colors[i] for i in range(len(colors))]
+        if colors
+        else ["gray"] * len(pts)
     )
-    # Subsequent points get the color of the segment that led to them
-    for i in range(1, len(traj_points)):
-        point = traj_points[i]
-        color = colors[i - 1]  # Color of the segment that reached this point
-        _add_depth_indicators(ax, point[0], point[1], point[2], color=color)
+    _add_depth_indicators_batch(ax, pts, color=point_colors)
 
     # Plot each segment
     for i in range(len(traj_points) - 1):
@@ -136,6 +150,7 @@ def _render_path(
         )
 
     # Mark origin (same color as first segment)
+    first_color = colors[0] if colors else "gray"
     ax.scatter(
         [0],
         [0],

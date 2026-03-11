@@ -84,7 +84,7 @@ class SegmentSynthesizer:
         decompositions.
         """
         # Initialize with first gate
-        dag.apply_operation_back(gate_list[0].unitary, qreg[:])
+        dag.apply_operation_back(gate_list[0].gate, qreg[:])
         P = gate_list[0].unitary.to_matrix()
         cache = self._cache
         jax_lm = self._jax_lm_solver
@@ -122,7 +122,7 @@ class SegmentSynthesizer:
             u0, u1 = seg_sol.u0, seg_sol.u1
             dag.apply_operation_back(UnitaryGate(u0, check_input=False), [qreg[0]])
             dag.apply_operation_back(UnitaryGate(u1, check_input=False), [qreg[1]])
-            dag.apply_operation_back(basis_inv.unitary, qreg[:])
+            dag.apply_operation_back(basis_inv.gate, qreg[:])
 
             # Update accumulated unitary
             u1u0 = np.empty((4, 4), dtype=np.complex128)

@@ -40,6 +40,12 @@ def get_all_test_isas(**isa_kwargs) -> list[DiscreteISA]:
             **isa_kwargs,
         ),
         DiscreteISA(
+            [CXGate().power(1 / 3)],
+            [1 / 3],
+            ["sq3cx"],
+            **isa_kwargs,
+        ),
+        DiscreteISA(
             [fsim(np.pi / 2, np.pi / 6), iSwapGate().power(1 / 4)],
             [1.0, 0.25],
             ["fsim_pi2_pi6", "sq4iswap"],

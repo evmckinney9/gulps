@@ -36,6 +36,7 @@ class GateInvariants:
         )  # Monodromy
         self.name = name or "2QGate"
         self._unitary = unitary  # Optional reference to original unitary
+        self._original_gate = None  # Preserved original Gate for DAG building
         self._rho_reflect = rho_reflect
 
         # Quantize ONCE
@@ -58,16 +59,26 @@ class GateInvariants:
             U = gate.data
         else:
             U = Operator(gate).data
+        original_gate = gate if isinstance(gate, Gate) else None
+        if original_gate is not None and name and original_gate.name != name:
+            original_gate = original_gate.copy(name=name)
         if not isinstance(gate, UnitaryGate):
             gate = UnitaryGate(U, label=name)
         coords = tuple(unitary_to_monodromy_coordinate(U))
-        return cls(logspec=coords, name=name, unitary=gate)
+        inv = cls(logspec=coords, name=name, unitary=gate)
+        inv._original_gate = original_gate
+        return inv
 
     @classmethod
     def from_weyl(cls, coords: tuple[np.float64, np.float64, np.float64]):
         """Create from weyl coordinates."""
         positive_canonical = np.pi / 2 * np.array(coords)
         return cls(positive_canonical_to_monodromy_coordinate(*positive_canonical))
+
+    @property
+    def gate(self) -> Gate:
+        """Return the original gate for circuit construction."""
+        return self._original_gate or self.unitary
 
     @property
     def unitary(self) -> UnitaryGate:

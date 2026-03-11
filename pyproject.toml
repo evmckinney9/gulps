@@ -2,8 +2,8 @@
 requires = ["setuptools", "wheel"]      #, "setuptools_rust"]
 build-backend = "setuptools.build_meta"
 
-[project.entry-points."qiskit.unitary_synthesis"]
-"gulps" = "gulps:GulpsSynthesisPlugin"
+[project.entry-points."qiskit.transpiler.translation"]
+"gulps" = "gulps:GulpsTranslationPlugin"
 
 [project]
 name = "gulps"

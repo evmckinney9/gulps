@@ -62,7 +62,7 @@ def build_cold_start_basis(
 
 
 # Safety cap on iterations
-MAX_PIVOTS: int = 50
+MAX_PIVOTS: int = 64
 
 
 class DualRevisedSimplex:

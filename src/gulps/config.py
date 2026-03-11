@@ -21,11 +21,6 @@ class GulpsConfig:
             polish. Default: 1e-5
 
 
-    Solver Attributes:
-        makhlin_restarts: Number of random restarts for Makhlin GN.
-            More restarts improve robustness but increase runtime. Default: 256
-        makhlin_maxiter: Maximum GN iterations per restart. Default: 512
-
     Diagnostics Attributes:
         flag_duration: If a single decomposition exceeds this time (seconds),
             emit a warning.  Set to 0 to disable.  Default: 0.05 (50ms)
@@ -38,9 +33,6 @@ class GulpsConfig:
     lp_feasibility_tol: float = 1e-10
     makhlin_conv_tol: float = 1e-9
     weyl_conv_tol: float = 1e-5
-    # Solver parameters
-    makhlin_restarts: int = 256
-    makhlin_maxiter: int = 512
 
     # Diagnostics
     flag_duration: float = 0.05
