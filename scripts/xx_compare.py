@@ -113,17 +113,18 @@ def make_gulps_decomposer(GulpsDecomposer, powers):
     """Create GulpsDecomposer for CX gates at given powers."""
     from qiskit.circuit.library import CXGate
 
-    from gulps.config import GulpsConfig
+    from gulps.core.isa import DiscreteISA
 
     gate_set = [CXGate().power(p) for p in powers]
     costs = list(powers)
     # CX^(1/4) has weak interaction strength (pi/8) and needs depth > 8
-    return GulpsDecomposer(
+    isa = DiscreteISA(
         gate_set=gate_set,
         costs=costs,
         precompute_polytopes=False,
-        config_options=GulpsConfig(max_depth=12),
+        max_sequence_length=12,
     )
+    return GulpsDecomposer(isa=isa)
 
 
 def main():

@@ -14,7 +14,13 @@ from gulps.isa_library.fsim import fsim
 def get_slim_isas(**isa_kwargs) -> list[DiscreteISA]:
     """Small ISA set for fast benchmarking."""
     return [
-        DiscreteISA([iSwapGate().power(1 / 4)], [0.25], ["sq4iswap"], **isa_kwargs),
+        DiscreteISA(
+            [iSwapGate().power(1 / 4)],
+            [0.25],
+            ["sq4iswap"],
+            max_sequence_length=12,
+            **isa_kwargs,
+        ),
         DiscreteISA(
             [CXGate().power(1 / 2), iSwapGate().power(1 / 3)],
             [0.5, 1 / 3],
@@ -37,12 +43,14 @@ def get_all_test_isas(**isa_kwargs) -> list[DiscreteISA]:
             [CXGate(), CXGate().power(1 / 2), CXGate().power(1 / 4)],
             [1.0, 0.5, 0.25],
             ["cx", "sq2cx", "sq4cx"],
+            max_sequence_length=12,
             **isa_kwargs,
         ),
         DiscreteISA(
             [CXGate().power(1 / 3)],
             [1 / 3],
             ["sq3cx"],
+            max_sequence_length=12,
             **isa_kwargs,
         ),
         DiscreteISA(

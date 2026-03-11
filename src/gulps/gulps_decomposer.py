@@ -66,6 +66,7 @@ class GulpsDecomposer:
         costs: list[float] | None = None,
         names: list[str] | None = None,
         precompute_polytopes: bool = False,
+        max_sequence_length: int = 8,
         isa: ISAInvariants | None = None,
         config_options: GulpsConfig | None = None,
     ):
@@ -83,6 +84,9 @@ class GulpsDecomposer:
                 When True, enables O(1) sentence lookup. When False, enumerates sentences
                 on-demand. Recommended True for repeated decompositions. Only applies
                 when constructing DiscreteISA via gate_set/costs.
+            max_sequence_length: Maximum gate sentence length for enumeration.
+                Only applies when constructing DiscreteISA via gate_set/costs.
+                Ignored when isa is provided (ISA carries its own max_sequence_length).
             isa: Optional pre-built ISA instance (DiscreteISA or ContinuousISA).
                 If provided, gate_set, costs, names, and precompute_polytopes are ignored.
             config_options: Optional GulpsConfig for all pipeline settings.
@@ -107,6 +111,7 @@ class GulpsDecomposer:
                 costs=costs,
                 names=names,
                 precompute_polytopes=precompute_polytopes,
+                max_sequence_length=max_sequence_length,
             )
 
         self._is_continuous = isinstance(self.isa, ContinuousISA)
@@ -176,7 +181,7 @@ class GulpsDecomposer:
             return constraints.solve(target, log_output=log_output)
 
         # Priority queue enumeration
-        for sentence in self.isa.enumerate(max_depth=self.config.max_depth):
+        for sentence in self.isa.enumerate():
             # Heuristic filter to skip obvious non-starters
             if (
                 sum(gate.strength for gate in sentence)
@@ -215,7 +220,7 @@ class GulpsDecomposer:
             # TODO: optimize by caching constraint object (construct once in __init__ or ISA)
             constraints = ContinuousISAConstraints(
                 base=self.isa.gate_set[0],
-                max_sequence_length=self.config.max_depth,
+                max_sequence_length=self.isa.max_sequence_length,
                 k_lb=self.isa.k_lb,
                 single_qubit_cost=self.isa.single_qubit_cost,
                 config=self.config,
@@ -229,7 +234,7 @@ class GulpsDecomposer:
             # single_qubit_cost is pulled from isa.single_qubit_cost inside the constructor
             constraints = HeterogeneousContinuousISAConstraints(
                 isa=self.isa,
-                max_sequence_length=self.config.max_depth,
+                max_sequence_length=self.isa.max_sequence_length,
                 config=self.config,
             )
 
@@ -261,7 +266,7 @@ class GulpsDecomposer:
             raise RuntimeError(
                 f"No valid ISA sentence found for target with monodromy {alcove_target.monodromy}. "
                 f"All candidates failed the LP feasibility check. "
-                f"For small fractional basis gates, consider increasing config.max_depth. "
+                f"For small fractional basis gates, consider increasing isa.max_sequence_length. "
                 f"This may indicate insufficient gate set strength or numerical issues."
             )
 

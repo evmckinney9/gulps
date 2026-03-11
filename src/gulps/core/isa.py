@@ -22,11 +22,13 @@ class ISAInvariants(ABC):
         gate_set: List of basis gate invariants.
         cost_dict: Mapping from gate invariants to their costs.
         single_qubit_cost: Cost offset per gate to prioritize shorter depth sequences.
+        max_sequence_length: Maximum gate sentence length for full Weyl chamber coverage.
     """
 
     gate_set: list[GateInvariants]
     cost_dict: dict[GateInvariants, float]
     single_qubit_cost: float
+    max_sequence_length: int
     # NOTE this is useful for tiebreakers between fractional parts
     # example 2 iswaps versus 4 sqrtiswaps both cost 4
     # with adjustment it is 2+2eps versus 2+4eps
@@ -51,6 +53,7 @@ class ContinuousISA(ISAInvariants):
     cost_dict: dict[GateInvariants, float] = field(default_factory=dict)
     k_lb: float = 0.1
     single_qubit_cost: float = ISAInvariants.MIN_COST_1Q
+    max_sequence_length: int = 8
 
     @property
     def is_single_family(self) -> bool:
@@ -63,6 +66,7 @@ class ContinuousISA(ISAInvariants):
         base_gate: Gate | np.ndarray,
         name: str | None = None,
         single_qubit_cost: float = ISAInvariants.MIN_COST_1Q,
+        max_sequence_length: int = 8,
     ) -> "ContinuousISA":
         """Create ContinuousISA from a single base gate.
 
@@ -70,6 +74,7 @@ class ContinuousISA(ISAInvariants):
             base_gate: Base gate unitary or Qiskit Gate.
             name: Optional name for the base gate.
             single_qubit_cost: Cost offset per gate to prioritize shorter circuits.
+            max_sequence_length: Maximum gate sentence length for the LP.
 
         Returns:
             ContinuousISA instance.
@@ -80,6 +85,7 @@ class ContinuousISA(ISAInvariants):
             gate_set=[base_inv],
             cost_dict=cost_dict,
             single_qubit_cost=single_qubit_cost,
+            max_sequence_length=max_sequence_length,
         )
 
 
@@ -98,6 +104,7 @@ class DiscreteISA(ISAInvariants):
         names: list[str] | None = None,
         precompute_polytopes: bool = False,
         single_qubit_cost: float = ISAInvariants.MIN_COST_1Q,
+        max_sequence_length: int = 8,
     ):
         """Initialize DiscreteISA from gates, costs, and optional names."""
         if not gate_set:
@@ -121,14 +128,15 @@ class DiscreteISA(ISAInvariants):
                 "For example, to prioritize 2 iswaps over 4 sqrtiswaps."
             )
             self.single_qubit_cost = self.MIN_COST_1Q
+        self.max_sequence_length = max_sequence_length
         self._precompute_polytopes = precompute_polytopes
         if precompute_polytopes:
             from gulps.core.coverage import isa_to_coverage
 
             self.coverage_set = isa_to_coverage(self)
 
-    def enumerate(self, max_depth: int) -> Generator[list[GateInvariants], None, None]:
-        """Generate all ordered gate sequences up to max_depth (inclusive)."""
+    def enumerate(self) -> Generator[list[GateInvariants], None, None]:
+        """Generate all ordered gate sequences up to max_sequence_length (inclusive)."""
         counter = itertools.count()  # acts as cost tie-breaker
         # (cost, unique_index, sequence)
         priority_queue = [(self.single_qubit_cost, next(counter), [])]
@@ -136,7 +144,7 @@ class DiscreteISA(ISAInvariants):
         while priority_queue:
             cost, _, sequence = heapq.heappop(priority_queue)
 
-            if len(sequence) < max_depth:
+            if len(sequence) < self.max_sequence_length:
                 for gate in self.gate_set:
                     # skip if trying to reuse a zero-cost gate already in the sequence
                     # used for example with SWAP-mirrors, cost 0.0 basis gates

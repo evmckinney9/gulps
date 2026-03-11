@@ -37,8 +37,5 @@ class GulpsConfig:
     # Diagnostics
     flag_duration: float = 0.05
 
-    # Search parameters
-    max_depth: int = 8  # Maximum gate sentence length for enumeration/LP
-
     # Cache parameters
     segment_cache_size: int = 3
