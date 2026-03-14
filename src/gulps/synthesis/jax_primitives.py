@@ -21,7 +21,6 @@ and residual functions used by the Gauss-Newton solver in jax_lm.py.
 import jax.numpy as jnp
 import numpy as np
 from jax import jit
-from qiskit.quantum_info import Operator
 
 from gulps.core.coordinates import M_WEYL as _M_WEYL_NP
 from gulps.core.coordinates import MAGIC as _MAGIC_NP
@@ -89,12 +88,26 @@ def weyl_coordinates(U):
 
 
 def _get_jax_matrix(inv):
-    """Return a JAX 4x4 unitary for a GateInvariants, creating it on first call."""
+    """Return a 4x4 unitary for a GateInvariants, caching on first call.
+
+    ISA gates (have ``_unitary``) are cached as DeviceArrays — they are reused
+    across many decompositions, so paying the ``jnp.asarray`` conversion once is
+    worth it.  LP intermediates (no ``_unitary``) are cached as numpy arrays
+    because they are used once; the JIT boundary converts at negligible cost.
+    """
     try:
         return inv._jax_matrix
     except AttributeError:
-        mat = np.asarray(Operator(inv.unitary).data, dtype=np.complex128)
-        inv._jax_matrix = jnp.asarray(mat, dtype=jnp.complex128)
+        if inv._unitary is not None:
+            # ISA gate: cache as DeviceArray (reused across decompositions)
+            mat = np.asarray(inv._unitary, dtype=np.complex128)
+            inv._jax_matrix = jnp.asarray(mat, dtype=jnp.complex128)
+        else:
+            # LP intermediate: cache as numpy (single-use, JIT converts)
+            mat = inv.canonical_matrix
+            if mat.dtype != np.complex128:
+                mat = mat.astype(np.complex128)
+            inv._jax_matrix = mat
         return inv._jax_matrix
 
 
