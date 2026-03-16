@@ -105,6 +105,7 @@ class LPSolverCache:
             A = _build_constraint_matrix(n_gates)
             n_stages = n_gates - 2
             c = -np.ones(A.shape[1])
+            c[::_d] -= 1e-12  # tiebreaker: prefer m0 > m1, breaks c1=c2 degeneracy
             basis = _build_cold_start_basis(n_stages)
             self._cache[key] = DualRevisedSimplex(A, c, basis, tol=tol)
         return self._cache[key]
