@@ -183,3 +183,20 @@ def _precompute_makhlin_args(prefix_op, basis_gate, target_makhlin):
             [target_makhlin, jnp.array([jnp.real(det_phase), jnp.imag(det_phase)])]
         ),
     )
+
+
+@jit
+def _matrix_residual(x, prefix_op, basis_gate, target_mat):
+    """Matrix matching residual: G@L1@C - L2@T@L3, 32 reals.
+
+    Solves for three local equivalences (L1, L2, L3) such that
+    basis_gate @ L1 @ prefix_op = L2 @ target_mat @ L3.
+    Full-rank Jacobian at c1=c2, bypassing the Makhlin rank-2 obstruction.
+    """
+    u0_1, u1_1 = _params_to_unitaries(x[:8])
+    u0_2, u1_2 = _params_to_unitaries(x[8:16])
+    u0_3, u1_3 = _params_to_unitaries(x[16:24])
+    LHS = basis_gate @ _kron_2x2(u1_1, u0_1) @ prefix_op
+    RHS = _kron_2x2(u1_2, u0_2) @ target_mat @ _kron_2x2(u1_3, u0_3)
+    diff = LHS - RHS
+    return jnp.concatenate([diff.real.ravel(), diff.imag.ravel()])

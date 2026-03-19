@@ -39,10 +39,25 @@ from gulps.synthesis.jax_primitives import (
     makhlin_invariants,
     weyl_coordinates,
 )
+from gulps.synthesis.recover_equiv import recover_local_equivalence
 from gulps.synthesis.segments_abc import SegmentSolution, SegmentSolver
 
 _REFL_SIGN = jnp.array([-1.0, 1.0, -1.0])
 _REFL_OFFSET = jnp.array([1.0, 0.0, 0.0])
+
+
+def _canonical_weyl_gap(weyl):
+    """Min gap between adjacent Weyl coordinates in canonical form.
+
+    GateInvariants.weyl can have c3 < 0 (non-canonical).  The canonical
+    Weyl chamber folds (c1, c2, c3) -> (1-c1, c2, -c3) when c3 < 0.
+    """
+    c1, c2, c3 = float(weyl[0]), float(weyl[1]), float(weyl[2])
+    if c3 < 0:
+        c1, c3 = 1.0 - c1, -c3
+    c2 = max(c2, 0.0)
+    c3 = max(c3, 0.0)
+    return min(abs(c1 - c2), abs(c2 - c3))
 
 
 def _weyl_res_both_branches(c, target_weyl):
@@ -272,20 +287,107 @@ class JaxLMSegmentSolver(SegmentSolver):
         self._key = PRNGKey(rng_seed or 0)
         self._solve = _compiled_solve
 
+    def _try_rearranged(
+        self,
+        key,
+        basis_inv,
+        prefix_jax,
+        target_jax,
+        makhlin_tol,
+        weyl_tol,
+    ):
+        """Try rearranged formulation L(T, G†, C) and convert to F1 form.
+
+        When the target T is on a degenerate Weyl face but the prefix C is
+        generic, solving G† @ K' @ T targeting C's invariants avoids the
+        rank-deficient Makhlin Jacobian at c1=c2.  The solution is converted
+        back to F1 form via KAK recovery so the caller sees standard u0, u1.
+        """
+        basis_dag = np.asarray(basis_inv._unitary, dtype=np.complex128).conj().T
+        u0_r, u1_r, weyl_res, makhlin_res = self._solve(
+            key,
+            target_jax,
+            basis_dag,
+            prefix_jax,
+            makhlin_tol,
+            weyl_tol,
+        )
+        wr, mr = float(weyl_res), float(makhlin_res)
+        if wr > weyl_tol and mr > makhlin_tol:
+            return None
+
+        # V = G† @ kron(u1', u0') @ T has C's invariants.
+        # recover_local_equivalence(C, V) gives:
+        #   C ≈ kron(k4, k3) @ V @ kron(k2, k1) @ phase
+        # => G @ kron(k4†, k3†) @ C ~ T, so u0=k3†, u1=k4†.
+        u0_np, u1_np = np.asarray(u0_r), np.asarray(u1_r)
+        V = (
+            basis_dag
+            @ np.kron(u1_np, u0_np)
+            @ np.asarray(target_jax, dtype=np.complex128)
+        )
+        try:
+            _, _, k3, k4, _ = recover_local_equivalence(
+                np.asarray(prefix_jax, dtype=np.complex128), V
+            )
+        except Exception:
+            return None
+
+        return SegmentSolution(
+            u0=k3.conj().T,
+            u1=k4.conj().T,
+            max_residual=wr,
+            success=True,
+            metadata={"rearranged": True},
+        )
+
     def try_solve(
         self, prefix_inv, basis_inv, target_inv, *, step=0, rng_seed=None
     ) -> SegmentSolution:
         """Solve one segment via Makhlin GN -> Weyl polish."""
         start = time.perf_counter()
-        key = self._key
-        if rng_seed is not None:
-            key = fold_in(key, rng_seed)
+        key = fold_in(self._key, rng_seed) if rng_seed is not None else self._key
 
         prefix_jax = _get_jax_matrix(prefix_inv)
-        basis_jax = _get_jax_matrix(basis_inv)
         target_jax = _get_jax_matrix(target_inv)
         makhlin_tol = self.config.makhlin_conv_tol
         weyl_tol = self.config.weyl_conv_tol
+
+        gap_t = _canonical_weyl_gap(target_inv.weyl)
+        if gap_t < 0.02 and basis_inv._unitary is not None:
+            # Canonicalize basis Weyl coordinates.
+            bw = basis_inv.weyl
+            _bc1, _bc2, _bc3 = float(bw[0]), float(bw[1]), float(bw[2])
+            if _bc3 < 0:
+                _bc1, _bc3 = 1.0 - _bc1, -_bc3
+            _bc2 = max(_bc2, 0.0)
+
+            should_rearrange = False
+
+            # Case 1: iSwap-family basis gate (c1≈c2).
+            # Works for ANY degenerate target (c1≈c2 or c2≈c3) as long as
+            # the prefix is generic.  CX-family basis gates must NOT fire
+            # here — they don't trigger the c1=c2 obstruction even with
+            # c1=c2 targets (tested: isa4 6→19ms regression without guard).
+            basis_on_c1c2 = abs(_bc1 - _bc2) < 0.02 and min(_bc1, _bc2) > 0.05
+            if basis_on_c1c2:
+                gap_c = _canonical_weyl_gap(prefix_inv.weyl)
+                should_rearrange = gap_c > 2 * gap_t + 0.01
+
+            if should_rearrange:
+                result = self._try_rearranged(
+                    key,
+                    basis_inv,
+                    prefix_jax,
+                    target_jax,
+                    makhlin_tol,
+                    weyl_tol,
+                )
+                if result is not None:
+                    result.metadata["elapsed"] = time.perf_counter() - start
+                    return result
+
+        basis_jax = _get_jax_matrix(basis_inv)
 
         u0, u1, weyl_res, makhlin_res = self._solve(
             key,
@@ -295,35 +397,30 @@ class JaxLMSegmentSolver(SegmentSolver):
             makhlin_tol,
             weyl_tol,
         )
-        weyl_ok = float(weyl_res) <= weyl_tol
-        makhlin_ok = float(makhlin_res) <= makhlin_tol
+        wr, mr = float(weyl_res), float(makhlin_res)
 
         # PRNG retry: at near-degenerate Weyl faces, the default key may
-        # produce 256 random inits that all miss convergent basins.  A
-        # diversified key explores a different set of basins.
-        if not (weyl_ok or makhlin_ok):
-            key2 = fold_in(self._key, step ^ 0xCAFE)
+        # produce 256 random inits that all miss convergent basins.
+        if not (wr <= weyl_tol or mr <= makhlin_tol):
             u0, u1, weyl_res, makhlin_res = self._solve(
-                key2,
+                fold_in(self._key, step ^ 0xCAFE),
                 prefix_jax,
                 basis_jax,
                 target_jax,
                 makhlin_tol,
                 weyl_tol,
             )
-            weyl_ok = float(weyl_res) <= weyl_tol
-            makhlin_ok = float(makhlin_res) <= makhlin_tol
+            wr, mr = float(weyl_res), float(makhlin_res)
 
-        if weyl_ok or makhlin_ok:
+        if wr <= weyl_tol or mr <= makhlin_tol:
             return SegmentSolution(
                 u0=np.asarray(u0),
                 u1=np.asarray(u1),
-                max_residual=float(weyl_res),
+                max_residual=wr,
                 success=True,
                 metadata={"elapsed": time.perf_counter() - start},
             )
 
         raise RuntimeError(
-            f"Optimization failed: makhlin_res={float(makhlin_res):.2e}, "
-            f"weyl_res={float(weyl_res):.2e}"
+            f"Optimization failed: makhlin_res={mr:.2e}, weyl_res={wr:.2e}"
         )
