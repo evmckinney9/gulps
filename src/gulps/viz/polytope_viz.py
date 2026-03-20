@@ -40,7 +40,6 @@ COLORS = [
 ]
 
 
-# TODO FIXME not detecting vertices versus 1d lines
 def _plot_polytope(circuit_polytope, ax, w, color="red"):
     """Plot a single circuit polytope on the given axes.
 
@@ -50,27 +49,15 @@ def _plot_polytope(circuit_polytope, ax, w, color="red"):
         w: WeylChamber object.
         color: Color for the polytope faces.
     """
-    polytope_vertices = (
-        monodromy_to_positive_canonical_polytope(circuit_polytope).reduce().vertices
-    )
-    polytope_vertices = np.array([[float(b) for b in a] for a in polytope_vertices[0]])
+    canon = monodromy_to_positive_canonical_polytope(circuit_polytope).reduce()
 
-    # TODO FIXME I think this symmetry might not be correct for all polytopes
-    # left_vertices = polytope_vertices
-    # right_vertices = np.array([[1 - a[0], a[1], a[2]] for a in polytope_vertices])
-    # extend polytope_vertices
-    extended_vertices = []
-    for v in polytope_vertices:
-        extended_vertices.append(v)
-        if v[2] == 0.0:
-            extended_vertices.append([1 - v[0], v[1], v[2]])
+    for vertex_set in canon.vertices:
+        vertices = np.unique([[float(b) for b in a] for a in vertex_set], axis=0)
 
-    for vertices in [extended_vertices]:
-        # delete duplicates that might exist
-        vertices = np.unique(vertices, axis=0)
-
-        if len(vertices) < 3:
+        if len(vertices) == 1:
             w.ax.scatter3D(*zip(*vertices), color=color)
+        elif len(vertices) == 2:
+            w.ax.plot3D(*zip(*vertices), color=color, linewidth=2)
         elif len(vertices) == 3:
             triangle = Poly3DCollection([vertices])
             triangle.set_facecolor(color)
@@ -78,7 +65,6 @@ def _plot_polytope(circuit_polytope, ax, w, color="red"):
             triangle.set_alpha(0.5)
             w.ax.add_collection3d(triangle)
         else:
-            # TODO use Qbk:0Bk:0 - drop dimension k from the input points
             hull = ss.ConvexHull(vertices, qhull_options="QJ")
             faces = Poly3DCollection([vertices[simplex] for simplex in hull.simplices])
             faces.set_facecolor(color)

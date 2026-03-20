@@ -32,9 +32,9 @@ from __future__ import annotations
 
 import numpy as np
 
+from gulps._accelerate import DualSimplex
 from gulps.config import GulpsConfig
 from gulps.core.invariants import LEN_GATE_INVARIANTS, GateInvariants
-from gulps._accelerate import DualSimplex
 from gulps.linear_program.lp_abc import ConstraintSolution, ISAConstraints
 from gulps.linear_program.qlr import len_qlr, qlr_inequalities
 
@@ -118,7 +118,12 @@ class LPSolverCache:
         if key not in self._cache:
             A = _build_constraint_matrix(n_gates)
             n_stages = n_gates - 2
+            # Non-zero objective is required: c=0 causes degenerate cycling
+            # in the dual simplex (all dual ratios become 0 → arbitrary pivots
+            # → exhausts MAX_PIVOTS on the QLR system). Maximizing
+            # Σ monodromy also steers intermediates toward polytope interior.
             c = -np.ones(A.shape[1])
+            # c[::_d] -= 1e-12  # m0-prefer tiebreaker: breaks c1=c2 degeneracy
             basis = _build_cold_start_basis(n_stages)
             self._cache[key] = DualSimplex(A, c, basis.tolist(), tol)
         return self._cache[key]

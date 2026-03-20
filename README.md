@@ -120,19 +120,17 @@ Unlike other decomposition techniques, the linear program contains additional in
 |:------------------------:|:------------------------:|
 | Red(2)                   | Blue                     |
 
-We solve for the local one-qubit gates in each segment using a numerical root-finding routine. The solver parameters (restart budgets, tolerances, stagnation thresholds) are tuned to work well across a broad range of ISAs, but there is no one-size-fits-all for every possible gate set, so edge-case performance may vary.
+We solve for the local one-qubit gates in each segment using a Gauss-Newton solver on the Makhlin invariants, followed by a Weyl-coordinate polish. The solver (implemented in Rust) is tuned to work well across a broad range of ISAs, but there is no one-size-fits-all for every possible gate set, so edge-case performance may vary.
 ```python
-decomposer._local_synthesis._solver.try_solve(
-    constraint_sol.sentence[0],
-    constraint_sol.sentence[1],
-    constraint_sol.intermediates[1],
+solutions = decomposer._local_synthesis._solve_segments(
+    constraint_sol.sentence,
+    constraint_sol.intermediates,
+    n_inner=len(constraint_sol.sentence) - 1,
 )
-
-SegmentSolution(u0=Array([[ 0.70695489-0.01465516j,  0.27313926-0.65222308j],
-       [-0.27313926-0.65222308j,  0.70695489+0.01465516j]],      dtype=complex128), u1=Array([[ 0.70695488-0.01465514j,  0.27313926-0.6522231j ],
-       [-0.27313926-0.6522231j ,  0.70695488+0.01465514j]],      dtype=complex128), max_residual=4.786284230062776e-09, success=True, metadata={'stage': 'weyl', 'elapsed': 0.014199456010828726})
-```  
-After solving the individual segments, we apply a final stitching step to handle orietation between segments and to promote local equivalence into global unitary equivalence:
+solutions[0]
+# SegmentSolution(u0=..., u1=..., weyl_residual=1.2e-16, max_residual=4.8e-09, success=True)
+```
+After solving the individual segments, we apply a final stitching step to handle orientation between segments and to promote local equivalence into global unitary equivalence:
 ```python
 decomposer._local_synthesis.synthesize_segments(
     gate_list=constraint_sol.sentence,
