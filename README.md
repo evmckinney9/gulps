@@ -122,7 +122,7 @@ Unlike other decomposition techniques, the linear program contains additional in
 
 We solve for the local one-qubit gates in each segment using a numerical root-finding routine. The solver parameters (restart budgets, tolerances, stagnation thresholds) are tuned to work well across a broad range of ISAs, but there is no one-size-fits-all for every possible gate set, so edge-case performance may vary.
 ```python
-decomposer._local_synthesis._jax_lm_solver.try_solve(
+decomposer._local_synthesis._solver.try_solve(
     constraint_sol.sentence[0],
     constraint_sol.sentence[1],
     constraint_sol.intermediates[1],

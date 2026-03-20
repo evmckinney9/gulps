@@ -34,11 +34,7 @@ import numpy as np
 
 from gulps.config import GulpsConfig
 from gulps.core.invariants import LEN_GATE_INVARIANTS, GateInvariants
-from gulps.linear_program.dual_simplex import (
-    DualRevisedSimplex,
-    build_cold_start_basis,
-    identity_row_indices,
-)
+from gulps._accelerate import DualSimplex
 from gulps.linear_program.lp_abc import ConstraintSolution, ISAConstraints
 from gulps.linear_program.qlr import len_qlr, qlr_inequalities
 
@@ -71,15 +67,33 @@ def _build_constraint_matrix(n_gates: int) -> np.ndarray:
 # --- Initial basis selection for simplex ---
 
 
+def _identity_row_indices(block: np.ndarray) -> np.ndarray:
+    """Find rows in block equal to each standard basis vector e_j."""
+    d = block.shape[1]
+    indices = np.empty(d, dtype=np.intp)
+    for j in range(d):
+        ej = np.zeros(d)
+        ej[j] = 1.0
+        (matches,) = np.where(np.all(block == ej, axis=1))
+        if len(matches) == 0:
+            raise ValueError(f"No identity row e_{j} in QLR block")
+        indices[j] = matches[0]
+    return indices
+
+
 # Indices of identity rows in each QLR block (used for cold start basis)
-_ci_identity_rows = identity_row_indices(_ci_block)
-_cip_identity_rows = identity_row_indices(_ciplus1_block)
+_ci_identity_rows = _identity_row_indices(_ci_block)
+_cip_identity_rows = _identity_row_indices(_ciplus1_block)
 
 
 def _build_cold_start_basis(n_stages: int) -> np.ndarray:
-    return build_cold_start_basis(
-        n_stages, _ci_identity_rows, _cip_identity_rows, len_qlr, _d
-    )
+    """Build an initial dual-feasible basis from the staircase structure."""
+    basis = np.empty(_d * n_stages, dtype=np.intp)
+    basis[:_d] = _cip_identity_rows
+    for k in range(1, n_stages):
+        block_start = (k + 1) * len_qlr
+        basis[k * _d : (k + 1) * _d] = block_start + _ci_identity_rows
+    return basis
 
 
 # --- Solver cache and interface ---
@@ -96,9 +110,9 @@ class LPSolverCache:
 
     def __init__(self) -> None:
         """Initialize an empty cache."""
-        self._cache: dict[tuple[int, float], DualRevisedSimplex] = {}
+        self._cache: dict[tuple[int, float], DualSimplex] = {}
 
-    def get(self, n_gates: int, tol: float) -> DualRevisedSimplex:
+    def get(self, n_gates: int, tol: float) -> DualSimplex:
         """Get or create a cached solver for sentence length *n_gates*."""
         key = (n_gates, tol)
         if key not in self._cache:
@@ -106,7 +120,7 @@ class LPSolverCache:
             n_stages = n_gates - 2
             c = -np.ones(A.shape[1])
             basis = _build_cold_start_basis(n_stages)
-            self._cache[key] = DualRevisedSimplex(A, c, basis, tol=tol)
+            self._cache[key] = DualSimplex(A, c, basis.tolist(), tol)
         return self._cache[key]
 
 

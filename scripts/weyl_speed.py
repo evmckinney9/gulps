@@ -40,9 +40,9 @@ def bench_weyl(decomposer, name, grid_points):
         target = GateInvariants.from_weyl(weyl_pt)
         try:
             t0 = time.perf_counter()
-            result = decomposer(target.unitary)
+            result = decomposer(target.gate)
             t1 = time.perf_counter()
-            fid = average_gate_fidelity(Operator(target.unitary), Operator(result))
+            fid = average_gate_fidelity(Operator(target.gate), Operator(result))
             if fid < 1 - 1e-8:
                 raise ValueError(
                     f"{name} pt={weyl_pt}: fidelity {fid:.10f} below threshold"

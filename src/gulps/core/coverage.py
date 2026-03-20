@@ -80,7 +80,7 @@ def isa_to_coverage(
     sort=True,
 ) -> list[CircuitPolytope]:
     """Calculates coverage given a basis gate set."""
-    unitaries = [g.unitary for g in isa.gate_set]
+    unitaries = [g.matrix for g in isa.gate_set]
     costs = [isa.cost_dict[g] for g in isa.gate_set]
     names = [f"{g.name}_{i}" for i, g in enumerate(isa.gate_set)]
     single_qubit_cost = isa.single_qubit_cost

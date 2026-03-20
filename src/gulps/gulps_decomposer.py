@@ -28,12 +28,12 @@ from qiskit.converters import circuit_to_dag, dag_to_circuit
 from qiskit.dagcircuit import DAGCircuit
 
 from gulps import GateInvariants
+from gulps._accelerate import recover_local_equiv as recover_local_equivalence
 from gulps.config import GulpsConfig
 from gulps.core.isa import ContinuousISA, DiscreteISA, ISAInvariants
+from gulps.core.segments import SegmentSynthesizer
 from gulps.linear_program.lp_abc import ConstraintSolution
-from gulps.linear_program.scipy_lp import LPSolverCache, MinimalOrderedISAConstraints
-from gulps.synthesis.recover_equiv import recover_local_equivalence
-from gulps.synthesis.segments_solver import SegmentSynthesizer
+from gulps.linear_program.lp_solver import LPSolverCache, MinimalOrderedISAConstraints
 
 logger = logging.getLogger(__name__)
 
@@ -154,8 +154,8 @@ class GulpsDecomposer:
             if logger.isEnabledFor(logging.DEBUG):
                 logger.debug("Target is identity, returning empty circuit")
             k1, k2, k3, k4, gphase = recover_local_equivalence(
-                target.unitary,
-                np.eye(4),
+                target.matrix,
+                np.eye(4, dtype=np.complex128),
             )
             dag = circuit_to_dag(QuantumCircuit(2, global_phase=gphase))
             qreg = dag.qregs["q"]
@@ -196,7 +196,8 @@ class GulpsDecomposer:
 
         # Priority queue enumeration
         for sentence in self.isa.enumerate():
-            # Heuristic filter to skip obvious non-starters
+            # QLR row-0 necessary condition (both orientations):
+            # min(target.mono_sum, target.rho_sum) ≤ Σ gate.mono_sum
             if (
                 sum(gate.strength for gate in sentence)
                 < target.strength - self.config.lp_feasibility_tol

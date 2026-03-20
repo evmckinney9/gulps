@@ -15,10 +15,10 @@
 """Benchmark utilities for Gulps vs Qiskit transpilation comparison.
 
 Provides:
-- ``build_target(num_qubits)`` — discrete {π/2, π/4, π/6} RZZ target
-- ``build_gulps_pm(target)`` / ``build_qiskit_pm(target)`` — matched PassManagers
-- ``circuit_duration(qc)`` — additive cost model (seconds)
-- ``build_benchmark_circuits(num_qubits)`` — standard circuit families
+- ``build_target(num_qubits)`` - discrete {π/2, π/4, π/6} RZZ target
+- ``build_gulps_pm(target)`` / ``build_qiskit_pm(target)`` - matched PassManagers
+- ``circuit_duration(qc)`` - additive cost model (seconds)
+- ``build_benchmark_circuits(num_qubits)`` - standard circuit families
 """
 
 from itertools import combinations

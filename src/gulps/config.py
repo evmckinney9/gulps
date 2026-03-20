@@ -38,9 +38,6 @@ class GulpsConfig:
     Diagnostics Attributes:
         flag_duration: If a single decomposition exceeds this time (seconds),
             emit a warning.  Set to 0 to disable.  Default: 0.05 (50ms)
-
-    Cache Attributes:
-        segment_cache_size: Size of the LFU cache for each step index. Default: 3
     """
 
     # Tolerances
@@ -51,5 +48,5 @@ class GulpsConfig:
     # Diagnostics
     flag_duration: float = 0.05
 
-    # Cache parameters
-    segment_cache_size: int = 3
+    # Solver parameters
+    min_batch_size: int = 6

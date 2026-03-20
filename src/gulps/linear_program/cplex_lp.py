@@ -138,7 +138,7 @@ class ContinuousISAConstraints(ISAConstraints):
         depth = sum(int(sol.get_value(self.y[i])) for i in range(self.N))
 
         gi_list = [
-            GateInvariants.from_unitary(self.base.unitary.power(k), name=self.base.name)
+            GateInvariants.from_unitary(self.base.gate.power(k), name=self.base.name)
             for k in ks[:depth]
         ]
         intermediate_invariants = (gi_list[0],) + tuple(

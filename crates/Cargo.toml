@@ -1,0 +1,27 @@
+[package]
+name = "gulps_accelerate"
+version = "0.3.0"
+edition = "2021"
+
+[lib]
+name = "_accelerate"
+crate-type = ["cdylib"]
+path = "src/lib.rs"
+
+[dependencies]
+pyo3 = { version = "=0.27.2", features = ["extension-module", "abi3-py310"] }
+numpy = "0.27"
+ndarray = "0.16"
+num-complex = "0.4"
+nalgebra = "0.33"
+faer = { version = "0.24", default-features = false, features = ["std"] }
+faer-ext = { version = "0.7", features = ["ndarray"] }
+rand = { version = "0.9", features = ["small_rng"] }
+rayon = "1.10"
+
+# Qiskit Rust internals - direct access to TwoQubitWeylDecomposition
+qiskit-synthesis = { git = "https://github.com/Qiskit/qiskit", tag = "2.3.0" }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1

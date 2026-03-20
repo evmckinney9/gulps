@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools", "wheel"]      #, "setuptools_rust"]
+requires = ["setuptools", "wheel", "setuptools_rust"]
 build-backend = "setuptools.build_meta"
 
 [project.entry-points."qiskit.transpiler.translation"]
@@ -8,10 +8,10 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "gulps"
 description = "compile arbitrary two-qubit unitaries"
-version = "0.2.0"
+version = "0.3.0"
 authors = [{ name = "evm9" }]
 requires-python = ">=3.9"
-dependencies = ["qiskit", "numpy", "jax"]
+dependencies = ["qiskit", "numpy"]
 [project.optional-dependencies]
 cplex = ["qiskit-optimization[cplex]"]
 monodromy = [
@@ -51,12 +51,13 @@ ignore = ["D105"] # magic methods like __init__ don't need docstrings
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
-# [[tool.setuptools-rust.ext-modules]]
-# # Private Rust extension module to be nested into the Python package
-# # https://github.com/PyO3/setuptools-rust?tab=readme-ov-file
-# target = "hetero_isas._accelerate"
-# path = "crates/Cargo.toml"
-# binding = "PyO3"
+[[tool.setuptools-rust.ext-modules]]
+# Private Rust extension module to be nested into the Python package
+# https://github.com/PyO3/setuptools-rust?tab=readme-ov-file
+target = "gulps._accelerate"
+path = "crates/Cargo.toml"
+binding = "PyO3"
+debug = false
 
 [tool.distutils.bdist_wheel]
 py_limited_api = "cp39"

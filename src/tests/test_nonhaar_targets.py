@@ -50,8 +50,8 @@ def test_weyl_linspace(decomposer):
     """Decompose a target at a deterministic Weyl-chamber grid points."""
     for weyl_pt in weyl_linspace(N_WEYL):
         target = GateInvariants.from_weyl(weyl_pt)
-        circuit = decomposer(target.unitary)
-        fid = average_gate_fidelity(Operator(target.unitary), Operator(circuit))
+        circuit = decomposer(target.matrix)
+        fid = average_gate_fidelity(Operator(target.matrix), Operator(circuit))
         assert fid > FIDELITY_TOL, (
             f"Fidelity {fid:.8f} at Weyl point ({weyl_pt[0]:.3f}, {weyl_pt[1]:.3f}, {weyl_pt[2]:.3f})"
         )

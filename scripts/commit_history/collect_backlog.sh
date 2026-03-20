@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# collect_backlog.sh — Walk git history and collect benchmark timing at each commit.
+# collect_backlog.sh - Walk git history and collect benchmark timing at each commit.
 #
 # Outputs: scripts/commit_history/wsl_desktop/backlog.csv  (appended, safe to re-run; skips already-collected commits)
 #
@@ -19,7 +19,7 @@
 #   - Assumes the machine is otherwise idle. Background load inflates timings,
 #     which matters most at recent commits where decomposition is fast (~10ms).
 #   - Older commits have higher numerical error rates (solver non-convergence).
-#     Failed decompositions still contribute their timing to the median — they
+#     Failed decompositions still contribute their timing to the median - they
 #     exhaust all solver attempts before failing, so they're genuinely slower.
 #     The progress line in benchmark_task.py shows `errors=N` when this occurs.
 
@@ -110,7 +110,7 @@ for COMMIT in $COMMITS; do
     SUBJECT=$(git log -1 --format="%s" "$COMMIT" | tr ',' ';')
 
     if ! $DRY_RUN && echo "$COLLECTED" | grep -q "^${COMMIT}$"; then
-        echo "[$IDX/$TOTAL] $SHORT — skip (already collected)"
+        echo "[$IDX/$TOTAL] $SHORT - skip (already collected)"
         continue
     fi
 
@@ -118,20 +118,20 @@ for COMMIT in $COMMITS; do
         # Skip known-bad commits
         for BAD in "${BAD_COMMITS[@]}"; do
             if [[ "$COMMIT" == "$BAD" ]]; then
-                echo "[$IDX/$TOTAL] $SHORT — skip (known-bad commit)"
+                echo "[$IDX/$TOTAL] $SHORT - skip (known-bad commit)"
                 continue 2
             fi
         done
 
         if [[ "$SUBJECT" == wip* ]]; then
-            echo "[$IDX/$TOTAL] $SHORT — skip (wip commit)"
+            echo "[$IDX/$TOTAL] $SHORT - skip (wip commit)"
             continue
         fi
 
         # Skip commits that don't touch any .py files in the package
         PY_CHANGED=$(git diff-tree --no-commit-id --name-only -r "$COMMIT" 2>/dev/null | grep -c '^src/gulps/.*\.py$' || true)
         if [[ "$PY_CHANGED" -eq 0 ]]; then
-            echo "[$IDX/$TOTAL] $SHORT — skip (no src/gulps/ .py changes)"
+            echo "[$IDX/$TOTAL] $SHORT - skip (no src/gulps/ .py changes)"
             continue
         fi
     fi
@@ -144,7 +144,7 @@ for COMMIT in $COMMITS; do
     fi
 
     if $IS_HEAD; then
-        # HEAD: benchmark in-place — no worktree, no reinstall needed
+        # HEAD: benchmark in-place - no worktree, no reinstall needed
         ERRLOG="/tmp/_bench_head_err.log"
         BENCH_SCRIPT="$BENCHMARK_SCRIPT"
     else
@@ -171,7 +171,7 @@ for COMMIT in $COMMITS; do
             "$REPO_ROOT/.venv/bin/pip" uninstall monodromy -y --quiet 2>/dev/null || true
         fi
 
-        # Install — show errors if it fails
+        # Install - show errors if it fails
         if ! "$REPO_ROOT/.venv/bin/pip" install -e . --quiet 2>"$ERRLOG"; then
             echo ""
             echo "STOPPED at $SHORT: pip install failed"
@@ -184,7 +184,7 @@ for COMMIT in $COMMITS; do
         DID_WORKTREE_INSTALL=true
     fi
 
-    # Run benchmark — stdout=JSON, stderr=progress+errors (tee to terminal and log)
+    # Run benchmark - stdout=JSON, stderr=progress+errors (tee to terminal and log)
     RESULT=""
     BENCH_ARGS=""
     if $DRY_RUN; then BENCH_ARGS="-n 10"; fi
