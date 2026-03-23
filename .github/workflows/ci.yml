@@ -18,14 +18,12 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-          cache: pip
-          cache-dependency-path: "**/pyproject.toml"
 
       - name: Set up Node (for conventional-commits hook)
         uses: actions/setup-node@v4
 
-      - name: Install pre-commit deps
-        run: pip install '.[format]' --quiet
+      - name: Install pre-commit
+        run: pip install pre-commit ruff --quiet
 
       - name: Run pre-commit
         run: pre-commit run --all-files
@@ -34,26 +32,24 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.12"]
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python ${{ matrix.python-version }}
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.12"
           cache: pip
           cache-dependency-path: "**/pyproject.toml"
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - name: Install test deps
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e '.[test]' --quiet
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates
+
+      - name: Install
+        run: pip install -e '.[test]' --quiet
 
       - name: Run pytest
         run: pytest src/tests/

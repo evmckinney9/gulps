@@ -10,7 +10,7 @@ path = "src/lib.rs"
 
 [dependencies]
 pyo3 = { version = "=0.27.2", features = ["extension-module", "abi3-py310"] }
-numpy = "0.27"
+numpy = "=0.27.0"
 ndarray = "0.16"
 num-complex = "0.4"
 nalgebra = "0.33"
@@ -21,6 +21,7 @@ rayon = "1.10"
 
 # Qiskit Rust internals - direct access to TwoQubitWeylDecomposition
 qiskit-synthesis = { git = "https://github.com/Qiskit/qiskit", tag = "2.3.0" }
+
 
 [profile.release]
 lto = "thin"
