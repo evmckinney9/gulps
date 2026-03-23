@@ -12,15 +12,15 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
       - name: Set up Node (for conventional-commits hook)
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
 
       - name: Install pre-commit
         run: pip install pre-commit ruff --quiet
@@ -33,10 +33,10 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
@@ -48,8 +48,11 @@ jobs:
         with:
           workspaces: crates
 
+      - name: Install system deps (lrslib for monodromy)
+        run: sudo apt-get install -y lrslib
+
       - name: Install
-        run: pip install -e '.[test]' --quiet
+        run: pip install -e '.[test,monodromy]' --quiet
 
       - name: Run pytest
         run: pytest src/tests/

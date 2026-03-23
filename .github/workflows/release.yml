@@ -20,20 +20,21 @@ jobs:
           - windows-latest
           - macos-14
     env:
-      CIBW_SKIP: "cp36-* cp37-* cp38-* pp* *-win32 *-musllinux* *_i686"
+      CIBW_BUILD: "cp310-*"
+      CIBW_SKIP: "pp* *-win32 *-musllinux* *_i686"
       # Install Rust inside cibuildwheel's manylinux Docker containers
       CIBW_BEFORE_ALL_LINUX: "curl https://sh.rustup.rs -sSf | sh -s -- -y"
       CIBW_ENVIRONMENT_LINUX: 'PATH="$HOME/.cargo/bin:$PATH"'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: crates
       - name: Build wheels
-        uses: pypa/cibuildwheel@v2.22.0
+        uses: pypa/cibuildwheel@v2.23.4
       - name: Upload wheels
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: cibw-wheels-${{ matrix.os }}-${{ strategy.job-index }}
           path: ./wheelhouse/*.whl
@@ -42,23 +43,24 @@ jobs:
     needs: build_wheels
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - name: Setup Node (for changelog)
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
       - name: Generate Changelog
         run: |
           npm install -g conventional-changelog-cli
           conventional-changelog -p conventionalcommits -r 2 | tail -n +3 > CHANGELOG.tmp
       - name: Download all wheel artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           path: ./wheelhouse
           merge-multiple: true
-      - name: Create GitHub Release
+      - name: Create GitHub Release (draft)
         uses: softprops/action-gh-release@v2
         with:
+          draft: true
           files: ./wheelhouse/**/*.whl
           body_path: CHANGELOG.tmp
         env:
