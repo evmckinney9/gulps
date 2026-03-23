@@ -1,0 +1,28 @@
+name: "\U0001F41B Bug Report"
+description: File a bug report for GULPS
+title: "[Bug]: "
+labels: ["bug", "triage"]
+assignees:
+  - evmckinney9
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to submit a bug report!
+  - type: textarea
+    id: bug-description
+    attributes:
+      label: Bug Description
+      placeholder: Describe the bug you encountered here...
+    validations:
+      required: true
+  - type: textarea
+    id: minimal-reproducible-example
+    attributes:
+      label: Minimal Reproducible Example
+      placeholder: |
+        from gulps import GulpsDecomposer
+        ...
+      render: python
+    validations:
+      required: true
