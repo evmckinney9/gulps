@@ -8,14 +8,16 @@ init:
 	$(PYTHON_VERSION) -m venv .venv
 	@$(PIP) install --upgrade pip
 # 	@$(PIP) install setuptools_rust
-	$(PIP) install -e .[monodromy,cplex,dev] --quiet
+	$(PIP) install -e .[cplex,dev] --quiet
+	$(PIP) install -r requirements-monodromy.txt --quiet
 	@$(PRE_COMMIT) install && $(PRE_COMMIT) install --hook-type commit-msg
 	@$(PRE_COMMIT) autoupdate
 	chmod +x .git/hooks/pre-commit
 
 upgrade:
 	$(PIP) install --upgrade pip
-	$(PIP) install -e .[monodromy,cplex,dev] --upgrade
+	$(PIP) install -e .[cplex,dev] --upgrade
+	$(PIP) install -r requirements-monodromy.txt --upgrade
 
 clean:
 	@find ./ -type f -name '*.pyc' -exec rm -f {} \; 2>/dev/null || true
