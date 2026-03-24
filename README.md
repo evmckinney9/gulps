@@ -101,7 +101,7 @@ from gulps.core.coverage import coverage_report
 
 coverage_report(isa.coverage_set)
 ```
-![isa_coverage](images/isa_coverage.png)
+![isa_coverage](https://raw.githubusercontent.com/evmckinney9/gulps/main/images/isa_coverage.png)
 
 Once a sentence is chosen, a linear program is used to determine a trajectory of intermediate invariants. These represent the cumulative two-qubit nonlocal action after each gate in the sentence, starting from the identity and ending at the target.
 ```python
@@ -115,14 +115,14 @@ plot_decomposition(
     constraint_sol.intermediates, constraint_sol.sentence, decomposer.isa
 );
 ```
-![example_cartan_trajectory](images/example_cartan_trajectory.png)
+![example_cartan_trajectory](https://raw.githubusercontent.com/evmckinney9/gulps/main/images/example_cartan_trajectory.png)
 
 In this example, the optimal sentence is composed of 2 $\sqrt[3]{\texttt{iSWAP}}$ gates and 1 $\sqrt[2]{\texttt{iSWAP}}$. That is, the resulting circuit falls into a parameterized ansatz like this:
-![full_ansatz](images/full_ansatz.png)
+![full_ansatz](https://raw.githubusercontent.com/evmckinney9/gulps/main/images/full_ansatz.png)
 
 Unlike other decomposition techniques, the linear program contains additional information about the intermediate points used to reduce the problem into simpler subproblems, each corresponding to a depth-2 circuit segment. In this case, the circuit has three segments, although the first red segment (beginning at Identity is trivial). That leaves two segments requiring synthesis:
 
-| ![ansatz_1](images/ansatz_1.png) | ![ansatz_2](images/ansatz_2.png) |
+| ![ansatz_1](https://raw.githubusercontent.com/evmckinney9/gulps/main/images/ansatz_1.png) | ![ansatz_2](https://raw.githubusercontent.com/evmckinney9/gulps/main/images/ansatz_2.png) |
 |:------------------------:|:------------------------:|
 | Red(2)                   | Blue                     |
 
@@ -144,7 +144,7 @@ decomposer._local_synthesis.synthesize_segments(
     target=target_inv,
 ).draw("mpl")
 ```
-![final](images/final.png)
+![final](https://raw.githubusercontent.com/evmckinney9/gulps/main/images/final.png)
 
 ___
 See more:
