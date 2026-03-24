@@ -23,24 +23,17 @@ ______
 ```bash
 pip install gulps
 ```
+-  For usage examples, see the notebooks in `src/notebooks/`.
+-  Report issues: [GitHub Issues](https://github.com/evmckinney9/gulps/issues)
 
 **Optional extras:**
 | Extra | Install | What it adds |
 |-------|---------|--------------|
+| `monodromy` | `pip install -r requirements-monodromy.txt` | Precomputes monodromy polytope coverage sets for direct lookup. Uses a [fork](https://github.com/qiskit-community/monodromy/pull/18). Also requires `lrslib` (`sudo apt-get install lrslib`). |
 | `cplex` | `pip install "gulps[cplex]"` | CPLEX-based continuous LP solver. Works but slower than the discrete path. |
-| `dev` | `pip install "gulps[dev]"` | Plotting (`matplotlib`, `SciencePlots`), Jupyter, linting, etc. |
+| `dev` | `pip install "gulps[dev]"` | Plotting, Jupyter, linting, etc. |
 | `test` | `pip install "gulps[test]"` | Adds `pytest`. |
-
-**Monodromy polytopes (optional, separate install):**
-
-Precomputes monodromy polytope coverage sets for direct lookup, bypassing LP enumeration. Only worth it for large ISAs with many small fractional gates. The `monodromy` package is not on PyPI, so we use a [fork](https://github.com/qiskit-community/monodromy/pull/18). Install the fork and its system dependency manually:
-```bash
-sudo apt-get install lrslib
-pip install -r requirements-monodromy.txt
-```
-
--  For usage examples, see the notebooks in `src/notebooks/`.
--  Report issues: [GitHub Issues](https://github.com/evmckinney9/gulps/issues)
+___
 
 To begin, define your instruction set architecture (ISA) to configure the decomposer. Alternatively, if the instruction set is specified in the properties of a Qiskit `Target`, you can use GULPS as a transpiler `translation` plugin.
 
