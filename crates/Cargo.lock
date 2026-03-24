@@ -1009,7 +1009,7 @@ dependencies = [
 
 [[package]]
 name = "gulps_accelerate"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "faer 0.24.0",
  "faer-ext",
