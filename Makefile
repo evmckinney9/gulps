@@ -9,7 +9,7 @@ init:
 	@$(PIP) install --upgrade pip
 # 	@$(PIP) install setuptools_rust
 	$(PIP) install -e .[monodromy,cplex,dev] --quiet
-	@$(PRE_COMMIT) install
+	@$(PRE_COMMIT) install && $(PRE_COMMIT) install --hook-type commit-msg
 	@$(PRE_COMMIT) autoupdate
 	chmod +x .git/hooks/pre-commit
 

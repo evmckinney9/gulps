@@ -7,17 +7,33 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gulps"
-description = "compile arbitrary two-qubit unitaries"
-version = "0.3.0"
-authors = [{ name = "evm9" }]
-requires-python = ">=3.9"
-dependencies = ["qiskit", "numpy"]
+description = "compile arbitrary two-qubit unitaries optimally"
+version = "0.3.1"
+authors = [{ name = "Evan McKinney", email = "evmckinney9@gmail.com" }]
+license = { text = "Apache-2.0" }
+readme = "README.md"
+requires-python = ">=3.10"
+keywords = ["quantum", "compiler", "qiskit", "two-qubit", "gate-decomposition", "quantum-gates", "unitary-decomposition"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Rust",
+    "Topic :: Scientific/Engineering :: Physics",
+]
+dependencies = ["qiskit>=2.0,<3", "numpy"]
+
+[project.urls]
+Homepage = "https://github.com/evmckinney9/gulps"
+Repository = "https://github.com/evmckinney9/gulps"
+Issues = "https://github.com/evmckinney9/gulps/issues"
 [project.optional-dependencies]
 cplex = ["qiskit-optimization[cplex]"]
-monodromy = [
-    # wait for this to merge https://github.com/qiskit-community/monodromy/pull/18
-    "monodromy @ git+https://github.com/evmckinney9/monodromy.git@fix-setup",
-]
 dev = [
     "matplotlib",
     "SciencePlots",
@@ -60,4 +76,4 @@ binding = "PyO3"
 debug = false
 
 [tool.distutils.bdist_wheel]
-py_limited_api = "cp39"
+py_limited_api = "cp310"

@@ -1,24 +1,17 @@
 exclude: ".*deprecated/"
+fail_fast: true
 
 repos:
-  - repo: https://github.com/evmckinney9/jupyter-notebook-naming-hook
-    rev: v0.1.2
-    hooks:
-      - id: enforce-notebook-naming
-
   - repo: https://github.com/qoomon/git-conventional-commits
     rev: v2.7.2
     hooks:
       - id: conventional-commits
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    # Ruff version.
-    rev: v0.15.5
+    rev: v0.15.7
     hooks:
-      # Run the linter.
       - id: ruff-check
         args: [--fix]
-      # Run the formatter.
       - id: ruff-format
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -27,17 +20,15 @@ repos:
       - id: trailing-whitespace
         args: [--markdown-linebreak-ext=md]
       - id: end-of-file-fixer
-      - id: check-docstring-first
       - id: check-merge-conflict
-      - id: check-toml
-      - id: check-yaml
       - id: detect-private-key
       - id: check-added-large-files
         args: [--maxkb=2000]
-      - id: forbid-submodules
       - id: name-tests-test
         args: [--pytest-test-first]
         exclude: ^src/tests/fixtures/
-      - id: pretty-format-json
-        args: [--autofix]
-        exclude: \.ipynb$
+
+  - repo: https://github.com/evmckinney9/jupyter-notebook-naming-hook
+    rev: v0.1.2
+    hooks:
+      - id: enforce-notebook-naming

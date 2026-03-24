@@ -1,0 +1,40 @@
+name: Publish to PyPI
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (e.g. v0.3.1-rc1)"
+        required: true
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: pypi
+    steps:
+      - name: Download release assets
+        run: |
+          mkdir -p dist
+          TAG="${{ github.event.release.tag_name || github.event.inputs.tag }}"
+          gh release download "$TAG" \
+            --repo "${{ github.repository }}" \
+            --pattern "*.whl" --pattern "*.tar.gz" --dir dist
+          count=$(ls dist/* 2>/dev/null | wc -l)
+          if [ "$count" -eq 0 ]; then
+            echo "::error::No packages found on release ${{ github.event.release.tag_name }}."
+            exit 1
+          fi
+          echo "Found $count package(s)"
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+          repository-url: https://test.pypi.org/legacy/
+          verbose: true

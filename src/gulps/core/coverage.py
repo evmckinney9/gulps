@@ -41,8 +41,8 @@ try:
     )
 except ModuleNotFoundError as _exc:
     raise ImportError(
-        "Coverage computation requires the 'monodromy' extra. "
-        "Install with `pip install gulps[monodromy]`."
+        "Coverage computation requires the 'monodromy' package. "
+        "Install with: pip install -r requirements-monodromy.txt"
     ) from _exc
 
 if TYPE_CHECKING:

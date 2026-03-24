@@ -1,0 +1,4 @@
+# Monodromy polytope support (optional).
+# Using fork until upstream merges: https://github.com/qiskit-community/monodromy/pull/18, then we can hardcode the dependency and remove this file.
+# Also requires system dep: sudo apt-get install lrslib
+monodromy @ git+https://github.com/evmckinney9/monodromy.git@fix-setup
