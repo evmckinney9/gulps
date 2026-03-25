@@ -6,7 +6,7 @@ from qiskit.quantum_info import Operator, average_gate_fidelity
 from qiskit.transpiler import PassManager
 
 from gulps import GateInvariants, GulpsDecomposer, GulpsDecompositionPass
-from gulps.core.coverage import weyl_linspace
+from gulps.viz.weyl_chamber import weyl_linspace
 from tests.fixtures.isas import get_all_test_isas
 
 FIDELITY_TOL = 1 - 1e-8

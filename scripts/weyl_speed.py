@@ -95,7 +95,7 @@ def main():
     from qiskit.circuit.library import CXGate, iSwapGate
 
     from gulps import GulpsDecomposer
-    from gulps.core.coverage import weyl_linspace
+    from gulps.viz.weyl_chamber import weyl_linspace
     from gulps.core.isa import DiscreteISA
 
     grid_points = list(weyl_linspace(args.n))

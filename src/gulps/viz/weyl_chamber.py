@@ -145,3 +145,91 @@ class WeylChamber:
         o = _WEYL_POINTS[origin] if isinstance(origin, str) else origin
         e = _WEYL_POINTS[end] if isinstance(end, str) else end
         ax.plot([o[0], e[0]], [o[1], e[1]], [o[2], e[2]], **kwargs)
+
+
+# ---------------------------------------------------------------------------
+# Weyl-chamber grid sampling (no matplotlib dependency)
+# ---------------------------------------------------------------------------
+
+# Tetrahedron vertices reused from _WEYL_POINTS
+_VERTICES = np.array(
+    [_WEYL_POINTS["O"], _WEYL_POINTS["A1"], _WEYL_POINTS["A2"], _WEYL_POINTS["A3"]],
+    dtype=np.float64,
+)
+
+
+def weyl_linspace(N):
+    """Generate N spread (x,y,z) sample points inside the Weyl-chamber tetrahedron.
+
+    Vertices: O=(0,0,0), A1=(1,0,0), A2=(0.5,0.5,0), A3=(0.5,0.5,0.5).
+
+    Construction:
+      1) 4 vertices
+      2) centroid
+      3) repeated bisection via barycentric lattices with denom=2^L
+         emitting only *new* lattice points at each level, ordered interior-first.
+
+    No distance search; purely constructive / number-sequence based.
+    """
+    N = int(N)
+    if N <= 0:
+        return iter(())
+
+    V = _VERTICES
+
+    def bary_to_xyz(a, b, c, d, denom):
+        w = np.array([a, b, c, d], dtype=np.float64) / float(denom)
+        p = w[0] * V[0] + w[1] * V[1] + w[2] * V[2] + w[3] * V[3]
+        return tuple(p)
+
+    def gen():
+        out = 0
+
+        # 1) vertices
+        for p in map(tuple, V):
+            if out >= N:
+                return
+            yield p
+            out += 1
+
+        # 2) centroid (dead center)
+        if out < N:
+            yield tuple(V.mean(axis=0))
+            out += 1
+
+        # 3) refinement levels: denom = 2^L
+        # Emit only NEW points at each level: skip tuples where all (a,b,c,d) even
+        # (those already existed at denom/2).
+        level = 1
+        while out < N:
+            denom = 2**level
+            new_tuples = []
+
+            for a in range(denom + 1):
+                for b in range(denom - a + 1):
+                    for c in range(denom - a - b + 1):
+                        d = denom - a - b - c
+
+                        # skip points that already exist at previous level
+                        if level > 0 and (
+                            a % 2 == 0 and b % 2 == 0 and c % 2 == 0 and d % 2 == 0
+                        ):
+                            continue
+
+                        # interior-first ordering key:
+                        # maximize the smallest barycentric weight, then next-smallest, etc.
+                        s = sorted((a, b, c, d))
+                        key = (-s[0], -s[1], -s[2], -s[3])
+                        new_tuples.append((key, a, b, c, d))
+
+            new_tuples.sort(key=lambda t: t[0])
+
+            for _, a, b, c, d in new_tuples:
+                if out >= N:
+                    return
+                yield bary_to_xyz(a, b, c, d, denom)
+                out += 1
+
+            level += 1
+
+    return gen()
