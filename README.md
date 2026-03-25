@@ -4,6 +4,9 @@
 [![CI](https://github.com/evmckinney9/gulps/actions/workflows/ci.yml/badge.svg)](https://github.com/evmckinney9/gulps/actions/workflows/ci.yml)
 [![Release](https://github.com/evmckinney9/gulps/actions/workflows/release.yml/badge.svg)](https://github.com/evmckinney9/gulps/actions/workflows/release.yml)
 [![DOI](https://img.shields.io/badge/DOI-10.48550%2FarXiv.2505.00543-blue)](https://doi.org/10.48550/arXiv.2505.00543)
+<a target="_blank" href="https://colab.research.google.com/github/evmckinney9/gulps/blob/main/src/notebooks/00_quickstart.ipynb">
+  <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
+</a>
 
 GULPS (Global Unitary Linear Programming Synthesis) is the first open tool that **robustly compiles arbitrary two-qubit unitaries optimally into non-standard instruction sets**.  
 
@@ -23,9 +26,6 @@ ______
 ```bash
 pip install gulps
 ```
--  For usage examples, see the notebooks in `src/notebooks/`.
--  Report issues: [GitHub Issues](https://github.com/evmckinney9/gulps/issues)
-
 **Optional extras:**
 | Extra | Install | What it adds |
 |-------|---------|--------------|
@@ -35,9 +35,16 @@ pip install gulps
 | `test` | `pip install "gulps[test]"` | Adds `pytest`. |
 ___
 
-To begin, define your instruction set architecture (ISA) to configure the decomposer. Alternatively, if the instruction set is specified in the properties of a Qiskit `Target`, you can use GULPS as a transpiler `translation` plugin.
+#### Qiskit Transpiler Plugin
+If your backend's ISA is already defined in a Qiskit `Target`, GULPS works as a drop-in `translation` stage plugin:
+```python
+from qiskit import transpile
 
-Define an ISA as a list of Qiskit `Gate` objects, each with a cost and (optionally) a name. Names are only used in debug logs. Costs must be additive (affine cost model: each gate added to a sentence adds its cost) because that's what the LP enumeration and polytope coverage search assume. This is a good fit for durations or small-infidelity approximations where errors add linearly. I typically use normalized durations where fractional gates cost proportionally to their basis gate.
+output_qc = transpile(input_qc, target=my_target, translation_method="gulps")
+```
+
+#### Custom ISA
+For full control, define your ISA manually. Gate costs must be additive (e.g., normalized durations where fractional gates cost proportionally to their basis gate).
 
 ```python
 from qiskit.circuit.library import iSwapGate
@@ -52,17 +59,16 @@ isa = DiscreteISA(
 decomposer = GulpsDecomposer(isa=isa)
 ```
 
-That's it. Once initialized, you can call the decomposer with either a Qiskit `Gate` or a 4x4 `np.ndarray` representing a two-qubit unitary:
+Once initialized, call the decomposer with a Qiskit `Gate` or a 4x4 `np.ndarray`:
 ```python
 from qiskit.quantum_info import random_unitary
-from qiskit import QuantumCircuit
 
 u = random_unitary(4, seed=0)
-v: QuantumCircuit = decomposer(u)
+v = decomposer(u)
 v.draw()
 ```
 
-Alternatively, to compile a full `QuantumCircuit`, use the GULPS `TransformationPass`. Because GULPS leaves single-qubit gates unsimplified, I recommend appending `Optimize1qGatesDecomposition` to rewrite them into standard gate sets:
+To compile a full `QuantumCircuit`, use the `TransformationPass`. Because GULPS leaves single-qubit gates unsimplified, append `Optimize1qGatesDecomposition` to rewrite them:
 
 ```python
 from gulps import GulpsDecompositionPass
@@ -145,6 +151,17 @@ decomposer._local_synthesis.synthesize_segments(
 ).draw("mpl")
 ```
 ![final](https://raw.githubusercontent.com/evmckinney9/gulps/main/images/final.png)
+
+___
+### Notebooks
+| | Topic |
+|---|---|
+| [00_quickstart](src/notebooks/00_quickstart.ipynb) | Getting started with GULPS |
+| [01_decomposition_pipeline](src/notebooks/01_decomposition_pipeline.ipynb) | Step-by-step decomposition pipeline |
+| [02_benchmarks](src/notebooks/02_benchmarks.ipynb) | LP and solver performance benchmarks |
+| [03_continuous](src/notebooks/03_continuous.ipynb) | Continuous ISA with gate power as a free variable |
+| [04_mixed_continuous](src/notebooks/04_mixed_continuous.ipynb) | Multiple continuous gate families in one ISA |
+| [05_xxdecomposer](src/notebooks/05_xxdecomposer.ipynb) | Comparison with Qiskit's XXDecomposer |
 
 ___
 See more:
