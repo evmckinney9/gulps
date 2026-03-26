@@ -8,7 +8,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "gulps"
 description = "optimally compile arbitrary two-qubit unitaries"
-version = "0.3.3"
+version = "0.3.4"
 authors = [{ name = "Evan McKinney", email = "evmckinney9@gmail.com" }]
 license = { text = "Apache-2.0" }
 readme = "README.md"
