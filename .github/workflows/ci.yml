@@ -50,7 +50,7 @@ jobs:
 
       - name: Install
         run: |
-          pip install -e '.[test]' --quiet
+          pip install -e '.[test,cplex]' --quiet
           pip install -r requirements-monodromy.txt --quiet
 
       - name: Run pytest
