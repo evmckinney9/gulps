@@ -67,7 +67,7 @@ class ContinuousISA(ISAInvariants):
     cost_dict: dict[GateInvariants, float] = field(default_factory=dict)
     k_lb: float = 0.1
     single_qubit_cost: float = ISAInvariants.MIN_COST_1Q
-    max_sequence_length: int = 8
+    max_sequence_length: int = 3
 
     @property
     def is_single_family(self) -> bool:
@@ -179,10 +179,8 @@ class DiscreteISA(ISAInvariants):
     def polytope_lookup(self, target: GateInvariants) -> list[GateInvariants] | None:
         """Return a gate sentence that spans the target via convex polytope lookup.
 
-        Args:
-            target: Alcove-normalized target gate invariants. The caller is responsible
-                for ensuring the target is in the alcove, which
-                eliminates the need to check rho-reflected variants here.
+        Checks both the direct monodromy and its ρ-reflected variant, since
+        the principal-branch convention may place the target in either alcove.
 
         Returns:
             Sorted list of gate invariants forming a valid sentence, or None if
@@ -191,10 +189,12 @@ class DiscreteISA(ISAInvariants):
         if not hasattr(self, "coverage_set"):
             raise ValueError("Polytope coverage set not precomputed.")
 
+        candidates = [target.monodromy, target.rho_reflect.monodromy]
         for convex_polytope in self.coverage_set:
-            if convex_polytope.has_element(target.monodromy):
-                # Sort instructions by cost for consistency with enumerate()
-                return sorted(
-                    convex_polytope.instructions, key=lambda g: self.cost_dict[g]
-                )
+            for mono in candidates:
+                if convex_polytope.has_element(mono):
+                    return sorted(
+                        convex_polytope.instructions,
+                        key=lambda g: self.cost_dict[g],
+                    )
         return None

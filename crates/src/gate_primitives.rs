@@ -122,7 +122,8 @@ pub fn eigendecomp_4x4(m: &Mat4) -> ([C64; 4], [f64; 4], [[C64; 4]; 4]) {
 
 /// Weyl chamber coordinates (c1, c2, c3) in units of π.
 ///
-/// Folded to canonical chamber: c1 ≥ c2 ≥ c3 ≥ 0, c1 ≤ 0.5.
+/// Folded to canonical chamber: c1 ≥ c2 ≥ c3 ≥ 0, c1 ≤ 0.5 on the c3=0
+/// face. c1 can exceed 0.5 when c3 > 0 (distinct local equivalence class).
 pub fn weyl_coordinates(u: &Mat4) -> [f64; 3] {
     // SU(4) projection: multiply by det(U)^{-1/4}
     // For unitary U, |det|=1, so det=e^{iθ} and det^{-1/4}=e^{-iθ/4}.
@@ -170,8 +171,10 @@ pub fn weyl_coordinates(u: &Mat4) -> [f64; 3] {
     let c2 = rolled[0] + rolled[2];
     let c3 = rolled[1] + rolled[2];
 
-    // Canonical folding: c3 < 0 ↦ (1−c1, c2, −c3)
-    let (c1, c3) = if c3 < 0.0 { (1.0 - c1, -c3) } else { (c1, c3) };
+    // Canonical folding: c3 < 0 ↦ (1−c1, c2, −c3).
+    // Uses tolerance to avoid spurious folds on floating-point negative zero,
+    // which causes CX-face (c3≡0) coordinates to oscillate between c1 and 1−c1.
+    let (c1, c3) = if c3 < -1e-15 { (1.0 - c1, -c3) } else { (c1, c3) };
 
     [c1, c2.max(0.0), c3.max(0.0)]
 }

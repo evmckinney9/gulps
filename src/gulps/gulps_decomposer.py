@@ -133,6 +133,7 @@ class GulpsDecomposer:
 
         self._lp_cache = LPSolverCache()
         self._local_synthesis = SegmentSynthesizer(config=self.config)
+        self._continuous_lp = None  # lazily built on first continuous solve
 
     def _eval_edge_case(
         self, target: GateInvariants, return_dag: bool
@@ -228,30 +229,30 @@ class GulpsDecomposer:
         Returns:
             ConstraintSolution with success=True if a valid decomposition is found.
         """
-        # Import here to avoid requiring CPLEX for discrete-only usage
-        if self.isa.is_single_family:
-            from gulps.linear_program.cplex_lp import ContinuousISAConstraints
+        if self._continuous_lp is None:
+            # Lazy import to avoid requiring CPLEX for discrete-only usage.
+            # Model is built once and reused - only the target RHS changes.
+            if self.isa.is_single_family:
+                from gulps.linear_program.cplex_lp import ContinuousISAConstraints
 
-            # TODO: optimize by caching constraint object (construct once in __init__ or ISA)
-            constraints = ContinuousISAConstraints(
-                base=self.isa.gate_set[0],
-                max_sequence_length=self.isa.max_sequence_length,
-                k_lb=self.isa.k_lb,
-                single_qubit_cost=self.isa.single_qubit_cost,
-                config=self.config,
-            )
-        else:
-            from gulps.linear_program.cplex_lp import (
-                HeterogeneousContinuousISAConstraints,
-            )
+                self._continuous_lp = ContinuousISAConstraints(
+                    base=self.isa.gate_set[0],
+                    max_sequence_length=self.isa.max_sequence_length,
+                    k_lb=self.isa.k_lb,
+                    single_qubit_cost=self.isa.single_qubit_cost,
+                    config=self.config,
+                )
+            else:
+                from gulps.linear_program.cplex_lp import (
+                    HeterogeneousContinuousISAConstraints,
+                )
 
-            # Heterogeneous continuous ISA with multiple gate families
-            # single_qubit_cost is pulled from isa.single_qubit_cost inside the constructor
-            constraints = HeterogeneousContinuousISAConstraints(
-                isa=self.isa,
-                max_sequence_length=self.isa.max_sequence_length,
-                config=self.config,
-            )
+                self._continuous_lp = HeterogeneousContinuousISAConstraints(
+                    isa=self.isa,
+                    max_sequence_length=self.isa.max_sequence_length,
+                    config=self.config,
+                )
+        constraints = self._continuous_lp
 
         return constraints.solve(target, log_output=log_output)
 
