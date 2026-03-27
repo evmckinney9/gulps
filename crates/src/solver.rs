@@ -303,7 +303,7 @@ fn weyl_residual_and_jacobian_analytic(
     let kk = kron_2x2(&u1, &u0);
     let u = basis_gate * kk * prefix_op;
 
-    // SU(4) projection (α is constant w.r.t. params, but needed for V)
+    // SU(4) projection (α is constant w.r.t. params, but needed for V and Jacobian)
     let det_u = u.determinant();
     let quarter_phase = -det_u.arg() * 0.25;
     let alpha = C64::new(quarter_phase.cos(), quarter_phase.sin());
@@ -540,6 +540,18 @@ fn weyl_residual_and_jacobian_analytic(
     (r, jac)
 }
 
+/// Compute Weyl coordinates from params (shared by residual and check).
+fn params_to_weyl(
+    params: &[f64; 8],
+    prefix_op: &Mat4,
+    basis_gate: &Mat4,
+) -> [f64; 3] {
+    let (u0, u1) = params_to_unitaries(params);
+    let k = kron_2x2(&u1, &u0);
+    let u = basis_gate * k * prefix_op;
+    weyl_coordinates(&u)
+}
+
 /// Signed Weyl residual vector against a specific branch target.
 fn weyl_residual_vec(
     params: &[f64; 8],
@@ -547,27 +559,18 @@ fn weyl_residual_vec(
     basis_gate: &Mat4,
     target: &[f64; 3],
 ) -> [f64; 3] {
-    let (u0, u1) = params_to_unitaries(params);
-    let k = kron_2x2(&u1, &u0);
-    let u = basis_gate * k * prefix_op;
-    let c = weyl_coordinates(&u);
+    let c = params_to_weyl(params, prefix_op, basis_gate);
     [c[0] - target[0], c[1] - target[1], c[2] - target[2]]
 }
 
-// ---------------------------------------------------------------------------
-// Weyl check helper
-// ---------------------------------------------------------------------------
-
+/// Weyl residual over both direct and ρ-reflected branches.
 fn weyl_check(
     params: &[f64; 8],
     prefix_op: &Mat4,
     basis_gate: &Mat4,
     target_weyl: &[f64; 3],
 ) -> f64 {
-    let (u0, u1) = params_to_unitaries(params);
-    let k = kron_2x2(&u1, &u0);
-    let u = basis_gate * k * prefix_op;
-    let c = weyl_coordinates(&u);
+    let c = params_to_weyl(params, prefix_op, basis_gate);
     weyl_res_both_branches(&c, target_weyl)
 }
 
@@ -769,9 +772,8 @@ fn contract_kron_u1(f: &Mat4, u0: &Mat2) -> Mat2 {
 fn quat_sensitivity(g: &Mat2, p: &[f64; 4]) -> ([C64; 4], C64) {
     let alpha = g[(0, 0)] + g[(1, 1)]; // coefficient of dw
     let beta = g[(0, 1)] - g[(1, 0)]; // coefficient of dx
-    let ci = C64::new(0.0, 1.0);
-    let gamma = ci * (g[(0, 1)] + g[(1, 0)]); // coefficient of dy
-    let delta = ci * (g[(0, 0)] - g[(1, 1)]); // coefficient of dz
+    let gamma = CI * (g[(0, 1)] + g[(1, 0)]); // coefficient of dy
+    let delta = CI * (g[(0, 0)] - g[(1, 1)]); // coefficient of dz
     let e = [alpha, beta, gamma, delta];
     // p[j] is real - use complex×real (2 FLOPs) not complex×complex (6 FLOPs)
     let s = alpha * p[0] + beta * p[1] + gamma * p[2] + delta * p[3];
