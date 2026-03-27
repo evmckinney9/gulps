@@ -1,12 +1,11 @@
 ##  [GULPS](https://c.tenor.com/NAwgHzRfK_wAAAAC/tenor.gif)
-[![ecosystem](https://img.shields.io/badge/Qiskit-Ecosystem-blueviolet)](https://github.com/qiskit-community/ecosystem)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python&logoColor=white)](https://www.python.org/downloads/)
+[![PyPI - Version](https://img.shields.io/pypi/v/gulps)](https://pypi.org/project/gulps/)
 [![CI](https://github.com/evmckinney9/gulps/actions/workflows/ci.yml/badge.svg)](https://github.com/evmckinney9/gulps/actions/workflows/ci.yml)
 [![Release](https://github.com/evmckinney9/gulps/actions/workflows/release.yml/badge.svg)](https://github.com/evmckinney9/gulps/actions/workflows/release.yml)
 [![DOI](https://img.shields.io/badge/DOI-10.48550%2FarXiv.2505.00543-blue)](https://doi.org/10.48550/arXiv.2505.00543)
-<a target="_blank" href="https://colab.research.google.com/github/evmckinney9/gulps/blob/main/src/notebooks/00_quickstart.ipynb">
-  <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
-</a>
+[![ecosystem](https://img.shields.io/badge/Qiskit-Ecosystem-blueviolet)](https://github.com/qiskit-community/ecosystem)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/evmckinney9/gulps/blob/main/src/notebooks/00_quickstart.ipynb)
 
 GULPS (Global Unitary Linear Programming Synthesis) is the first open tool that **robustly compiles arbitrary two-qubit unitaries optimally into non-standard instruction sets**.  
 
@@ -29,7 +28,7 @@ pip install gulps
 **Optional extras:**
 | Extra | Install | What it adds |
 |-------|---------|--------------|
-| `monodromy` | `pip install -r requirements-monodromy.txt` | Precomputes monodromy polytope coverage sets for direct lookup. Uses a [fork](https://github.com/qiskit-community/monodromy/pull/18). Also requires `lrslib` (`sudo apt-get install lrslib`). |
+| `monodromy` | `pip install -r requirements-monodromy.txt` | Precomputes monodromy polytope coverage sets for direct lookup. Also requires `lrslib` (`sudo apt-get install lrslib`). |
 | `cplex` | `pip install "gulps[cplex]"` | CPLEX-based continuous LP solver. Works but slower than the discrete path. |
 | `dev` | `pip install "gulps[dev]"` | Plotting, Jupyter, linting, etc. |
 | `test` | `pip install "gulps[test]"` | Adds `pytest`. |

@@ -15,6 +15,19 @@ pub type Mat2 = Matrix2<C64>;
 // Frequently used complex constants.
 pub const C0: C64 = C64::new(0.0, 0.0);
 pub const C1: C64 = C64::new(1.0, 0.0);
+pub const CI: C64 = C64::new(0.0, 1.0);
+pub const CM1: C64 = C64::new(-1.0, 0.0);
+
+/// Project a 4×4 unitary to SU(4) by removing the determinant phase.
+///
+/// Returns (U_su4, global_phase) where det(U_su4) = 1 and
+/// U_su4 = exp(-i·arg(det)/4) · U.
+pub fn project_su4(u: &Mat4) -> (Mat4, f64) {
+    let det = u.determinant();
+    let quarter_phase = -det.arg() * 0.25;
+    let phase = C64::new(quarter_phase.cos(), quarter_phase.sin());
+    (u * phase, det.arg() / 4.0)
+}
 
 // ---------------------------------------------------------------------------
 // Basis matrices (constructed per call - compiler constant-folds these)
@@ -34,9 +47,8 @@ pub fn magic_dag() -> Mat4 {
 
 /// σ_y ⊗ σ_y  (real, symmetric, unitary, self-inverse).
 pub fn sysy() -> Mat4 {
-    let neg = C64::new(-1.0, 0.0);
     Mat4::new(
-        C0, C0, C0, neg, C0, C0, C1, C0, C0, C1, C0, C0, neg, C0, C0, C0,
+        C0, C0, C0, CM1, C0, C0, C1, C0, C0, C1, C0, C0, CM1, C0, C0, C0,
     )
 }
 
@@ -125,13 +137,7 @@ pub fn eigendecomp_4x4(m: &Mat4) -> ([C64; 4], [f64; 4], [[C64; 4]; 4]) {
 /// Folded to canonical chamber: c1 ≥ c2 ≥ c3 ≥ 0, c1 ≤ 0.5 on the c3=0
 /// face. c1 can exceed 0.5 when c3 > 0 (distinct local equivalence class).
 pub fn weyl_coordinates(u: &Mat4) -> [f64; 3] {
-    // SU(4) projection: multiply by det(U)^{-1/4}
-    // For unitary U, |det|=1, so det=e^{iθ} and det^{-1/4}=e^{-iθ/4}.
-    // One atan2 + sincos instead of complex log + exp.
-    let det = u.determinant();
-    let quarter_phase = -det.arg() * 0.25;
-    let phase = C64::new(quarter_phase.cos(), quarter_phase.sin());
-    let u_su4 = u * phase;
+    let (u_su4, _) = project_su4(u);
 
     // Ũ = (σ_y⊗σ_y) Uᵀ (σ_y⊗σ_y)
     let sy = sysy();
@@ -142,12 +148,7 @@ pub fn weyl_coordinates(u: &Mat4) -> [f64; 3] {
     let two_s = eigenphases_4x4(&product);
 
     // Sort descending, halve
-    let mut s = [
-        two_s[0] / 2.0,
-        two_s[1] / 2.0,
-        two_s[2] / 2.0,
-        two_s[3] / 2.0,
-    ];
+    let mut s = two_s.map(|x| x / 2.0);
     s.sort_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
 
     // Alcove normalization
@@ -212,21 +213,20 @@ pub fn canonical_matrix(c1: f64, c2: f64, c3: f64) -> Mat4 {
     let sam = (a - b).sin();
     let cap = (a + b).cos();
     let sap = (a + b).sin();
-    let ci = C64::new(0.0, 1.0);
     Mat4::new(
         eig * cam,
         C0,
         C0,
-        ci * eig * sam,
+        CI * eig * sam,
         C0,
         eig_c * cap,
-        ci * eig_c * sap,
+        CI * eig_c * sap,
         C0,
         C0,
-        ci * eig_c * sap,
+        CI * eig_c * sap,
         eig_c * cap,
         C0,
-        ci * eig * sam,
+        CI * eig * sam,
         C0,
         C0,
         eig * cam,
