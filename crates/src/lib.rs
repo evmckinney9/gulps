@@ -78,6 +78,36 @@ fn monodromy_from_weyl<'py>(
 }
 
 // ---------------------------------------------------------------------------
+// Local equivalence recovery
+// ---------------------------------------------------------------------------
+
+/// Recover local equivalence corrections between two 4×4 unitaries.
+///
+/// Returns (k1, k2, k3, k4, global_phase) where k_i are 2×2 complex such that:
+///   U_target ≈ exp(i·phase) · kron(k4, k3) · U_basis · kron(k2, k1)
+#[pyfunction]
+fn recover_local_equiv<'py>(
+    py: Python<'py>,
+    u_target: PyReadonlyArray2<'py, Complex64>,
+    u_basis: PyReadonlyArray2<'py, Complex64>,
+) -> PyResult<(Py<PyAny>, Py<PyAny>, Py<PyAny>, Py<PyAny>, f64)> {
+    let target = numpy_to_mat4(&u_target);
+    let basis = numpy_to_mat4(&u_basis);
+
+    let result = py.detach(|| {
+        recover::recover_local_equivalence(&target, &basis)
+    }).map_err(pyo3::exceptions::PyValueError::new_err)?;
+
+    Ok((
+        mat2_to_numpy(py, &result.k1).into_any().unbind(),
+        mat2_to_numpy(py, &result.k2).into_any().unbind(),
+        mat2_to_numpy(py, &result.k3).into_any().unbind(),
+        mat2_to_numpy(py, &result.k4).into_any().unbind(),
+        result.global_phase,
+    ))
+}
+
+// ---------------------------------------------------------------------------
 // Full solver
 // ---------------------------------------------------------------------------
 
@@ -144,40 +174,10 @@ fn solve_batch<'py>(
 }
 
 // ---------------------------------------------------------------------------
-// Local equivalence recovery (uses Qiskit's TwoQubitWeylDecomposition)
-// ---------------------------------------------------------------------------
-
-/// Recover local equivalence corrections between two 4×4 unitaries.
-///
-/// Returns (k1, k2, k3, k4, global_phase) where k_i are 2×2 complex such that:
-///   U_target ≈ exp(i·phase) · kron(k4, k3) · U_basis · kron(k2, k1)
-#[pyfunction]
-fn recover_local_equiv<'py>(
-    py: Python<'py>,
-    u_target: PyReadonlyArray2<'py, Complex64>,
-    u_basis: PyReadonlyArray2<'py, Complex64>,
-) -> PyResult<(Py<PyAny>, Py<PyAny>, Py<PyAny>, Py<PyAny>, f64)> {
-    let target = numpy_to_mat4(&u_target);
-    let basis = numpy_to_mat4(&u_basis);
-
-    let result = py.detach(|| {
-        recover::recover_local_equivalence(&target, &basis)
-    }).map_err(pyo3::exceptions::PyValueError::new_err)?;
-
-    Ok((
-        mat2_to_numpy(py, &result.k1).into_any().unbind(),
-        mat2_to_numpy(py, &result.k2).into_any().unbind(),
-        mat2_to_numpy(py, &result.k3).into_any().unbind(),
-        mat2_to_numpy(py, &result.k4).into_any().unbind(),
-        result.global_phase,
-    ))
-}
-
-// ---------------------------------------------------------------------------
 // Stitch: P accumulation + intermediate recovery in one Rust call
 // ---------------------------------------------------------------------------
 
-/// Stitch solved segments: accumulate P, compute intermediate recoveries.
+/// Stitch solved segments: accumulate P, recover intermediates to targets.
 ///
 /// Takes the initial gate matrix, all segment solutions (u0, u1),
 /// basis gate matrices, and target canonical matrices for intermediates.

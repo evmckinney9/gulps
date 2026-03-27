@@ -2,10 +2,11 @@ exclude: ".*deprecated/"
 fail_fast: true
 
 repos:
-  - repo: https://github.com/qoomon/git-conventional-commits
-    rev: v2.7.2
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v4.1.0
     hooks:
-      - id: conventional-commits
+      - id: conventional-pre-commit
+        stages: [commit-msg]
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.7

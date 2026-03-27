@@ -15,13 +15,8 @@ ndarray = "0.16"
 num-complex = "0.4"
 nalgebra = "0.33"
 faer = { version = "0.24", default-features = false, features = ["std"] }
-faer-ext = { version = "0.7", features = ["ndarray"] }
 rand = { version = "0.9", features = ["small_rng"] }
 rayon = "1.10"
-
-# Qiskit Rust internals - direct access to TwoQubitWeylDecomposition
-qiskit-synthesis = { git = "https://github.com/Qiskit/qiskit", tag = "2.3.0" }
-
 
 [profile.release]
 lto = "thin"
