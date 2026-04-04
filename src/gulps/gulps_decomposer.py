@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import logging
 import time
-import warnings
 
 import numpy as np
 from qiskit import QuantumCircuit
@@ -356,12 +355,11 @@ class GulpsDecomposer:
 
         flag = self.config.flag_duration
         if flag > 0 and self.last_timing["total"] > flag:
-            warnings.warn(
-                f"Decomposition took {self.last_timing['total']:.4f}s "
-                f"(threshold: {flag:.4f}s). Suppress with "
-                f"GulpsConfig(flag_duration=0), or raise an issue at "
-                f"https://github.com/evmckinney9/gulps/issues",
-                stacklevel=2,
+            logger.warning(
+                "Decomposition took %.4fs (threshold: %.4fs). "
+                "Suppress with GulpsConfig(flag_duration=0).",
+                self.last_timing["total"],
+                flag,
             )
 
         return stitched_circuit
