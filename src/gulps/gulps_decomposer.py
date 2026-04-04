@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Iterator
 
 import numpy as np
 from qiskit import QuantumCircuit
@@ -134,6 +135,19 @@ class GulpsDecomposer:
         self._local_synthesis = SegmentSynthesizer(config=self.config)
         self._continuous_lp = None  # lazily built on first continuous solve
 
+        # Lazy sentence cache for discrete ISAs without polytope lookup.
+        # Grows on demand: each _try_discrete_lp call scans the cached prefix,
+        # then pulls from the generator only if no feasible sentence was found.
+        # Avoids eager materialization of deep sentences that easy targets never need.
+        self._sentence_cache: list[tuple[float, MinimalOrderedISAConstraints]] = []
+        self._sentence_iter: Iterator | None = None
+        if (
+            not self._is_continuous
+            and isinstance(self.isa, DiscreteISA)
+            and not self.isa._precompute_polytopes
+        ):
+            self._sentence_iter = self.isa.enumerate()
+
     def _eval_edge_case(
         self, target: GateInvariants, return_dag: bool
     ) -> QuantumCircuit | DAGCircuit | None:
@@ -172,7 +186,8 @@ class GulpsDecomposer:
     ) -> ConstraintSolution:
         """Find optimal decomposition using discrete ISA.
 
-        Uses polytope lookup if precomputed, otherwise enumerates sentences.
+        Uses polytope lookup if precomputed, otherwise iterates sentences in
+        cost order via a lazy cache that grows on demand from enumerate().
 
         Args:
             target: Alcove-normalized target gate invariants.
@@ -194,21 +209,31 @@ class GulpsDecomposer:
             )
             return constraints.solve(target, log_output=log_output)
 
-        # Priority queue enumeration
-        for sentence in self.isa.enumerate():
-            # QLR row-0 necessary condition (both orientations):
-            # min(target.mono_sum, target.rho_sum) ≤ Σ gate.mono_sum
-            if (
-                sum(gate.strength for gate in sentence)
-                < target.strength - self.config.lp_feasibility_tol
-            ):
+        tol = self.config.lp_feasibility_tol
+        target_strength = target.strength
+
+        # Scan already-cached sentences (flat list, no heap overhead).
+        for strength, constraints in self._sentence_cache:
+            if strength < target_strength - tol:
                 continue
-            constraints = MinimalOrderedISAConstraints(
-                sentence, config=self.config, solver_cache=self._lp_cache
-            )
             result = constraints.solve(target, log_output=log_output)
             if result.success:
                 return result
+
+        # Extend cache from generator until a feasible sentence is found.
+        if self._sentence_iter is not None:
+            for sentence in self._sentence_iter:
+                strength = sum(g.strength for g in sentence)
+                constraints = MinimalOrderedISAConstraints(
+                    sentence, config=self.config, solver_cache=self._lp_cache
+                )
+                self._sentence_cache.append((strength, constraints))
+                if strength < target_strength - tol:
+                    continue
+                result = constraints.solve(target, log_output=log_output)
+                if result.success:
+                    return result
+            self._sentence_iter = None  # exhausted
 
         return ConstraintSolution(success=False)
 
@@ -318,7 +343,7 @@ class GulpsDecomposer:
 
         Note:
             Timing information for the last decomposition is stored in self.last_timing
-            with keys 'lp_sentence' and 'segments' (in seconds).
+            with keys 'lp_sentence', 'segments_numerics', 'segments_stitch' (in seconds).
         """
         alcove_target = GateInvariants.from_unitary(target)
 
@@ -347,9 +372,11 @@ class GulpsDecomposer:
         t2 = time.perf_counter()  # TIMING
 
         # Optional: Store or return timing info for analysis
+        phase = self._local_synthesis.last_phase_timing
         self.last_timing = {
             "lp_sentence": t1 - t0,
-            "segments": t2 - t1,
+            "segments_numerics": phase["numerics"],
+            "segments_stitch": phase["stitch"],
             "total": t2 - t0,
         }
 
