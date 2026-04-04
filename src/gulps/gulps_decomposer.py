@@ -343,8 +343,9 @@ class GulpsDecomposer:
 
         Note:
             Timing information for the last decomposition is stored in self.last_timing
-            with keys 'lp_sentence', 'segments_numerics', 'segments_stitch' (in seconds).
+            with keys 'init', 'lp_sentence', 'numerics', 'stitch', 'total' (in seconds).
         """
+        t_start = time.perf_counter()  # TIMING
         alcove_target = GateInvariants.from_unitary(target)
 
         edge_output = self._eval_edge_case(alcove_target, return_dag)
@@ -371,13 +372,14 @@ class GulpsDecomposer:
         )
         t2 = time.perf_counter()  # TIMING
 
-        # Optional: Store or return timing info for analysis
+        # Store timing info for analysis
         phase = self._local_synthesis.last_phase_timing
         self.last_timing = {
+            "init": t0 - t_start,
             "lp_sentence": t1 - t0,
-            "segments_numerics": phase["numerics"],
-            "segments_stitch": phase["stitch"],
-            "total": t2 - t0,
+            "numerics": phase["numerics"],
+            "stitch": phase["stitch"],
+            "total": t2 - t_start,
         }
 
         flag = self.config.flag_duration

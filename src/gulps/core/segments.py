@@ -22,6 +22,7 @@ Architecture:
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -80,7 +81,9 @@ class SegmentSynthesizer:
         qreg = dag.qregs["q"]
 
         # Phase 1: Solve (Rust handles sequential vs parallel)
+        t_num0 = time.perf_counter()
         solutions = self._solve_segments(gate_list, invariant_list, n_inner)
+        t_num1 = time.perf_counter()
 
         # Phase 2: Stitch into DAG (Rust P accumulation + Python DAG ops)
         P = self._stitch_into_dag(
@@ -94,6 +97,12 @@ class SegmentSynthesizer:
         dag.apply_operation_front(UnitaryGate(k2, check_input=False), [qreg[1]])
         dag.apply_operation_back(UnitaryGate(k3, check_input=False), [qreg[0]])
         dag.apply_operation_back(UnitaryGate(k4, check_input=False), [qreg[1]])
+        t_stitch1 = time.perf_counter()
+
+        self.last_phase_timing = {
+            "numerics": t_num1 - t_num0,
+            "stitch": t_stitch1 - t_num1,
+        }
 
         return dag if return_dag else dag_to_circuit(dag)
 
