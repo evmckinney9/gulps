@@ -47,7 +47,7 @@ def compare_continuous_discrete(
         discrete_params
     )
 
-    with plt.style.context(["ieee", "science", "use_mathtext"]):
+    with plt.style.context(["ieee", "science", "no-latex"]):
         fig, axes = plt.subplots(1, 2, figsize=(8.0, 3.0))
 
         # Left: Continuous (histogram)
@@ -134,7 +134,7 @@ def report_benchmark_results(fidelities, all_timings, decomposer, N, failures):
         "total": "#95a5a6",
     }
 
-    with plt.style.context(["ieee", "science", "use_mathtext"]):
+    with plt.style.context(["ieee", "science", "no-latex"]):
         fig = plt.figure(figsize=(8, 4.5))
         gs = fig.add_gridspec(2, 3, hspace=0.4, wspace=0.4)
 
