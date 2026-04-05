@@ -47,7 +47,7 @@ def compare_continuous_discrete(
         discrete_params
     )
 
-    with plt.style.context(["ieee", "science", "use_mathtext"]):
+    with plt.style.context(["ieee", "science", "no-latex"]):
         fig, axes = plt.subplots(1, 2, figsize=(8.0, 3.0))
 
         # Left: Continuous (histogram)
@@ -104,7 +104,7 @@ def report_benchmark_results(fidelities, all_timings, decomposer, N, failures):
         f"Fidelity: median={np.median(fidelities):.10f}, min={np.min(fidelities):.10f}"
     )
 
-    preferred_order = ["lp_sentence", "segments", "total"]
+    preferred_order = ["init", "lp_sentence", "numerics", "stitch", "total"]
     phase_names = [k for k in preferred_order if k in all_timings[0]]
     timing_array = np.array([[t[k] for k in phase_names] for t in all_timings])
 
@@ -117,10 +117,24 @@ def report_benchmark_results(fidelities, all_timings, decomposer, N, failures):
     print(f"Avg time: {total_avg:.1f} us/decomposition")
 
     # Create visualizations
-    lp_times = [d["lp_sentence"] for d in all_timings]
-    numeric_times = [d["segments"] for d in all_timings]
+    hist_phases = ["lp_sentence", "numerics", "stitch"]
+    hist_data = {k: np.array([d[k] for d in all_timings]) for k in hist_phases}
+    hist_titles = {
+        "lp_sentence": "LP Sentence",
+        "numerics": "Numerics",
+        "stitch": "Stitch",
+    }
 
-    with plt.style.context(["ieee", "science", "use_mathtext"]):
+    # Consistent color map for all phase visualizations
+    phase_colors = {
+        "init": "#2ecc71",
+        "lp_sentence": "#3498db",
+        "numerics": "#9b59b6",
+        "stitch": "#e67e22",
+        "total": "#95a5a6",
+    }
+
+    with plt.style.context(["ieee", "science", "no-latex"]):
         fig = plt.figure(figsize=(8, 4.5))
         gs = fig.add_gridspec(2, 3, hspace=0.4, wspace=0.4)
 
@@ -135,11 +149,11 @@ def report_benchmark_results(fidelities, all_timings, decomposer, N, failures):
         ax0.grid(True, alpha=0.3)
         ax0.set_title("Infidelity Distribution")
 
-        # Top right: timing breakdown (horizontal bars with shortened labels)
+        # Top right: timing breakdown (horizontal bars)
         ax1 = fig.add_subplot(gs[0, 2])
         mean_times = timing_array.mean(axis=0) * 1000000
-        colors_bar = plt.cm.viridis(np.linspace(0.2, 0.8, len(phase_names)))
-        ax1.barh(range(len(phase_names)), mean_times, color=colors_bar)
+        bar_colors = [phase_colors.get(p, "#999999") for p in phase_names]
+        ax1.barh(range(len(phase_names)), mean_times, color=bar_colors)
         ax1.set_yticks(range(len(phase_names)))
         ax1.set_yticklabels(phase_names, fontsize=8)
         ax1.set_xlabel("Time (us)")
@@ -148,27 +162,13 @@ def report_benchmark_results(fidelities, all_timings, decomposer, N, failures):
         ax1.invert_yaxis()
 
         # Bottom row: timing histograms
-        ax2 = fig.add_subplot(gs[1, 0])
-        ax2.hist(lp_times, bins=20, edgecolor="black", color="#3498db")
-        ax2.set_xlabel("LP Time (us)")
-        ax2.set_ylabel("Count")
-        ax2.set_title("LP Solver")
-        ax2.grid(axis="y", alpha=0.3)
-
-        ax3 = fig.add_subplot(gs[1, 1])
-        ax3.hist(numeric_times, bins=20, edgecolor="black", color="#9b59b6")
-        ax3.set_xlabel("Numeric Time (us)")
-        ax3.set_ylabel("Count")
-        ax3.set_title("Segment Solver")
-        ax3.grid(axis="y", alpha=0.3)
-
-        # Bottom right: fidelity histogram
-        ax4 = fig.add_subplot(gs[1, 2])
-        ax4.hist(1 - fidelities, bins=20, edgecolor="black", color="#2ecc71")
-        ax4.set_xlabel("Infidelity")
-        ax4.set_ylabel("Count")
-        ax4.set_title("Fidelity Distribution")
-        ax4.set_xscale("log")
-        ax4.grid(axis="y", alpha=0.3)
+        for col, phase in enumerate(hist_phases):
+            ax = fig.add_subplot(gs[1, col])
+            data = hist_data[phase]
+            ax.hist(data, bins=40, edgecolor="black", color=phase_colors[phase])
+            ax.set_xlabel("Time (s)")
+            ax.set_ylabel("Count")
+            ax.set_title(hist_titles[phase])
+            ax.grid(axis="y", alpha=0.3)
 
         plt.show()

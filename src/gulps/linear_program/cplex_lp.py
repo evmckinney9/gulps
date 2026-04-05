@@ -59,27 +59,20 @@ def _ensure_linear_monodromy(base: GateInvariants) -> GateInvariants:
     """
     B = base.monodromy
     test_k = 0.5
-    gate = base.gate
-    try:
-        actual_mono = GateInvariants.from_unitary(gate.power(test_k)).monodromy
-    except Exception:
-        return base
 
-    err = np.max(np.abs(actual_mono - B * test_k))
-    if err < 0.01:
+    actual_mono = GateInvariants.from_unitary(base.gate.power(test_k)).monodromy
+    if np.max(np.abs(actual_mono - B * test_k)) < 0.01:
         return base
 
     canon = GateInvariants.from_unitary(base.canonical_matrix, name=base.name)
-    try:
-        canon_mono = GateInvariants.from_unitary(canon.gate.power(test_k)).monodromy
-    except Exception:
-        return base
-
-    canon_err = np.max(np.abs(canon_mono - canon.monodromy * test_k))
-    if canon_err < 0.01:
+    canon_mono = GateInvariants.from_unitary(canon.gate.power(test_k)).monodromy
+    if np.max(np.abs(canon_mono - canon.monodromy * test_k)) < 0.01:
         return canon
 
-    return base
+    raise ValueError(
+        f"Gate '{base.name}' has non-linear monodromy path and its canonical "
+        f"matrix does not fix it. Cannot use with continuous ISA."
+    )
 
 
 class ContinuousISAConstraints(ISAConstraints):

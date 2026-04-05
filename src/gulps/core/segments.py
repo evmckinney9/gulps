@@ -15,46 +15,33 @@
 """Segment-wise synthesis: solve segments, stitch into circuit.
 
 Architecture:
-  Phase 1: Solve all segments (sequential or Rayon-parallel, decided in Rust).
-  Phase 2: Accumulate P + intermediate recoveries (single Rust FFI call).
-  Phase 3: Apply gates to DAG (Qiskit API, Python).
+  Phase 1: Solve all segments with canonical prefixes (single Rust call,
+    Rayon-parallel above min_batch_size).
+  Phase 2: Stitch with intermediate KAK recoveries + final recovery (Rust).
+  Phase 3: Build DAG from returned circuit data (Python/Qiskit).
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any
+import time
 
-import numpy as np
 from qiskit import QuantumCircuit
 from qiskit.circuit.library import UnitaryGate
 from qiskit.converters import circuit_to_dag, dag_to_circuit
 from qiskit.dagcircuit import DAGCircuit
 
 from gulps._accelerate import recover_local_equiv as recover_local_equivalence
-from gulps._accelerate import solve_batch as _rust_solve_batch
-from gulps._accelerate import stitch_segments as _rust_stitch
+from gulps._accelerate import solve_and_stitch as _rust_solve_and_stitch
 from gulps.config import GulpsConfig
 from gulps.core.invariants import GateInvariants
-
-
-@dataclass
-class SegmentSolution:
-    """Result of a single segment solve (local unitaries and diagnostics)."""
-
-    u0: np.ndarray | None  # 2x2 or None if failure
-    u1: np.ndarray | None  # 2x2 or None if failure
-    max_residual: float  # worst-case residual component (Linf norm)
-    success: bool
-    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class SegmentSynthesizer:
     """Solve all segments and stitch into a circuit.
 
     Each segment finds single-qubit unitaries (u0, u1) such that
-    G @ kron(u1, u0) @ C is locally equivalent to the target invariants,
-    where C is the prefix (accumulated product) and G is the basis gate.
+    G @ kron(u1, u0) @ P is locally equivalent to the target invariants,
+    where P is the actual accumulated product and G is the basis gate.
     """
 
     def __init__(self, config: GulpsConfig | None = None):
@@ -79,101 +66,45 @@ class SegmentSynthesizer:
         dag = circuit_to_dag(QuantumCircuit(2, global_phase=0))
         qreg = dag.qregs["q"]
 
-        # Phase 1: Solve (Rust handles sequential vs parallel)
-        solutions = self._solve_segments(gate_list, invariant_list, n_inner)
+        t0 = time.perf_counter()
 
-        # Phase 2: Stitch into DAG (Rust P accumulation + Python DAG ops)
-        P = self._stitch_into_dag(
-            dag, qreg, gate_list, invariant_list, solutions, n_inner
-        )
+        if n_inner == 0:
+            # Single-gate case: just do the final recovery
+            k1, k2, k3, k4, gphase = recover_local_equivalence(
+                target.matrix, gate_list[0].matrix
+            )
+            u0s, u1s = [], []
+        else:
+            u0s, u1s, k1, k2, k3, k4, gphase = _rust_solve_and_stitch(
+                gate_list[0].matrix,
+                [gate_list[i + 1].matrix for i in range(n_inner)],
+                [invariant_list[i + 1].matrix for i in range(n_inner)],
+                target.matrix,
+                self.config.makhlin_conv_tol,
+                self.config.weyl_conv_tol,
+                self.config.min_batch_size,
+                [list(invariant_list[i + 1].weyl) for i in range(n_inner - 1)],
+            )
 
-        # Final recovery to true target
-        k1, k2, k3, k4, gphase = recover_local_equivalence(target.matrix, P)
+        t1 = time.perf_counter()
+
+        # Build DAG: front corrections, gate sequence, back corrections
         dag.global_phase += gphase
         dag.apply_operation_front(UnitaryGate(k1, check_input=False), [qreg[0]])
         dag.apply_operation_front(UnitaryGate(k2, check_input=False), [qreg[1]])
+        dag.apply_operation_back(gate_list[0].gate, qreg[:])
+        for i in range(n_inner):
+            dag.apply_operation_back(UnitaryGate(u0s[i], check_input=False), [qreg[0]])
+            dag.apply_operation_back(UnitaryGate(u1s[i], check_input=False), [qreg[1]])
+            dag.apply_operation_back(gate_list[i + 1].gate, qreg[:])
         dag.apply_operation_back(UnitaryGate(k3, check_input=False), [qreg[0]])
         dag.apply_operation_back(UnitaryGate(k4, check_input=False), [qreg[1]])
 
+        t2 = time.perf_counter()
+
+        self.last_phase_timing = {
+            "numerics": t1 - t0,
+            "stitch": t2 - t1,
+        }
+
         return dag if return_dag else dag_to_circuit(dag)
-
-    # -- Phase 1: segment solving --
-
-    def _solve_segments(self, gate_list, invariant_list, n_inner):
-        """Solve all segments via Rust (Rayon-parallel above threshold)."""
-        prefixes = [
-            gate_list[0] if idx == 0 else invariant_list[idx] for idx in range(n_inner)
-        ]
-        bases = [gate_list[idx + 1] for idx in range(n_inner)]
-        targets = [invariant_list[idx + 1] for idx in range(n_inner)]
-
-        makhlin_tol = self.config.makhlin_conv_tol
-        weyl_tol = self.config.weyl_conv_tol
-
-        results = _rust_solve_batch(
-            [inv.matrix for inv in prefixes],
-            [inv.matrix for inv in bases],
-            [inv.matrix for inv in targets],
-            makhlin_tol,
-            weyl_tol,
-            self.config.min_batch_size,
-        )
-
-        solutions = [
-            SegmentSolution(
-                u0=u0,
-                u1=u1,
-                max_residual=weyl_res,
-                success=(weyl_res <= weyl_tol or makhlin_res <= makhlin_tol),
-            )
-            for u0, u1, weyl_res, makhlin_res in results
-        ]
-
-        for idx, sol in enumerate(solutions):
-            if not sol.success:
-                raise RuntimeError(
-                    f"Segment {idx + 1} synthesis failed "
-                    f"(residual norm={sol.max_residual:.2e})."
-                )
-
-        return solutions
-
-    # -- Phase 2: stitch + DAG --
-
-    @staticmethod
-    def _stitch_into_dag(dag, qreg, gate_list, invariant_list, solutions, n_inner):
-        """Rust stitch (P accumulation + recovery) then apply gates to DAG."""
-        dag.apply_operation_back(gate_list[0].gate, qreg[:])
-
-        if n_inner == 0:
-            return gate_list[0].matrix.copy()
-
-        # Single Rust FFI call for P accumulation + intermediate recoveries
-        corrections, final_p = _rust_stitch(
-            gate_list[0].matrix,
-            [solutions[i].u0 for i in range(n_inner)],
-            [solutions[i].u1 for i in range(n_inner)],
-            [gate_list[i + 1].matrix for i in range(n_inner)],
-            [
-                np.asarray(invariant_list[i + 1].canonical_matrix, dtype=np.complex128)
-                for i in range(n_inner - 1)
-            ],
-        )
-
-        # Apply gates to DAG
-        for i in range(n_inner):
-            dag.apply_operation_back(
-                UnitaryGate(solutions[i].u0, check_input=False), [qreg[0]]
-            )
-            dag.apply_operation_back(
-                UnitaryGate(solutions[i].u1, check_input=False), [qreg[1]]
-            )
-            dag.apply_operation_back(gate_list[i + 1].gate, qreg[:])
-
-            if i < n_inner - 1:
-                k3, k4, gphase = corrections[i]
-                dag.global_phase += gphase
-                dag.apply_operation_back(UnitaryGate(k3, check_input=False), [qreg[0]])
-                dag.apply_operation_back(UnitaryGate(k4, check_input=False), [qreg[1]])
-
-        return np.asarray(final_p)

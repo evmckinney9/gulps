@@ -40,7 +40,7 @@ COLORS = [
 ]
 
 
-def _plot_polytope(circuit_polytope, ax, w, color="red"):
+def _plot_polytope(circuit_polytope, ax, w, color="red", alpha=None, edgecolor=None):
     """Plot a single circuit polytope on the given axes.
 
     Args:
@@ -48,7 +48,11 @@ def _plot_polytope(circuit_polytope, ax, w, color="red"):
         ax: Matplotlib 3D axes.
         w: WeylChamber object.
         color: Color for the polytope faces.
+        alpha: Face opacity. Defaults to 0.5 for triangles, 0.2 for hulls.
+        edgecolor: Edge color. Defaults to black.
     """
+    if edgecolor is None:
+        edgecolor = color
     canon = monodromy_to_positive_canonical_polytope(circuit_polytope).reduce()
 
     for vertex_set in canon.vertices:
@@ -58,19 +62,20 @@ def _plot_polytope(circuit_polytope, ax, w, color="red"):
             w.ax.scatter3D(*zip(*vertices), color=color)
         elif len(vertices) == 2:
             w.ax.plot3D(*zip(*vertices), color=color, linewidth=2)
-        elif len(vertices) == 3:
-            triangle = Poly3DCollection([vertices])
-            triangle.set_facecolor(color)
-            triangle.set_edgecolor("k")
-            triangle.set_alpha(0.5)
-            w.ax.add_collection3d(triangle)
         else:
-            hull = ss.ConvexHull(vertices, qhull_options="QJ")
-            faces = Poly3DCollection([vertices[simplex] for simplex in hull.simplices])
-            faces.set_facecolor(color)
-            faces.set_alpha(0.2)
-            faces.set_edgecolor("k")
-            w.ax.add_collection3d(faces)
+            if len(vertices) == 3:
+                coll = Poly3DCollection([vertices])
+                a = alpha if alpha is not None else 0.5
+            else:
+                hull = ss.ConvexHull(vertices, qhull_options="QJ")
+                coll = Poly3DCollection(
+                    [vertices[simplex] for simplex in hull.simplices]
+                )
+                a = alpha if alpha is not None else 0.2
+            coll.set_facecolor(color)
+            coll.set_edgecolor(edgecolor)
+            coll.set_alpha(a)
+            w.ax.add_collection3d(coll)
 
 
 def plot_coverage_set(coverage_set, volume_info=None):
