@@ -1,5 +1,7 @@
 """End-to-end fidelity tests across every ISA in the fixture library."""
 
+import importlib.util
+
 import numpy as np
 import pytest
 from qiskit.circuit.library import iSwapGate
@@ -12,11 +14,19 @@ from tests.fixtures.isas import get_all_test_isas, get_slim_isas
 N_RANDOM = 20
 FIDELITY_TOL = 1 - 1e-8
 
+_monodromy_available = importlib.util.find_spec("monodromy") is not None
+
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
-@pytest.fixture(params=get_slim_isas(precompute_polytopes=True))
+@pytest.fixture(
+    params=(
+        get_slim_isas(precompute_polytopes=True)
+        if _monodromy_available
+        else [pytest.param(None, marks=pytest.mark.skip(reason="monodromy package not installed"))]
+    )
+)
 def decomposer(request):
     return GulpsDecomposer(isa=request.param)
 

@@ -8,6 +8,9 @@ coverage set is inconsistent.
 """
 
 import pytest
+
+pytest.importorskip("monodromy", reason="monodromy package not installed; skipping polytope-agreement tests")
+
 from qiskit.quantum_info import Operator, average_gate_fidelity, random_unitary
 
 from gulps import GateInvariants
