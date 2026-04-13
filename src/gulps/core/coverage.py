@@ -78,7 +78,6 @@ def _operation_to_circuit_polytope(
 
 def isa_to_coverage(
     isa: "ISAInvariants",
-    sort=True,
 ) -> list[CircuitPolytope]:
     """Calculates coverage given a basis gate set."""
     unitaries = [g.matrix for g in isa.gate_set]
@@ -103,10 +102,7 @@ def isa_to_coverage(
         # second, a bit pedantic but we can fix the off by-one in cost here
         polytope.cost += single_qubit_cost
 
-    if sort:
-        return sorted(coverage_set, key=lambda k: k.cost)
-
-    return coverage_set
+    return sorted(coverage_set, key=lambda k: k.cost)
 
 
 def compute_coverage_statistics(coverage_set, chatty=False):

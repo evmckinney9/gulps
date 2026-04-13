@@ -14,7 +14,10 @@
 
 """GULPS python module."""
 
-from ._internal.logging_config import logger
+import logging
+
+logging.getLogger(__name__).addHandler(logging.NullHandler())
+
 from .core.invariants import GateInvariants
 from .gulps_decomposer import GulpsDecomposer
 from .qiskit_ext.decomposer_pass import GulpsDecompositionPass

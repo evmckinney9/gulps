@@ -131,23 +131,14 @@ Unlike other decomposition techniques, the linear program contains additional in
 |:------------------------:|:------------------------:|
 | Red(2)                   | Blue                     |
 
-We solve for the local one-qubit gates in each segment using a Gauss-Newton solver on the Makhlin invariants, followed by a Weyl-coordinate polish. The solver (implemented in Rust) is tuned to work well across a broad range of ISAs, but there is no one-size-fits-all for every possible gate set, so edge-case performance may vary.
+We solve for the local one-qubit gates in each segment using a Gauss-Newton solver on the Makhlin invariants, followed by a Weyl-coordinate polish. Segment solving and stitching (recovering global unitary equivalence from the local solutions) happen in a single Rust call. The solver is tuned to work well across a broad range of ISAs, but there is no one-size-fits-all for every possible gate set, so edge-case performance may vary.
 ```python
-solutions = decomposer._local_synthesis._solve_segments(
-    constraint_sol.sentence,
-    constraint_sol.intermediates,
-    n_inner=len(constraint_sol.sentence) - 1,
-)
-solutions[0]
-# SegmentSolution(u0=..., u1=..., weyl_residual=1.2e-16, max_residual=4.8e-09, success=True)
-```
-After solving the individual segments, we apply a final stitching step to handle orientation between segments and to promote local equivalence into global unitary equivalence:
-```python
-decomposer._local_synthesis.synthesize_segments(
+circuit = decomposer._local_synthesis.synthesize_segments(
     gate_list=constraint_sol.sentence,
     invariant_list=constraint_sol.intermediates,
     target=target_inv,
-).draw("mpl")
+)
+circuit.draw("mpl")
 ```
 ![final](https://raw.githubusercontent.com/evmckinney9/gulps/main/images/final.png)
 

@@ -1,6 +1,7 @@
 .vscode
 
 scripts/temp_diagnostics/
+dev/
 
 #ruff
 .ruff_cache

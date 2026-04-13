@@ -108,13 +108,14 @@ fn recover_local_equiv<'py>(
 }
 
 // ---------------------------------------------------------------------------
-// Full solver
+// Segment solver (diagnostic / per-segment access)
 // ---------------------------------------------------------------------------
 
-/// Solve multiple segments, using Rayon parallelism when beneficial.
+/// Solve one or more segments independently, returning per-segment results.
 ///
-/// For n < min_batch_size, solves sequentially (avoids Rayon dispatch overhead).
-/// For n >= min_batch_size, uses Rayon work-stealing threadpool.
+/// For production decomposition, use `solve_and_stitch` instead (handles
+/// stitching and recovery). This function is useful for diagnostics that
+/// need per-segment residuals.
 ///
 /// Returns list of (u0, u1, weyl_res, makhlin_res) tuples.
 #[pyfunction]
@@ -125,41 +126,23 @@ fn solve_batch<'py>(
     targets: Vec<PyReadonlyArray2<'py, Complex64>>,
     makhlin_tol: f64,
     weyl_tol: f64,
-    min_batch_size: usize,
 ) -> PyResult<Vec<(Py<PyAny>, Py<PyAny>, f64, f64)>> {
-    // Extract all matrices while we hold the GIL
     let inputs: Vec<_> = prefixes
         .iter()
         .zip(bases.iter())
         .zip(targets.iter())
-        .map(|((p, b), t)| {
-            (numpy_to_mat4(p), numpy_to_mat4(b), numpy_to_mat4(t))
-        })
+        .map(|((p, b), t)| (numpy_to_mat4(p), numpy_to_mat4(b), numpy_to_mat4(t)))
         .collect();
 
-    // Solve with GIL released - sequential below threshold, parallel above.
-    // Rayon par_iter wakes the entire thread pool (~140μs overhead).
-    // For small N this exceeds the solve time itself, so we go sequential.
     let results: Vec<_> = py.detach(|| {
-        if inputs.len() < min_batch_size {
-            inputs
-                .iter()
-                .map(|(prefix, basis, target)| {
-                    solver::solve(0, prefix, basis, target, makhlin_tol, weyl_tol)
-                })
-                .collect()
-        } else {
-            use rayon::prelude::*;
-            inputs
-                .par_iter()
-                .map(|(prefix, basis, target)| {
-                    solver::solve(0, prefix, basis, target, makhlin_tol, weyl_tol)
-                })
-                .collect()
-        }
+        inputs
+            .iter()
+            .map(|(prefix, basis, target)| {
+                solver::solve(0, prefix, basis, target, makhlin_tol, weyl_tol)
+            })
+            .collect()
     });
 
-    // Convert results back to numpy (need GIL)
     results
         .into_iter()
         .map(|(u0, u1, weyl_res, makhlin_res)| {
@@ -174,57 +157,95 @@ fn solve_batch<'py>(
 }
 
 // ---------------------------------------------------------------------------
-// Stitch: P accumulation + intermediate recovery in one Rust call
+// Solve + stitch in one call
 // ---------------------------------------------------------------------------
 
-/// Stitch solved segments: accumulate P, recover intermediates to targets.
+/// Solve all segments and stitch into circuit data.
 ///
-/// Takes the initial gate matrix, all segment solutions (u0, u1),
-/// basis gate matrices, and target canonical matrices for intermediates.
+/// Solves with canonical prefixes (Rayon above min_batch_size, sequential
+/// below), then stitches with intermediate KAK recoveries. Consolidates
+/// what was previously two separate FFI calls (solve_batch + stitch_segments).
 ///
-/// Returns (corrections, final_P) where corrections is a list of
-/// (k3, k4, global_phase) for each intermediate recovery.
+/// Returns (u0s, u1s, k1, k2, k3, k4, global_phase).
 #[pyfunction]
-fn stitch_segments<'py>(
+fn solve_and_stitch<'py>(
     py: Python<'py>,
     initial_matrix: PyReadonlyArray2<'py, Complex64>,
-    u0s: Vec<PyReadonlyArray2<'py, Complex64>>,
-    u1s: Vec<PyReadonlyArray2<'py, Complex64>>,
     basis_matrices: Vec<PyReadonlyArray2<'py, Complex64>>,
-    target_canonical_matrices: Vec<PyReadonlyArray2<'py, Complex64>>,
-) -> PyResult<(Vec<(Py<PyAny>, Py<PyAny>, f64)>, Py<PyAny>)> {
+    target_matrices: Vec<PyReadonlyArray2<'py, Complex64>>,
+    final_target: PyReadonlyArray2<'py, Complex64>,
+    makhlin_tol: f64,
+    weyl_tol: f64,
+    min_batch_size: usize,
+    target_weyl_coords: Vec<[f64; 3]>,
+) -> PyResult<(
+    Vec<Py<PyAny>>,  // u0s (fused with intermediate corrections)
+    Vec<Py<PyAny>>,  // u1s
+    Py<PyAny>,       // k1 (final recovery)
+    Py<PyAny>,       // k2
+    Py<PyAny>,       // k3
+    Py<PyAny>,       // k4
+    f64,             // global_phase
+)> {
     let init = numpy_to_mat4(&initial_matrix);
-
-    // Convert all numpy arrays to nalgebra while holding GIL
-    let u0_mats: Vec<Mat2> = u0s.iter().map(|u| {
-        let s = u.as_slice().expect("u0 not contiguous");
-        Mat2::from_row_slice(s)
-    }).collect();
-    let u1_mats: Vec<Mat2> = u1s.iter().map(|u| {
-        let s = u.as_slice().expect("u1 not contiguous");
-        Mat2::from_row_slice(s)
-    }).collect();
+    let target = numpy_to_mat4(&final_target);
     let basis_mats: Vec<Mat4> = basis_matrices.iter().map(|b| numpy_to_mat4(b)).collect();
-    let target_mats: Vec<Mat4> = target_canonical_matrices.iter().map(|t| numpy_to_mat4(t)).collect();
+    let target_mats: Vec<Mat4> = target_matrices.iter().map(|t| numpy_to_mat4(t)).collect();
+    let n = basis_mats.len();
 
-    // Stitch with GIL released
-    let result = py.detach(|| {
-        recover::stitch_segments(&init, &u0_mats, &u1_mats, &basis_mats, &target_mats)
+    let result = py.detach(|| -> Result<_, String> {
+        // Solve: canonical prefixes, Rayon above threshold
+        let solve_one = |i: usize| {
+            let prefix = if i == 0 { &init } else { &target_mats[i - 1] };
+            solver::solve(0, prefix, &basis_mats[i], &target_mats[i], makhlin_tol, weyl_tol)
+        };
+
+        let results: Vec<_> = if n >= min_batch_size {
+            use rayon::prelude::*;
+            (0..n).into_par_iter().map(solve_one).collect()
+        } else {
+            (0..n).map(solve_one).collect()
+        };
+
+        for (i, &(_, _, weyl_res, makhlin_res)) in results.iter().enumerate() {
+            if weyl_res > weyl_tol && makhlin_res > makhlin_tol {
+                return Err(format!(
+                    "Segment {} synthesis failed (weyl={:.2e}, makhlin={:.2e})",
+                    i + 1, weyl_res, makhlin_res
+                ));
+            }
+        }
+
+        let u0s: Vec<Mat2> = results.iter().map(|(u0, _, _, _)| *u0).collect();
+        let u1s: Vec<Mat2> = results.iter().map(|(_, u1, _, _)| *u1).collect();
+
+        // Stitch: P accumulation + intermediate KAK recovery + final recovery
+        let stitch = recover::stitch_segments(
+            &init, &u0s, &u1s, &basis_mats, &target_weyl_coords, &target,
+        )?;
+
+        let gphase = stitch.intermediate_gphase + stitch.final_recovery.global_phase;
+        Ok((stitch.fused_u0s, stitch.fused_u1s, stitch.final_recovery, gphase))
     }).map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
 
-    // Convert results back to numpy
-    let corrections: Vec<(Py<PyAny>, Py<PyAny>, f64)> = result.corrections.iter().map(|c| {
-        (
-            mat2_to_numpy(py, &c.k3).into_any().unbind(),
-            mat2_to_numpy(py, &c.k4).into_any().unbind(),
-            c.global_phase,
-        )
-    }).collect();
+    let (u0s, u1s, recovery, gphase) = result;
 
-    let final_p = Array2::from_shape_fn((4, 4), |(r, c)| result.final_p[(r, c)])
-        .into_pyarray(py).into_any().unbind();
+    let u0_numpy: Vec<Py<PyAny>> = u0s.iter()
+        .map(|u| mat2_to_numpy(py, u).into_any().unbind())
+        .collect();
+    let u1_numpy: Vec<Py<PyAny>> = u1s.iter()
+        .map(|u| mat2_to_numpy(py, u).into_any().unbind())
+        .collect();
 
-    Ok((corrections, final_p))
+    Ok((
+        u0_numpy,
+        u1_numpy,
+        mat2_to_numpy(py, &recovery.k1).into_any().unbind(),
+        mat2_to_numpy(py, &recovery.k2).into_any().unbind(),
+        mat2_to_numpy(py, &recovery.k3).into_any().unbind(),
+        mat2_to_numpy(py, &recovery.k4).into_any().unbind(),
+        gphase,
+    ))
 }
 
 // ---------------------------------------------------------------------------
@@ -308,7 +329,7 @@ fn _accelerate(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(monodromy_from_weyl, m)?)?;
     m.add_function(wrap_pyfunction!(solve_batch, m)?)?;
     m.add_function(wrap_pyfunction!(recover_local_equiv, m)?)?;
-    m.add_function(wrap_pyfunction!(stitch_segments, m)?)?;
+    m.add_function(wrap_pyfunction!(solve_and_stitch, m)?)?;
     m.add_class::<DualSimplex>()?;
     Ok(())
 }
