@@ -99,10 +99,18 @@ fn gn_restart_loop(
             .wrapping_mul(6364136223846793005)
             .wrapping_add(1442695040888963407)
             .wrapping_add(restart as u64);
-        let mut rng = SmallRng::seed_from_u64(rseed);
         let mut init = [0.0f64; 8];
-        for v in &mut init {
-            *v = rng.random_range(-0.1..0.1);
+        if restart == 0 {
+            // Structural first guess: u0 = u1 = I (identity SU(2)s → kron = I).
+            // For targets locally close to basis·prefix, converges in a few GN steps
+            // without consuming random restarts. Random sampling resumes at restart ≥ 1.
+            init[0] = 1.0;
+            init[4] = 1.0;
+        } else {
+            let mut rng = SmallRng::seed_from_u64(rseed);
+            for v in &mut init {
+                *v = rng.random_range(-0.1..0.1);
+            }
         }
 
         // GN inner loop
