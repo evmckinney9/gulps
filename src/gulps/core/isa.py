@@ -16,6 +16,7 @@
 
 import heapq
 import itertools
+import warnings
 from abc import ABC
 from collections.abc import Generator
 from dataclasses import dataclass, field
@@ -135,9 +136,20 @@ class DiscreteISA(ISAInvariants):
         self.max_sequence_length = max_sequence_length
         self._precompute_polytopes = precompute_polytopes
         if precompute_polytopes:
-            from gulps.core.coverage import isa_to_coverage
-
-            self.coverage_set = isa_to_coverage(self)
+            try:
+                from gulps.core.coverage import isa_to_coverage
+            except ImportError:
+                warnings.warn(
+                    "Coverage precomputation requires the 'monodromy' package, which is not "
+                    "installed.  Falling back to enumeration-based decomposition "
+                    "(precompute_polytopes=False).  "
+                    "Install with: pip install -r requirements-monodromy.txt",
+                    UserWarning,
+                    stacklevel=2,
+                )
+                self._precompute_polytopes = False
+            else:
+                self.coverage_set = isa_to_coverage(self)
 
     def enumerate(self) -> Generator[list[GateInvariants], None, None]:
         """Generate all ordered gate sequences up to max_sequence_length (inclusive)."""
