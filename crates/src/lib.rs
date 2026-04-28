@@ -119,6 +119,7 @@ fn recover_local_equiv<'py>(
 ///
 /// Returns list of (u0, u1, weyl_res, makhlin_res) tuples.
 #[pyfunction]
+#[pyo3(signature = (prefixes, bases, targets, makhlin_tol, weyl_tol, identity_warmstart=false))]
 fn solve_batch<'py>(
     py: Python<'py>,
     prefixes: Vec<PyReadonlyArray2<'py, Complex64>>,
@@ -126,6 +127,7 @@ fn solve_batch<'py>(
     targets: Vec<PyReadonlyArray2<'py, Complex64>>,
     makhlin_tol: f64,
     weyl_tol: f64,
+    identity_warmstart: bool,
 ) -> PyResult<Vec<(Py<PyAny>, Py<PyAny>, f64, f64)>> {
     let inputs: Vec<_> = prefixes
         .iter()
@@ -138,7 +140,7 @@ fn solve_batch<'py>(
         inputs
             .iter()
             .map(|(prefix, basis, target)| {
-                solver::solve(0, prefix, basis, target, makhlin_tol, weyl_tol)
+                solver::solve(0, prefix, basis, target, makhlin_tol, weyl_tol, identity_warmstart)
             })
             .collect()
     });
@@ -168,6 +170,7 @@ fn solve_batch<'py>(
 ///
 /// Returns (u0s, u1s, k1, k2, k3, k4, global_phase).
 #[pyfunction]
+#[pyo3(signature = (initial_matrix, basis_matrices, target_matrices, final_target, makhlin_tol, weyl_tol, min_batch_size, target_weyl_coords, identity_warmstart=false))]
 fn solve_and_stitch<'py>(
     py: Python<'py>,
     initial_matrix: PyReadonlyArray2<'py, Complex64>,
@@ -178,6 +181,7 @@ fn solve_and_stitch<'py>(
     weyl_tol: f64,
     min_batch_size: usize,
     target_weyl_coords: Vec<[f64; 3]>,
+    identity_warmstart: bool,
 ) -> PyResult<(
     Vec<Py<PyAny>>,  // u0s (fused with intermediate corrections)
     Vec<Py<PyAny>>,  // u1s
@@ -197,7 +201,7 @@ fn solve_and_stitch<'py>(
         // Solve: canonical prefixes, Rayon above threshold
         let solve_one = |i: usize| {
             let prefix = if i == 0 { &init } else { &target_mats[i - 1] };
-            solver::solve(0, prefix, &basis_mats[i], &target_mats[i], makhlin_tol, weyl_tol)
+            solver::solve(0, prefix, &basis_mats[i], &target_mats[i], makhlin_tol, weyl_tol, identity_warmstart)
         };
 
         let results: Vec<_> = if n >= min_batch_size {
