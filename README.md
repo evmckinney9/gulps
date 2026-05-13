@@ -14,7 +14,7 @@ Most existing compilers only target CNOT gates. Analytical rules exist for a few
 - **Scalability to larger ISAs**, unlike black-box numerical methods.  
 - A fast, practical tool integrated with Qiskit if you study **gate compilation from two-body Hamiltonians** or parameterized unitary families.
 
-#### 📌 Read the preprint: [Two-Qubit Gate Synthesis via Linear Programming for Heterogeneous Instruction Sets](https://arxiv.org/abs/2505.00543)
+#### 📌 Read the preprint: [GULPS: Two-Qubit Gate Synthesis via Linear Programming for Heterogeneous Instruction Sets](https://arxiv.org/abs/2505.00543)
 
 > [!IMPORTANT]
 > GULPS is a general-purpose numerical method. If your ISA has a known analytical decomposition (e.g., Qiskit's `XXDecomposer` for CX/RZX families), prefer that - specialized solvers will always be faster and more precise for the gates they target. GULPS is for everything else.

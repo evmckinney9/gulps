@@ -44,8 +44,7 @@ Issues = "https://github.com/evmckinney9/gulps/issues"
 cplex = ["qiskit-optimization[cplex]"]
 dev = [
     "matplotlib",
-    "SciencePlots",
-    "LovelyPlots",
+    "lusca",
     "ipykernel",
     "pre-commit",
     "pylatexenc",
