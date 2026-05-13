@@ -16,10 +16,9 @@
 
 from collections import Counter
 
-import lovelyplots
+import lusca  # noqa: F401  # registers "lusca" matplotlib style
 import matplotlib.pyplot as plt
 import numpy as np
-import scienceplots
 
 
 def compare_continuous_discrete(
@@ -47,7 +46,7 @@ def compare_continuous_discrete(
         discrete_params
     )
 
-    with plt.style.context(["ieee", "science", "no-latex"]):
+    with plt.style.context("lusca"):
         fig, axes = plt.subplots(1, 2, figsize=(8.0, 3.0))
 
         # Left: Continuous (histogram)
@@ -134,7 +133,7 @@ def report_benchmark_results(fidelities, all_timings, decomposer, N, failures):
         "total": "#95a5a6",
     }
 
-    with plt.style.context(["ieee", "science", "no-latex"]):
+    with plt.style.context("lusca"):
         fig = plt.figure(figsize=(8, 4.5))
         gs = fig.add_gridspec(2, 3, hspace=0.4, wspace=0.4)
 

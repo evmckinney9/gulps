@@ -38,6 +38,12 @@ class GulpsConfig:
     Diagnostics Attributes:
         flag_duration: If a single decomposition exceeds this time (seconds),
             emit a warning.  Set to 0 to disable.  Default: 0.05 (50ms)
+
+    Solver Attributes:
+        min_batch_size: Minimum segment count before Rayon parallelizes. Default: 6
+        identity_warmstart: Seed GN restart 0 with identity SU(2) params
+            (u0 = u1 = I) instead of random init. Effect is basis-dependent;
+            benchmark on the target ISA before enabling. Default: False.
     """
 
     # Tolerances
@@ -50,3 +56,4 @@ class GulpsConfig:
 
     # Solver parameters
     min_batch_size: int = 6
+    identity_warmstart: bool = False

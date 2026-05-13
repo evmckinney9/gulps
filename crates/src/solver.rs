@@ -45,6 +45,7 @@ pub fn solve(
     target_mat: &Mat4,
     makhlin_tol: f64,
     weyl_tol: f64,
+    identity_warmstart: bool,
 ) -> (Mat2, Mat2, f64, f64) {
     let target_makhlin = makhlin_invariants(target_mat);
     let target_weyl = weyl_coordinates(target_mat);
@@ -62,6 +63,7 @@ pub fn solve(
         basis_gate,
         &target_weyl,
         weyl_tol,
+        identity_warmstart,
     );
 
     // Weyl LM polish: close the Makhlin→Weyl gap for fidelity.
@@ -89,6 +91,7 @@ fn gn_restart_loop(
     basis_gate: &Mat4,
     target_weyl: &[f64; 3],
     weyl_tol: f64,
+    identity_warmstart: bool,
 ) -> ([f64; 8], f64) {
     let mut best_params = [0.0f64; 8];
     let mut best_res = f64::INFINITY;
@@ -100,10 +103,9 @@ fn gn_restart_loop(
             .wrapping_add(1442695040888963407)
             .wrapping_add(restart as u64);
         let mut init = [0.0f64; 8];
-        if restart == 0 {
+        if identity_warmstart && restart == 0 {
             // Structural first guess: u0 = u1 = I (identity SU(2)s → kron = I).
-            // For targets locally close to basis·prefix, converges in a few GN steps
-            // without consuming random restarts. Random sampling resumes at restart ≥ 1.
+            // Opt-in via config; default is full random init.
             init[0] = 1.0;
             init[4] = 1.0;
         } else {

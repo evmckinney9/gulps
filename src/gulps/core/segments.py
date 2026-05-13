@@ -84,6 +84,7 @@ class SegmentSynthesizer:
                 self.config.weyl_conv_tol,
                 self.config.min_batch_size,
                 [list(invariant_list[i + 1].weyl) for i in range(n_inner - 1)],
+                self.config.identity_warmstart,
             )
 
         t1 = time.perf_counter()
