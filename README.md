@@ -17,7 +17,7 @@ Most existing compilers only target CNOT gates. Analytical rules exist for a few
 #### 📌 Read the preprint: [GULPS: Two-Qubit Gate Synthesis via Linear Programming for Heterogeneous Instruction Sets](https://arxiv.org/abs/2505.00543)
 
 > [!IMPORTANT]
-> GULPS is a general-purpose numerical method. If your ISA has a known analytical decomposition (e.g., Qiskit's `XXDecomposer` for CX/RZX families), prefer that - specialized solvers will always be faster and more precise for the gates they target. GULPS is for everything else.
+> GULPS is a general-purpose numerical method. If your ISA has a known analytical decomposition (e.g., Qiskit's `XXDecomposer` for CX/RZX families), prefer that. Specialized solvers will typically be faster and more precise for the gates they target.
 
 ______
 ### Getting Started
@@ -34,16 +34,37 @@ pip install gulps
 | `test` | `pip install "gulps[test]"` | Adds `pytest`. |
 ___
 
-#### Qiskit Transpiler Plugin
-If your backend's ISA is already defined in a Qiskit `Target`, GULPS works as a drop-in `translation` stage plugin:
+#### Qiskit Transpiler Plugin (recommended)
+GULPS registers as a `translation` stage plugin. Describe your hardware as a Qiskit `Target` and call `transpile()` directly. Gate costs are read from the target's instruction durations, so fractional gates are weighted proportionally:
 ```python
 from qiskit import transpile
+from qiskit.circuit.library import iSwapGate
+from qiskit.transpiler import Target, CouplingMap, InstructionDurations
 
-output_qc = transpile(input_qc, target=my_target, translation_method="gulps")
+target = Target.from_configuration(
+    basis_gates=["u", "iswap", "sq2iswap", "sq3iswap"],
+    num_qubits=4,
+    coupling_map=CouplingMap.from_full(4),
+    custom_name_mapping={
+        "iswap": iSwapGate().power(1.0),
+        "sq2iswap": iSwapGate().power(1 / 2),
+        "sq3iswap": iSwapGate().power(1 / 3),
+    },
+    instruction_durations=InstructionDurations(
+        [
+            ("iswap", None, 300, "ns"),
+            ("sq2iswap", None, 150, "ns"),
+            ("sq3iswap", None, 100, "ns"),
+            ("u", None, 10, "ns"),
+        ]
+    ),
+)
+
+output_qc = transpile(input_qc, target=target, translation_method="gulps")
 ```
 
-#### Custom ISA
-For full control, define your ISA manually. Gate costs must be additive (e.g., normalized durations where fractional gates cost proportionally to their basis gate).
+#### Direct Decomposer (Custom ISA)
+For a single unitary, or full control over costs, build a `DiscreteISA` and call the decomposer directly.
 
 ```python
 from qiskit.circuit.library import iSwapGate
@@ -67,7 +88,7 @@ v = decomposer(u)
 v.draw()
 ```
 
-To compile a full `QuantumCircuit`, use the `TransformationPass`. Because GULPS leaves single-qubit gates unsimplified, append `Optimize1qGatesDecomposition` to rewrite them:
+Without a `Target`, run the decomposer as a pass directly. GULPS leaves single-qubit gates unsimplified, so append `Optimize1qGatesDecomposition`:
 
 ```python
 from gulps import GulpsDecompositionPass
