@@ -76,6 +76,12 @@ class GateInvariants:
         else:
             U = np.asarray(gate)
         U = np.asarray(U, dtype=np.complex128)
+        if U.shape != (4, 4):
+            raise ValueError(f"target must be a 4x4 matrix, got shape {U.shape}")
+        if not np.all(np.isfinite(U)):
+            raise ValueError("target contains non-finite entries (NaN or Inf)")
+        if not np.allclose(U.conj().T @ U, np.eye(4), atol=1e-8):
+            raise ValueError("target is not unitary within atol=1e-8")
 
         c = _rust_weyl(U)
         coords = tuple(_monodromy_from_weyl_rs(float(c[0]), float(c[1]), float(c[2])))
