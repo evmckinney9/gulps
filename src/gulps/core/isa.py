@@ -123,6 +123,16 @@ class DiscreteISA(ISAInvariants):
             raise ValueError("gate_set can't be empty.")
         if len(gate_set) != len(costs):
             raise ValueError("gate_set and costs must have the same length.")
+        if not all(np.isfinite(c) and c >= 0 for c in costs):
+            raise ValueError(f"costs must be finite and non-negative, got {costs}")
+        if not np.isfinite(single_qubit_cost):
+            raise ValueError(
+                f"single_qubit_cost must be finite, got {single_qubit_cost}"
+            )
+        if not isinstance(max_sequence_length, int) or max_sequence_length < 1:
+            raise ValueError(
+                f"max_sequence_length must be a positive integer, got {max_sequence_length}"
+            )
         if names is None:
             names = [None] * len(gate_set)
         self.gate_set = [
