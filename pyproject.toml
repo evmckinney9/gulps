@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gulps"
-description = "optimally compile arbitrary two-qubit unitaries"
+description = "optimally compile arbitrary two-qubit unitaries into heterogeneous native gate sets"
 version = "0.3.7"
 authors = [{ name = "Evan McKinney", email = "evmckinney9@gmail.com" }]
 license = { text = "Apache-2.0" }
