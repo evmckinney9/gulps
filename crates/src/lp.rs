@@ -1,12 +1,7 @@
 //! Warm-startable dual revised simplex for small dense LPs.
 //!
-//! Solves: minimize c'x subject to Ax ≤ b
-//! where A and c are fixed, and only b changes between solves.
-//!
-//! The basis warm-starts across solves, making repeated solves with
-//! different b vectors efficient (only a few pivots per solve).
-//!
-//! Reference: Nocedal & Wright, "Numerical Optimization" 2nd ed., §13.5.
+//! Minimize `c'x` subject to `Ax ≤ b`; `A` and `c` are fixed, only `b`
+//! varies between solves. See Nocedal & Wright §13.5.
 
 use nalgebra::{DMatrix, DVector};
 
@@ -27,12 +22,7 @@ pub struct DualSimplexSolver {
 
 impl DualSimplexSolver {
     /// Create a new solver with fixed A, c, and initial dual-feasible basis.
-    pub fn new(
-        a: DMatrix<f64>,
-        c: DVector<f64>,
-        initial_basis: Vec<usize>,
-        tol: f64,
-    ) -> Self {
+    pub fn new(a: DMatrix<f64>, c: DVector<f64>, initial_basis: Vec<usize>, tol: f64) -> Self {
         Self {
             a,
             c,
@@ -41,24 +31,21 @@ impl DualSimplexSolver {
         }
     }
 
-    /// Solve for a given b vector. Returns the optimal x, or None if infeasible.
-    ///
-    /// The basis is updated (warm-started) regardless of feasibility.
+    /// Solve for `b`; returns `x` or None. Basis is warm-started either way.
     pub fn solve(&mut self, b: &[f64]) -> Option<Vec<f64>> {
         let n = self.a.ncols();
         let m = self.a.nrows();
         let tol = self.tol;
         let mut basis = self.basis.clone();
 
-        // B = A[basis, :] (n × n submatrix) → invert
+        // invert the basis submatrix
         let mut b_inv = extract_basis(&self.a, &basis).try_inverse()?;
 
         for _ in 0..MAX_PIVOTS {
-            // x = B⁻¹ b[basis]
             let b_basis = DVector::from_fn(n, |i, _| b[basis[i]]);
             let x = &b_inv * &b_basis;
 
-            // Find most violated constraint: argmax(Ax - b)
+            // most violated constraint
             let mut max_viol = f64::NEG_INFINITY;
             let mut entering = 0;
             for i in 0..m {
@@ -83,12 +70,13 @@ impl DualSimplexSolver {
             let tau = b_inv.tr_mul(&a_enter);
             let dual = -(b_inv.tr_mul(&self.c));
 
-            let leaving = min_ratio(tau.as_slice(), dual.as_slice(), n, tol);
-            if leaving < 0 {
-                self.basis = basis;
-                return None;
-            }
-            let leaving = leaving as usize;
+            let leaving = match min_ratio(tau.as_slice(), dual.as_slice(), n, tol) {
+                Some(idx) => idx,
+                None => {
+                    self.basis = basis;
+                    return None;
+                }
+            };
 
             // Rank-1 Sherman-Morrison update of B⁻¹
             let old_row = basis[leaving];
@@ -109,7 +97,6 @@ impl DualSimplexSolver {
             } else {
                 let col = b_inv_col.clone_owned();
                 let row = &delta * &b_inv;
-                // B⁻¹ -= col ⊗ row / denom
                 for i in 0..n {
                     for j in 0..n {
                         b_inv[(i, j)] -= col[i] * row[(0, j)] / denom;
@@ -135,18 +122,18 @@ fn extract_basis(a: &DMatrix<f64>, basis: &[usize]) -> DMatrix<f64> {
     DMatrix::from_fn(basis.len(), n, |r, c| a[(basis[r], c)])
 }
 
-/// Minimum-ratio test for the dual simplex. Returns leaving index, or -1.
-fn min_ratio(tau: &[f64], dual: &[f64], n: usize, tol: f64) -> i32 {
-    let mut best_idx: i32 = -1;
+/// Minimum-ratio test for the dual simplex. Returns the leaving index.
+fn min_ratio(tau: &[f64], dual: &[f64], n: usize, tol: f64) -> Option<usize> {
+    let mut best: Option<usize> = None;
     let mut best_ratio = f64::INFINITY;
     for k in 0..n {
         if tau[k] > tol {
             let r = dual[k] / tau[k];
             if r < best_ratio {
                 best_ratio = r;
-                best_idx = k as i32;
+                best = Some(k);
             }
         }
     }
-    best_idx
+    best
 }

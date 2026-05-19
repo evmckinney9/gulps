@@ -1,4 +1,4 @@
-##  [GULPS](https://c.tenor.com/NAwgHzRfK_wAAAAC/tenor.gif)
+## [GULPS](https://c.tenor.com/NAwgHzRfK_wAAAAC/tenor.gif)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python&logoColor=white)](https://www.python.org/downloads/)
 [![PyPI - Version](https://img.shields.io/pypi/v/gulps)](https://pypi.org/project/gulps/)
 [![CI](https://github.com/evmckinney9/gulps/actions/workflows/ci.yml/badge.svg)](https://github.com/evmckinney9/gulps/actions/workflows/ci.yml)
@@ -7,17 +7,7 @@
 [![Qiskit Ecosystem](https://qisk.it/e-0a8128d0)](https://qisk.it/e)
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/evmckinney9/gulps/blob/main/src/notebooks/00_quickstart.ipynb)
 
-GULPS (Global Unitary Linear Programming Synthesis) is the first open tool that **robustly compiles arbitrary two-qubit unitaries optimally into non-standard instruction sets**.  
-
-Most existing compilers only target CNOT gates. Analytical rules exist for a few special cases like fractional CNOT (XX family), Berkeley (B), and $\sqrt{\text{iSWAP}}$, but nothing more general. Numerical methods can in principle handle arbitrary gates, but they are slow, unreliable, and do not scale as instruction sets grow.  **GULPS fills this gap** by combining linear programming with lightweight numerics to achieve:  
-- Support for **fractional, continuous, or heterogeneous gate sets**.  
-- **Scalability to larger ISAs**, unlike black-box numerical methods.  
-- A fast, practical tool integrated with Qiskit if you study **gate compilation from two-body Hamiltonians** or parameterized unitary families.
-
-#### 📌 Read the preprint: [GULPS: Two-Qubit Gate Synthesis via Linear Programming for Heterogeneous Instruction Sets](https://arxiv.org/abs/2505.00543)
-
-> [!IMPORTANT]
-> GULPS is a general-purpose numerical method. If your ISA has a known analytical decomposition (e.g., Qiskit's `XXDecomposer` for CX/RZX families), prefer that. Specialized solvers will typically be faster and more precise for the gates they target.
+GULPS compiles arbitrary two-qubit unitaries into fractional, continuous, or heterogeneous native gate sets via a linear program over monodromy reachability. On Haar-random targets it is >500× faster than [BQSKit](https://github.com/BQSKit/bqskit) and [NuOp](https://github.com/prakashmurali/NuOp) at strictly lower circuit cost ([paper](https://arxiv.org/abs/2505.00543), [`02_benchmarks`](src/notebooks/02_benchmarks.ipynb)).
 
 ______
 ### Getting Started
@@ -25,13 +15,16 @@ ______
 ```bash
 pip install gulps
 ```
-**Optional extras:**
+
+Optional extras:
+
 | Extra | Install | What it adds |
 |-------|---------|--------------|
-| `monodromy` | `pip install -r requirements-monodromy.txt` | Precomputes monodromy polytope coverage sets for direct lookup. Also requires `lrslib` (`sudo apt-get install lrslib`). |
-| `cplex` | `pip install "gulps[cplex]"` | CPLEX-based continuous LP solver. Works but slower than the discrete path. |
-| `dev` | `pip install "gulps[dev]"` | Plotting, Jupyter, linting, etc. |
-| `test` | `pip install "gulps[test]"` | Adds `pytest`. |
+| `monodromy` | `pip install -r requirements-monodromy.txt` | Polytope coverage sets for direct lookup. Requires `lrslib`. |
+| `cplex` | `pip install "gulps[cplex]"` | CPLEX continuous LP solver. |
+| `dev` | `pip install "gulps[dev]"` | Plotting, Jupyter, linting. |
+| `test` | `pip install "gulps[test]"` | `pytest`. |
+
 ___
 
 #### Qiskit Transpiler Plugin (recommended)

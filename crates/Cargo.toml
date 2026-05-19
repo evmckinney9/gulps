@@ -7,6 +7,18 @@ edition = "2021"
 name = "_accelerate"
 crate-type = ["cdylib"]
 path = "src/lib.rs"
+doctest = false
+
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[lints.clippy]
+print_stdout = "deny"
+print_stderr = "deny"
+op_ref = "allow"
+assign_op_pattern = "allow"
+type_complexity = "allow"
+too_many_arguments = "allow"
 
 [dependencies]
 pyo3 = { version = "=0.27.2", features = ["extension-module", "abi3-py310"] }
@@ -19,5 +31,6 @@ rand = { version = "0.9", features = ["small_rng"] }
 rayon = "1.10"
 
 [profile.release]
-lto = "thin"
+lto = "fat"
 codegen-units = 1
+strip = "symbols"

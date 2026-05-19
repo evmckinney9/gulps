@@ -1,27 +1,11 @@
-//! Gate primitive definitions for two-qubit invariants and coordinates.
-//!
-//! Mathematical objects: basis matrices, invariant functions, coordinate
-//! transforms, and SU(2) parameterization.  All functions operate on
-//! stack-allocated nalgebra matrices with no heap allocation.
+//! Basis matrices, two-qubit invariants, coordinate transforms, and the
+//! SU(2) parameterization.
 
-use faer::Mat;
-use nalgebra::{Complex, Matrix2, Matrix4};
+use crate::linalg::{eigenphases_4x4, normalize_quat};
+use crate::{Mat2, Mat4, C0, C1, C64, CI, CM1};
 use std::f64::consts::{FRAC_1_SQRT_2, PI};
 
-pub type C64 = Complex<f64>;
-pub type Mat4 = Matrix4<C64>;
-pub type Mat2 = Matrix2<C64>;
-
-// Frequently used complex constants.
-pub const C0: C64 = C64::new(0.0, 0.0);
-pub const C1: C64 = C64::new(1.0, 0.0);
-pub const CI: C64 = C64::new(0.0, 1.0);
-pub const CM1: C64 = C64::new(-1.0, 0.0);
-
-/// Project a 4×4 unitary to SU(4) by removing the determinant phase.
-///
-/// Returns (U_su4, global_phase) where det(U_su4) = 1 and
-/// U_su4 = exp(-i·arg(det)/4) · U.
+/// Project a 4×4 unitary onto SU(4), returning it and the phase removed.
 pub fn project_su4(u: &Mat4) -> (Mat4, f64) {
     let det = u.determinant();
     let quarter_phase = -det.arg() * 0.25;
@@ -29,32 +13,24 @@ pub fn project_su4(u: &Mat4) -> (Mat4, f64) {
     (u * phase, det.arg() / 4.0)
 }
 
-// ---------------------------------------------------------------------------
-// Basis matrices (constructed per call - compiler constant-folds these)
-// ---------------------------------------------------------------------------
-
-/// Magic basis Q = (H⊗I)·CX·(I⊗S†), normalized by 1/√2.
+/// Magic basis, normalized by 1/√2.
 pub fn magic() -> Mat4 {
     let s = C64::new(FRAC_1_SQRT_2, 0.0);
     let si = C64::new(0.0, FRAC_1_SQRT_2);
     Mat4::new(s, C0, C0, si, C0, si, s, C0, C0, si, -s, C0, s, C0, C0, -si)
 }
 
-/// MAGIC†  (conjugate transpose of magic basis).
+/// MAGIC†.
 pub fn magic_dag() -> Mat4 {
     magic().adjoint()
 }
 
-/// σ_y ⊗ σ_y  (real, symmetric, unitary, self-inverse).
+/// σ_y ⊗ σ_y.
 pub fn sysy() -> Mat4 {
     Mat4::new(
         C0, C0, C0, CM1, C0, C0, C1, C0, C0, C1, C0, C0, CM1, C0, C0, C0,
     )
 }
-
-// ---------------------------------------------------------------------------
-// Invariant functions
-// ---------------------------------------------------------------------------
 
 /// Makhlin invariants [Re(G1), Im(G1), Re(G2)] of a 4×4 unitary.
 pub fn makhlin_invariants(u: &Mat4) -> [f64; 3] {
@@ -69,7 +45,7 @@ pub fn makhlin_invariants(u: &Mat4) -> [f64; 3] {
     let m = um.transpose() * um; // transpose, NOT adjoint
     let t1 = m.trace();
     let t1s = t1 * t1;
-    // tr(M²) = Σᵢⱼ M[i,j]·M[j,i] - 16 multiply-adds, avoids full matmul
+    // tr(M^2) without forming M*M
     let mut tr_m2 = C0;
     for i in 0..4 {
         for j in 0..4 {
@@ -81,84 +57,27 @@ pub fn makhlin_invariants(u: &Mat4) -> [f64; 3] {
     [g1.re, g1.im, g2.re]
 }
 
-/// Extract eigenvalue phases / π from a 4×4 unitary matrix.
-///
-/// Uses faer's eigenvalue decomposition, which handles degenerate eigenvalues
-/// correctly (LAPACK-grade QR with proper deflation).
-fn eigenphases_4x4(m: &Mat4) -> [f64; 4] {
-    // nalgebra Mat4<C64> → faer Mat<C64> (C64 IS num_complex::Complex<f64>)
-    let fm = Mat::<C64>::from_fn(4, 4, |i, j| m[(i, j)]);
-    let eigvals = fm.eigenvalues().expect("eigenvalue decomposition failed");
-
-    let mut phases = [0.0f64; 4];
-    for (i, ev) in eigvals.iter().enumerate() {
-        let mut p = ev.arg() / PI;
-        if p < -0.5 + 1e-12 {
-            p += 2.0;
-        }
-        phases[i] = p;
-    }
-    phases
-}
-
-/// Eigendecomposition of a 4×4 matrix returning eigenvalues, phases, and
-/// right eigenvectors.
-///
-/// Returns (eigenvalues, phases/π, eigenvectors) where eigenvectors[i] is
-/// the right eigenvector for eigenvalue i.
-pub fn eigendecomp_4x4(m: &Mat4) -> ([C64; 4], [f64; 4], [[C64; 4]; 4]) {
-    let fm = Mat::<C64>::from_fn(4, 4, |i, j| m[(i, j)]);
-    let evd = fm.eigen().expect("eigendecomposition failed");
-
-    let mut eigvals = [C0; 4];
-    let mut phases = [0.0f64; 4];
-    let mut vecs = [[C0; 4]; 4];
-
-    for (i, ev) in evd.S().column_vector().iter().enumerate() {
-        eigvals[i] = *ev;
-        let mut p = ev.arg() / PI;
-        if p < -0.5 + 1e-12 {
-            p += 2.0;
-        }
-        phases[i] = p;
-    }
-    let u = evd.U();
-    for i in 0..4 {
-        for j in 0..4 {
-            vecs[i][j] = u[(j, i)]; // column i, row j
-        }
-    }
-
-    (eigvals, phases, vecs)
-}
-
-/// Weyl chamber coordinates (c1, c2, c3) in units of π.
-///
-/// Folded to canonical chamber: c1 ≥ c2 ≥ c3 ≥ 0, c1 ≤ 0.5 on the c3=0
-/// face. c1 can exceed 0.5 when c3 > 0 (distinct local equivalence class).
+/// Weyl chamber coordinates (c1, c2, c3) in units of π, folded to
+/// c1 ≥ c2 ≥ c3 ≥ 0. c1 may exceed 0.5 when c3 > 0.
 pub fn weyl_coordinates(u: &Mat4) -> [f64; 3] {
     let (u_su4, _) = project_su4(u);
 
-    // Ũ = (σ_y⊗σ_y) Uᵀ (σ_y⊗σ_y)
     let sy = sysy();
     let u_tilde = sy * u_su4.transpose() * sy;
 
-    // Eigenvalue phases of U·Ũ (bounded Schur with quartic fallback)
     let product = u_su4 * u_tilde;
     let two_s = eigenphases_4x4(&product);
 
-    // Sort descending, halve
     let mut s = two_s.map(|x| x / 2.0);
     s.sort_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
 
-    // Alcove normalization
+    // alcove normalization
     let sum: f64 = s.iter().sum();
     let n = sum.round() as usize;
     for item in s.iter_mut().take(n.min(4)) {
         *item -= 1.0;
     }
 
-    // Circular shift left by n
     let shift = n % 4;
     let rolled = [
         s[shift % 4],
@@ -167,31 +86,27 @@ pub fn weyl_coordinates(u: &Mat4) -> [f64; 3] {
         s[(3 + shift) % 4],
     ];
 
-    // M_WEYL @ rolled[:3]  →  c = (s0+s1, s0+s2, s1+s2)
     let c1 = rolled[0] + rolled[1];
     let c2 = rolled[0] + rolled[2];
     let c3 = rolled[1] + rolled[2];
 
-    // Canonical folding: c3 < 0 ↦ (1−c1, c2, −c3).
-    // Uses tolerance to avoid spurious folds on floating-point negative zero,
-    // which causes CX-face (c3≡0) coordinates to oscillate between c1 and 1−c1.
-    let (c1, c3) = if c3 < -1e-15 { (1.0 - c1, -c3) } else { (c1, c3) };
+    // c3 < 0 ↦ (1−c1, c2, −c3); tolerance avoids the c3≡0 oscillation
+    // between c1 and 1−c1 from floating-point negative zero.
+    let (c1, c3) = if c3 < -1e-15 {
+        (1.0 - c1, -c3)
+    } else {
+        (c1, c3)
+    };
 
     [c1, c2.max(0.0), c3.max(0.0)]
 }
 
-// ---------------------------------------------------------------------------
-// Coordinate transforms
-// ---------------------------------------------------------------------------
-
-/// Monodromy → Weyl: c = M_WEYL @ m[:3] where M_WEYL = [[1,1,0],[1,0,1],[0,1,1]].
+/// Monodromy to Weyl coordinates.
 pub fn weyl_from_monodromy(m: &[f64; 3]) -> [f64; 3] {
     [m[0] + m[1], m[0] + m[2], m[1] + m[2]]
 }
 
-/// Weyl → Monodromy (inverse of M_WEYL).
-///
-/// M_WEYL⁻¹ = 0.5 × [[1,1,-1],[1,-1,1],[-1,1,1]].
+/// Weyl to monodromy coordinates (inverse of weyl_from_monodromy).
 pub fn monodromy_from_weyl(c1: f64, c2: f64, c3: f64) -> [f64; 3] {
     [
         0.5 * (c1 + c2 - c3),
@@ -200,9 +115,7 @@ pub fn monodromy_from_weyl(c1: f64, c2: f64, c3: f64) -> [f64; 3] {
     ]
 }
 
-/// Canonical unitary exp(-i(a·XX + b·YY + c·ZZ)) from Weyl coordinates.
-///
-/// c1, c2, c3 in normalized [0,1] units (multiply by π/2 for radians).
+/// Canonical two-qubit gate from Weyl coordinates `(c1, c2, c3) ∈ [0,1]` (radians = c·π/2).
 pub fn canonical_matrix(c1: f64, c2: f64, c3: f64) -> Mat4 {
     let a = PI / 2.0 * c1;
     let b = PI / 2.0 * c2;
@@ -247,19 +160,9 @@ pub fn weyl_res_both_branches(c: &[f64; 3], target: &[f64; 3]) -> f64 {
     direct.min(reflected)
 }
 
-// ---------------------------------------------------------------------------
-// Parameterization: 8D quaternion pairs → SU(2) × SU(2)
-// ---------------------------------------------------------------------------
-
-/// Normalized quaternion (w,x,y,z) → 2×2 SU(2) matrix.
+/// Normalized quaternion (w,x,y,z) to a 2×2 SU(2) matrix.
 fn quat_to_su2(q: &[f64]) -> Mat2 {
-    let norm = (q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3])
-        .sqrt()
-        .max(1e-12);
-    let w = q[0] / norm;
-    let x = q[1] / norm;
-    let y = q[2] / norm;
-    let z = q[3] / norm;
+    let ([w, x, y, z], _) = normalize_quat(q);
     let a = C64::new(w, z);
     let b = C64::new(x, y);
     Mat2::new(a, b, -b.conj(), a.conj())
