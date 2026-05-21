@@ -9,6 +9,9 @@
 
 GULPS compiles arbitrary two-qubit unitaries into fractional, continuous, or heterogeneous native gate sets via a linear program over monodromy reachability. On Haar-random targets it is >500× faster than [BQSKit](https://github.com/BQSKit/bqskit) and [NuOp](https://github.com/prakashmurali/NuOp) at strictly lower circuit cost ([paper](https://arxiv.org/abs/2505.00543), [`02_benchmarks`](src/notebooks/02_benchmarks.ipynb)).
 
+> [!NOTE]
+> Paper benchmarks: GULPS 0.3.7 vs Qiskit 2.3.1. Qiskit 2.4 closes most of the `XXDecomposer` speed gap, as §V anticipated, though the remaining margin depends on whether you call the decomposer directly or run it inside a full-circuit transpile (see [`05_xxdecomposer`](src/notebooks/05_xxdecomposer.ipynb) for both). If a specialized decomposer exists for your ISA, use it. GULPS is for when none does.
+
 ______
 ### Getting Started
 
