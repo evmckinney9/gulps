@@ -19,41 +19,20 @@ from dataclasses import dataclass
 
 @dataclass
 class GulpsConfig:
-    """Configuration for GULPS decomposition pipeline.
+    """Tunables for the GULPS decomposition pipeline."""
 
-    This dataclass consolidates all tunable parameters for the GULPS decomposition
-    pipeline in one place, including tolerances, solver parameters, and algorithmic
-    settings. Adjust these values to trade off between accuracy and performance.
-
-    Tolerance Attributes:
-        lp_feasibility_tol: Linear program primal/dual feasibility tolerance.
-            Used in scipy linprog solver. Default: 1e-10
-        makhlin_conv_tol: Makhlin invariant convergence tolerance.
-            Maximum residual for the GN restart loop's early-exit. Default: 1e-9
-        weyl_conv_tol: Weyl coordinate convergence tolerance.
-            Maximum residual for Weyl-based early-exit and inline
-            polish. Default: 1e-5
-
-
-    Diagnostics Attributes:
-        flag_duration: If a single decomposition exceeds this time (seconds),
-            emit a warning.  Set to 0 to disable.  Default: 0.05 (50ms)
-
-    Solver Attributes:
-        min_batch_size: Minimum segment count before Rayon parallelizes. Default: 6
-        identity_warmstart: Seed GN restart 0 with identity SU(2) params
-            (u0 = u1 = I) instead of random init. Effect is basis-dependent;
-            benchmark on the target ISA before enabling. Default: False.
-    """
-
-    # Tolerances
+    # Primal/dual feasibility tolerance for the Rust DualSimplex.
     lp_feasibility_tol: float = 1e-10
+    # GN restart-loop early-exit residual (Makhlin invariants).
     makhlin_conv_tol: float = 1e-9
+    # Weyl-coordinate early-exit + inline-polish residual.
     weyl_conv_tol: float = 1e-5
 
-    # Diagnostics
+    # Per-call slow-decomposition warning threshold in seconds; 0 disables.
     flag_duration: float = 0.05
 
-    # Solver parameters
+    # Minimum segment count before Rayon parallelizes restarts inside Rust.
     min_batch_size: int = 6
+    # Seed GN restart 0 with u0 = u1 = I instead of random init. Basis-
+    # dependent; benchmark on the target ISA before enabling.
     identity_warmstart: bool = False

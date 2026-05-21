@@ -17,9 +17,7 @@ References:
 
 import numpy as np
 
-# ---------------------------------------------------------------------------
 # Named points in the Weyl chamber (coordinates in units of π)
-# ---------------------------------------------------------------------------
 _WEYL_POINTS = {
     "O": np.array((0.0, 0.0, 0.0)),
     "A1": np.array((1.0, 0.0, 0.0)),
@@ -80,7 +78,6 @@ class WeylChamber:
             "Q": _WEYL_POINTS["Q"] + np.array((0.0, 0.01, 0.03)),
         }
 
-    # ------------------------------------------------------------------
     def render(self, ax):
         """Render the Weyl chamber wireframe on *ax* (an ``Axes3D``)."""
         self.ax = ax
@@ -139,17 +136,12 @@ class WeylChamber:
             t.set_va("center")
             t.set_ha("right")
 
-    # ------------------------------------------------------------------
     @staticmethod
     def _line(ax, origin, end, **kwargs):
         o = _WEYL_POINTS[origin] if isinstance(origin, str) else origin
         e = _WEYL_POINTS[end] if isinstance(end, str) else end
         ax.plot([o[0], e[0]], [o[1], e[1]], [o[2], e[2]], **kwargs)
 
-
-# ---------------------------------------------------------------------------
-# Weyl-chamber grid sampling (no matplotlib dependency)
-# ---------------------------------------------------------------------------
 
 # Tetrahedron vertices reused from _WEYL_POINTS
 _VERTICES = np.array(
