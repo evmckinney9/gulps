@@ -80,7 +80,7 @@ class ContinuousISAConstraints(ISAConstraints):
 
     Semicontinuous k variables with binary depth indicators and rho selector.
     Gate monodromy g_i = B * k_i is substituted directly into QLR constraints
-    (no auxiliary gi variables). Model is built once and reused — only the
+    (no auxiliary gi variables). Model is built once and reused; only the
     target RHS changes per solve.
     """
 
@@ -115,21 +115,33 @@ class ContinuousISAConstraints(ISAConstraints):
         self.model = self._create_model()
         self._target_cts: list = []
 
-    def set_target(self, target: GateInvariants) -> None:
-        """Set the target gate invariants for the constraint RHS.
+    def solve(
+        self, target: GateInvariants, log_output: bool = False
+    ) -> ConstraintSolution:
+        """Solve the MILP for ``target``.
 
-        Uses a binary variable d_rho to select between direct and rho-reflected
-        orientations in a single solve: c_N = T_rho + d_rho * (T - T_rho).
-        When d_rho=1 → c_N = T (direct). When d_rho=0 → c_N = T_rho.
+        Rho orientation is picked internally by the binary ``d_rho`` variable
+        in a single MILP solve.
+        """
+        self._update_target_constraints(target)
+        sol = self.model.solve(log_output=log_output)
+        if not sol:
+            return ConstraintSolution(success=False)
+        return self._extract_solution(sol)
+
+    def _update_target_constraints(self, target: GateInvariants) -> None:
+        """Swap in the new target's RHS constraints.
+
+        Encoding: ``c_N = T_rho + d_rho * (T - T_rho)``, so when ``d_rho=1``
+        the LP solves for direct, when ``d_rho=0`` for the rho-reflected
+        orientation. The MILP picks whichever yields lower cost.
         """
         t_direct = np.asarray(target.monodromy[:3], dtype=float)
         t_rho = np.asarray(target.rho_reflect.monodromy[:3], dtype=float)
         delta = t_direct - t_rho
-
         if self._target_cts:
             self.model.remove_constraints(self._target_cts)
             self._target_cts.clear()
-
         self._target_cts = [
             self.model.add_constraint(
                 self.ci_nested[-1][j] - self.d_rho * float(delta[j]) == float(t_rho[j])
@@ -137,22 +149,10 @@ class ContinuousISAConstraints(ISAConstraints):
             for j in range(3)
         ]
 
-    def solve(
-        self, target: GateInvariants, log_output: bool = False
-    ) -> ConstraintSolution:
-        """Solve MILP with internal rho selection via binary d_rho variable."""
-        self.set_target(target)
-        return self.solve_single(log_output=log_output)
-
-    def solve_single(self, log_output: bool = False) -> ConstraintSolution:
-        """Solve the MILP once and extract results."""
-        sol = self.model.solve(log_output=log_output)
-        if not sol:
-            return ConstraintSolution(success=False)
-
+    def _extract_solution(self, sol) -> ConstraintSolution:
+        """Pull ks, intermediates, cost from a successful CPLEX solution."""
         ks = [float(sol.get_value(self.k_vars[i])) for i in range(self.N)]
         depth = sum(1 for k in ks if k > self.k_lb / 2)
-
         if depth == 0:
             return ConstraintSolution(
                 success=True,
@@ -161,14 +161,12 @@ class ContinuousISAConstraints(ISAConstraints):
                 parameters=(),
                 cost=self.single_qubit_cost,
             )
-
         cis = [
             np.array(
                 [sol.get_value(self.ci_nested[i][j]) for j in range(3)], dtype=float
             )
             for i in range(self.N - 1)
         ]
-
         gi_list = [
             GateInvariants.from_unitary(self.base.gate.power(k), name=self.base.name)
             for k in ks[:depth]
@@ -176,7 +174,6 @@ class ContinuousISAConstraints(ISAConstraints):
         intermediate_invariants = (gi_list[0],) + tuple(
             GateInvariants(tuple(c)) for c in cis[: depth - 1]
         )
-
         return ConstraintSolution(
             success=True,
             sentence=tuple(gi_list),
@@ -191,7 +188,7 @@ class ContinuousISAConstraints(ISAConstraints):
         Tuned via one-at-a-time sweep + combination validation across
         4 gate types (CX, iSWAP, SWAP, fSim) × 2 sqc values (0.1, 1.0).
         Key finding: presolve=0 is the biggest single win (~35% median
-        reduction) — the model is small enough that presolve overhead
+        reduction); the model is small enough that presolve overhead
         exceeds its benefit. Disabling MIP heuristics, RINS, cut passes,
         and probing removes ~10% more overhead.
         """
@@ -211,7 +208,7 @@ class ContinuousISAConstraints(ISAConstraints):
         self.k_vars = m.semicontinuous_var_list(self.N, lb=self.k_lb)
         # Binary rho selector: d_rho = 1 → direct, d_rho = 0 → rho-reflected.
         self.d_rho = m.binary_var()
-        # Free intermediate monodromy nodes (no gi variables — substituted out).
+        # Free intermediate monodromy nodes (no gi variables; substituted out).
         self.ci_nested = [
             m.continuous_var_list(3, lb=-1.0, ub=1.0) for _ in range(self.N - 1)
         ]

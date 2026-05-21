@@ -18,22 +18,18 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Iterator
 
 import numpy as np
 from qiskit import QuantumCircuit
 from qiskit.circuit import Gate
-from qiskit.circuit.library import UnitaryGate
-from qiskit.converters import circuit_to_dag, dag_to_circuit
 from qiskit.dagcircuit import DAGCircuit
 
 from gulps import GateInvariants
-from gulps._accelerate import recover_local_equiv as recover_local_equivalence
 from gulps.config import GulpsConfig
 from gulps.core.isa import ContinuousISA, DiscreteISA, ISAInvariants
 from gulps.core.segments import SegmentSynthesizer
-from gulps.linear_program.lp_abc import ConstraintSolution
-from gulps.linear_program.lp_solver import LPSolverCache, MinimalOrderedISAConstraints
+from gulps.linear_program.lp_dispatch import best_decomposition_batch
+from gulps.linear_program.lp_solver import LPSolverCache
 
 logger = logging.getLogger(__name__)
 
@@ -132,194 +128,20 @@ class GulpsDecomposer:
         self.config = config_options or GulpsConfig()
 
         self._lp_cache = LPSolverCache()
+        # MOC cache: ``MinimalOrderedISAConstraints`` keyed by sentence tuple.
+        self._moc_cache: dict[tuple, object] = {}
         self._local_synthesis = SegmentSynthesizer(config=self.config)
         self._continuous_lp = None  # lazily built on first continuous solve
 
-        # Lazy sentence cache for discrete ISAs without polytope lookup.
-        # Grows on demand: each _try_discrete_lp call scans the cached prefix,
-        # then pulls from the generator only if no feasible sentence was found.
-        # Avoids eager materialization of deep sentences that easy targets never need.
-        self._sentence_cache: list[tuple[float, MinimalOrderedISAConstraints]] = []
-        self._sentence_iter: Iterator | None = None
-        if (
-            not self._is_continuous
-            and isinstance(self.isa, DiscreteISA)
-            and not self.isa._precompute_polytopes
-        ):
-            self._sentence_iter = self.isa.enumerate()
-
-    def _eval_edge_case(
-        self, target: GateInvariants, return_dag: bool
-    ) -> QuantumCircuit | DAGCircuit | None:
-        """Check if target is locally equivalent to identity.
-
-        This fast path handles the edge case where the target can be synthesized
-        using only single-qubit gates (no two-qubit gate needed).
-
-        Args:
-            target: GateInvariants representation of the target unitary.
-            return_dag: If True, return DAGCircuit instead of QuantumCircuit.
-
-        Returns:
-            Synthesized circuit if target is identity, None otherwise.
-        """
-        # Check if target is locally equivalent to identity
-        if target.is_identity or target.rho_reflect.is_identity:
-            if logger.isEnabledFor(logging.DEBUG):
-                logger.debug("Target is identity, returning empty circuit")
-            k1, k2, k3, k4, gphase = recover_local_equivalence(
-                target.matrix,
-                np.eye(4, dtype=np.complex128),
-            )
-            dag = circuit_to_dag(QuantumCircuit(2, global_phase=gphase))
-            qreg = dag.qregs["q"]
-            dag.apply_operation_back(UnitaryGate(k1, check_input=False), [qreg[0]])
-            dag.apply_operation_back(UnitaryGate(k2, check_input=False), [qreg[1]])
-            dag.apply_operation_back(UnitaryGate(k3, check_input=False), [qreg[0]])
-            dag.apply_operation_back(UnitaryGate(k4, check_input=False), [qreg[1]])
-            return dag if return_dag else dag_to_circuit(dag)
-
-        return None
-
-    def _try_discrete_lp(
-        self, target: GateInvariants, log_output: bool = False
-    ) -> ConstraintSolution:
-        """Find optimal decomposition using discrete ISA.
-
-        Uses polytope lookup if precomputed, otherwise iterates sentences in
-        cost order via a lazy cache that grows on demand from enumerate().
-
-        Args:
-            target: Alcove-normalized target gate invariants.
-            log_output: If True, enable verbose LP solver output.
-
-        Returns:
-            ConstraintSolution with success=True if a valid decomposition is found.
-        """
-        if self.isa._precompute_polytopes:
-            sentence = self.isa.polytope_lookup(target)
-            if sentence is None:
-                raise RuntimeError(
-                    f"No precomputed ISA sentence found for target with monodromy {target.monodromy}. "
-                    f"The target may lie outside all polytope coverage. "
-                    f"Try disabling precompute_polytopes or expanding the gate set."
-                )
-            constraints = MinimalOrderedISAConstraints(
-                sentence, config=self.config, solver_cache=self._lp_cache
-            )
-            return constraints.solve(target, log_output=log_output)
-
-        tol = self.config.lp_feasibility_tol
-        target_strength = target.strength
-
-        # Scan already-cached sentences (flat list, no heap overhead).
-        for strength, constraints in self._sentence_cache:
-            if strength < target_strength - tol:
-                continue
-            result = constraints.solve(target, log_output=log_output)
-            if result.success:
-                return result
-
-        # Extend cache from generator until a feasible sentence is found.
-        if self._sentence_iter is not None:
-            for sentence in self._sentence_iter:
-                strength = sum(g.strength for g in sentence)
-                constraints = MinimalOrderedISAConstraints(
-                    sentence, config=self.config, solver_cache=self._lp_cache
-                )
-                self._sentence_cache.append((strength, constraints))
-                if strength < target_strength - tol:
-                    continue
-                result = constraints.solve(target, log_output=log_output)
-                if result.success:
-                    return result
-            self._sentence_iter = None  # exhausted
-
-        return ConstraintSolution(success=False)
-
-    def _try_continuous_lp(
-        self, target: GateInvariants, log_output: bool = False
-    ) -> ConstraintSolution:
-        """Find optimal decomposition using continuous ISA.
-
-        Single LP/MILP solve with continuous gate parameters.
-        For single-family ISA: uses LP (ContinuousISAConstraints)
-        For multi-family ISA: uses MILP (HeterogeneousContinuousISAConstraints)
-
-        Args:
-            target: Alcove-normalized target gate invariants.
-            log_output: If True, enable verbose LP solver output.
-
-        Returns:
-            ConstraintSolution with success=True if a valid decomposition is found.
-        """
-        if self._continuous_lp is None:
-            # Lazy import to avoid requiring CPLEX for discrete-only usage.
-            # Model is built once and reused - only the target RHS changes.
-            if self.isa.is_single_family:
-                from gulps.linear_program.cplex_lp import ContinuousISAConstraints
-
-                self._continuous_lp = ContinuousISAConstraints(
-                    base=self.isa.gate_set[0],
-                    max_sequence_length=self.isa.max_sequence_length,
-                    k_lb=self.isa.k_lb,
-                    single_qubit_cost=self.isa.single_qubit_cost,
-                    config=self.config,
-                )
-            else:
-                from gulps.linear_program.cplex_lp import (
-                    HeterogeneousContinuousISAConstraints,
-                )
-
-                self._continuous_lp = HeterogeneousContinuousISAConstraints(
-                    isa=self.isa,
-                    max_sequence_length=self.isa.max_sequence_length,
-                    config=self.config,
-                )
-        constraints = self._continuous_lp
-
-        return constraints.solve(target, log_output=log_output)
-
     def _best_decomposition(
-        self, alcove_target: GateInvariants, log_output: bool = False
-    ) -> ConstraintSolution:
-        """Find the optimal gate sentence and intermediate invariants for the target.
-
-        Dispatches to discrete or continuous LP solver based on ISA type.
-
-        Args:
-            alcove_target: Target gate invariants in alcove-normalized form.
-            log_output: If True, enable verbose LP solver output.
-
-        Returns:
-            ConstraintSolution with sentence and intermediates.
-
-        Raises:
-            RuntimeError: If no valid decomposition found.
-        """
-        if self._is_continuous:
-            result = self._try_continuous_lp(alcove_target, log_output=log_output)
-        else:
-            result = self._try_discrete_lp(alcove_target, log_output=log_output)
-
-        if not result.success:
-            raise RuntimeError(
-                f"No valid ISA sentence found for target with monodromy {alcove_target.monodromy}. "
-                f"All candidates failed the LP feasibility check. "
-                f"For small fractional basis gates, consider increasing isa.max_sequence_length. "
-                f"This may indicate insufficient gate set strength or numerical issues."
-            )
-
-        # NOTE, not strictly necessary, but convenient for downstream cost calculations
-        # and for matching the ConstraintSolution attributes from continuous LPs
-        if not self._is_continuous:
-            result.parameters = [self.isa.cost_dict[s] for s in result.sentence]
-            result.cost = (
-                sum(result.parameters)
-                + (len(result.sentence) + 1) * self.isa.single_qubit_cost
-            )
-
-        return result
+        self,
+        alcove_target: GateInvariants,
+        log_output: bool = False,
+    ):
+        """Single-target LP via :func:`best_decomposition_batch` (sentence + intermediates only)."""
+        return best_decomposition_batch(self, [alcove_target], log_output=log_output)[
+            alcove_target
+        ]
 
     def _run(
         self,
@@ -327,33 +149,15 @@ class GulpsDecomposer:
         return_dag: bool = False,
         log_output: bool = False,
     ) -> QuantumCircuit | DAGCircuit:
-        """Core decomposition routine.
+        """LP + segment synthesis on a single target.
 
-        Args:
-            target: Two-qubit unitary as 4x4 numpy array or Qiskit Gate.
-            return_dag: If True, return DAGCircuit instead of QuantumCircuit.
-            log_output: If True, enable verbose LP solver output.
-
-        Returns:
-            Quantum circuit implementing the target unitary using the configured ISA.
-
-        Raises:
-            RuntimeError: If no valid sentence found or segment synthesis fails.
-            ValueError: If gate_list and invariant_list have mismatched lengths or < 2 gates.
-
-        Note:
-            Timing information for the last decomposition is stored in self.last_timing
-            with keys 'init', 'lp_sentence', 'numerics', 'stitch', 'total' (in seconds).
+        Populates ``self.last_timing`` with keys ``init``, ``lp_sentence``,
+        ``numerics``, ``stitch``, ``total`` (seconds).
         """
-        t_start = time.perf_counter()  # TIMING
+        t_start = time.perf_counter()
         alcove_target = GateInvariants.from_unitary(target)
 
-        edge_output = self._eval_edge_case(alcove_target, return_dag)
-        if edge_output is not None:
-            return edge_output
-
-        # --- A) LP ---
-        t0 = time.perf_counter()  # TIMING
+        t0 = time.perf_counter()
         result = self._best_decomposition(alcove_target, log_output=log_output)
         sentence = result.sentence
         intermediates = result.intermediates
@@ -362,17 +166,15 @@ class GulpsDecomposer:
             logger.debug(f"Sentence: {[g.name for g in sentence]}")
             logger.debug(f"Intermediates: {[g.logspec for g in intermediates]}")
 
-        # --- B1) Segment synthesis ---
-        t1 = time.perf_counter()  # TIMING
+        t1 = time.perf_counter()
         stitched_circuit = self._local_synthesis.synthesize_segments(
             gate_list=sentence,
             invariant_list=intermediates,
             target=alcove_target,
             return_dag=return_dag,
         )
-        t2 = time.perf_counter()  # TIMING
+        t2 = time.perf_counter()
 
-        # Store timing info for analysis
         phase = self._local_synthesis.last_phase_timing
         self.last_timing = {
             "init": t0 - t_start,
@@ -412,7 +214,7 @@ class GulpsDecomposer:
             Single-qubit gates are returned as generic UnitaryGate objects.
 
         Raises:
-            RuntimeError: If no valid sentence found or segment synthesis fails.
+            LPInfeasibleError: If no valid sentence found for the target.
             ValueError: If target is not a valid two-qubit unitary.
 
         Examples:

@@ -10,7 +10,7 @@ authors:
     given-names: "Lev S"
 url: "https://github.com/evmckinney9/gulps"
 repository-code: "https://github.com/evmckinney9/gulps"
-version: "0.3.7"
+version: "0.4.0"
 date-released: "2026-05-15"
 license: "Apache-2.0"
 preferred-citation:

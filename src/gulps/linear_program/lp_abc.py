@@ -31,9 +31,11 @@ class ConstraintSolution:
             For continuous: gates instantiated from k values.
         intermediates: Intermediate invariants [C_1, ..., C_n] representing
             the path through monodromy space: I -> C_1 -> ... -> C_n = target.
-        parameters: Gate parameters (continuous only). For single-family
-            continuous ISA, these are the k values where G_i = k_i * base.
-        cost: Total cost of the decomposition (if computed by solver).
+        parameters: Per-gate parameters. For continuous single-family ISAs,
+            these are the k values where G_i = k_i * base. For discrete ISAs,
+            these are the per-gate costs from the ISA's cost_dict.
+        cost: Total decomposition cost (sum of parameters plus single-qubit
+            overhead). Populated for both discrete and continuous paths.
     """
 
     success: bool
@@ -44,28 +46,10 @@ class ConstraintSolution:
 
 
 class ISAConstraints(Protocol):
-    """Protocol for LP/MILP constraint solvers."""
-
-    def set_target(self, target: GateInvariants) -> None:
-        """Set the target gate invariants for the constraint RHS."""
-        ...
-
-    def solve_single(self, log_output: bool = False) -> "ConstraintSolution":
-        """Solve the LP/MILP with the current target."""
-        ...
+    """Protocol for LP/MILP constraint solvers. Single public method: solve."""
 
     def solve(
         self, target: GateInvariants, log_output: bool = False
     ) -> ConstraintSolution:
-        """Solve LP, trying both rho orientations and returning first success.
-
-        For discrete ISAs, cost is fixed by the sentence, so we return the first
-        feasible orientation. Continuous ISAs override this to compare costs.
-        """
-        self.set_target(target)
-        result = self.solve_single(log_output=log_output)
-        if result.success:
-            return result
-
-        self.set_target(target.rho_reflect)
-        return self.solve_single(log_output=log_output)
+        """Solve the LP/MILP for ``target``; pick the rho orientation internally."""
+        ...

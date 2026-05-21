@@ -1,4 +1,4 @@
-##  [GULPS](https://c.tenor.com/NAwgHzRfK_wAAAAC/tenor.gif)
+## [GULPS](https://c.tenor.com/NAwgHzRfK_wAAAAC/tenor.gif)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python&logoColor=white)](https://www.python.org/downloads/)
 [![PyPI - Version](https://img.shields.io/pypi/v/gulps)](https://pypi.org/project/gulps/)
 [![CI](https://github.com/evmckinney9/gulps/actions/workflows/ci.yml/badge.svg)](https://github.com/evmckinney9/gulps/actions/workflows/ci.yml)
@@ -7,17 +7,10 @@
 [![Qiskit Ecosystem](https://qisk.it/e-0a8128d0)](https://qisk.it/e)
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/evmckinney9/gulps/blob/main/src/notebooks/00_quickstart.ipynb)
 
-GULPS (Global Unitary Linear Programming Synthesis) is the first open tool that **robustly compiles arbitrary two-qubit unitaries optimally into non-standard instruction sets**.  
+GULPS compiles arbitrary two-qubit unitaries into fractional, continuous, or heterogeneous native gate sets via a linear program over monodromy reachability. On Haar-random targets it is >500× faster than [BQSKit](https://github.com/BQSKit/bqskit) and [NuOp](https://github.com/prakashmurali/NuOp) at strictly lower circuit cost ([paper](https://arxiv.org/abs/2505.00543), [`02_benchmarks`](src/notebooks/02_benchmarks.ipynb)).
 
-Most existing compilers only target CNOT gates. Analytical rules exist for a few special cases like fractional CNOT (XX family), Berkeley (B), and $\sqrt{\text{iSWAP}}$, but nothing more general. Numerical methods can in principle handle arbitrary gates, but they are slow, unreliable, and do not scale as instruction sets grow.  **GULPS fills this gap** by combining linear programming with lightweight numerics to achieve:  
-- Support for **fractional, continuous, or heterogeneous gate sets**.  
-- **Scalability to larger ISAs**, unlike black-box numerical methods.  
-- A fast, practical tool integrated with Qiskit if you study **gate compilation from two-body Hamiltonians** or parameterized unitary families.
-
-#### 📌 Read the preprint: [GULPS: Two-Qubit Gate Synthesis via Linear Programming for Heterogeneous Instruction Sets](https://arxiv.org/abs/2505.00543)
-
-> [!IMPORTANT]
-> GULPS is a general-purpose numerical method. If your ISA has a known analytical decomposition (e.g., Qiskit's `XXDecomposer` for CX/RZX families), prefer that. Specialized solvers will typically be faster and more precise for the gates they target.
+> [!NOTE]
+> Paper benchmarks: GULPS 0.3.7 vs Qiskit 2.3.1. Qiskit 2.4 closes most of the `XXDecomposer` speed gap, as §V anticipated, though the remaining margin depends on whether you call the decomposer directly or run it inside a full-circuit transpile (see [`05_xxdecomposer`](src/notebooks/05_xxdecomposer.ipynb) for both). If a specialized decomposer exists for your ISA, use it. GULPS is for when none does.
 
 ______
 ### Getting Started
@@ -25,13 +18,16 @@ ______
 ```bash
 pip install gulps
 ```
-**Optional extras:**
+
+Optional extras:
+
 | Extra | Install | What it adds |
 |-------|---------|--------------|
-| `monodromy` | `pip install -r requirements-monodromy.txt` | Precomputes monodromy polytope coverage sets for direct lookup. Also requires `lrslib` (`sudo apt-get install lrslib`). |
-| `cplex` | `pip install "gulps[cplex]"` | CPLEX-based continuous LP solver. Works but slower than the discrete path. |
-| `dev` | `pip install "gulps[dev]"` | Plotting, Jupyter, linting, etc. |
-| `test` | `pip install "gulps[test]"` | Adds `pytest`. |
+| `monodromy` | `pip install -r requirements-monodromy.txt` | Polytope coverage sets for direct lookup. Requires `lrslib`. |
+| `cplex` | `pip install "gulps[cplex]"` | CPLEX continuous LP solver. |
+| `dev` | `pip install "gulps[dev]"` | Plotting, Jupyter, linting. |
+| `test` | `pip install "gulps[test]"` | `pytest`. |
+
 ___
 
 #### Qiskit Transpiler Plugin (recommended)
@@ -127,7 +123,7 @@ from gulps.core.coverage import coverage_report
 
 coverage_report(isa.coverage_set)
 ```
-![isa_coverage](https://raw.githubusercontent.com/evmckinney9/gulps/main/images/isa_coverage.png)
+![isa_coverage](https://raw.githubusercontent.com/evmckinney9/gulps/main/.github/images/isa_coverage.png)
 
 Once a sentence is chosen, a linear program is used to determine a trajectory of intermediate invariants. These represent the cumulative two-qubit nonlocal action after each gate in the sentence, starting from the identity and ending at the target.
 ```python
@@ -141,14 +137,14 @@ plot_decomposition(
     constraint_sol.intermediates, constraint_sol.sentence, decomposer.isa
 );
 ```
-![example_cartan_trajectory](https://raw.githubusercontent.com/evmckinney9/gulps/main/images/example_cartan_trajectory.png)
+![example_cartan_trajectory](https://raw.githubusercontent.com/evmckinney9/gulps/main/.github/images/example_cartan_trajectory.png)
 
 In this example, the optimal sentence is composed of 2 $\sqrt[3]{\texttt{iSWAP}}$ gates and 1 $\sqrt[2]{\texttt{iSWAP}}$. That is, the resulting circuit falls into a parameterized ansatz like this:
-![full_ansatz](https://raw.githubusercontent.com/evmckinney9/gulps/main/images/full_ansatz.png)
+![full_ansatz](https://raw.githubusercontent.com/evmckinney9/gulps/main/.github/images/full_ansatz.png)
 
 Unlike other decomposition techniques, the linear program contains additional information about the intermediate points used to reduce the problem into simpler subproblems, each corresponding to a depth-2 circuit segment. In this case, the circuit has three segments, although the first red segment (beginning at Identity is trivial). That leaves two segments requiring synthesis:
 
-| ![ansatz_1](https://raw.githubusercontent.com/evmckinney9/gulps/main/images/ansatz_1.png) | ![ansatz_2](https://raw.githubusercontent.com/evmckinney9/gulps/main/images/ansatz_2.png) |
+| ![ansatz_1](https://raw.githubusercontent.com/evmckinney9/gulps/main/.github/images/ansatz_1.png) | ![ansatz_2](https://raw.githubusercontent.com/evmckinney9/gulps/main/.github/images/ansatz_2.png) |
 |:------------------------:|:------------------------:|
 | Red(2)                   | Blue                     |
 
@@ -161,18 +157,18 @@ circuit = decomposer._local_synthesis.synthesize_segments(
 )
 circuit.draw("mpl")
 ```
-![final](https://raw.githubusercontent.com/evmckinney9/gulps/main/images/final.png)
+![final](https://raw.githubusercontent.com/evmckinney9/gulps/main/.github/images/final.png)
 
 ___
 ### Notebooks
 | | Topic |
 |---|---|
-| [00_quickstart](src/notebooks/00_quickstart.ipynb) | Getting started with GULPS |
-| [01_decomposition_pipeline](src/notebooks/01_decomposition_pipeline.ipynb) | Step-by-step decomposition pipeline |
-| [02_benchmarks](src/notebooks/02_benchmarks.ipynb) | LP and solver performance benchmarks |
-| [03_continuous](src/notebooks/03_continuous.ipynb) | Continuous ISA with gate power as a free variable |
-| [04_mixed_continuous](src/notebooks/04_mixed_continuous.ipynb) | Multiple continuous gate families in one ISA |
-| [05_xxdecomposer](src/notebooks/05_xxdecomposer.ipynb) | Comparison with Qiskit's XXDecomposer |
+| [00_quickstart](https://github.com/evmckinney9/gulps/blob/main/src/notebooks/00_quickstart.ipynb) | Getting started with GULPS |
+| [01_decomposition_pipeline](https://github.com/evmckinney9/gulps/blob/main/src/notebooks/01_decomposition_pipeline.ipynb) | Step-by-step decomposition pipeline |
+| [02_benchmarks](https://github.com/evmckinney9/gulps/blob/main/src/notebooks/02_benchmarks.ipynb) | LP and solver performance benchmarks |
+| [03_continuous](https://github.com/evmckinney9/gulps/blob/main/src/notebooks/03_continuous.ipynb) | Continuous ISA with gate power as a free variable |
+| [04_mixed_continuous](https://github.com/evmckinney9/gulps/blob/main/src/notebooks/04_mixed_continuous.ipynb) | Multiple continuous gate families in one ISA |
+| [05_xxdecomposer](https://github.com/evmckinney9/gulps/blob/main/src/notebooks/05_xxdecomposer.ipynb) | Comparison with Qiskit's XXDecomposer |
 
 ___
 See more:

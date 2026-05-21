@@ -42,11 +42,6 @@ clean:  ## Remove temporary files and build artifacts
 	@rm -rf src/__pycache__
 	@rm -rf src/*.egg-info
 
-ab:
-	.venv/bin/python ./scripts/simple_speed.py
-	.venv/bin/python ./scripts/xx_compare.py
-	.venv/bin/python ./scripts/weyl_speed.py
-
 test:  ## Run pytest
 	@$(PIP) install -e .[test] --quiet
 	$(PYTEST) src/tests

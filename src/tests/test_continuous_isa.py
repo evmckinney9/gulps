@@ -7,11 +7,12 @@ CX, iSWAP, and SWAP gate families with continuous power parameterization.
 import numpy as np
 import pytest
 from qiskit.circuit.library import CXGate, SwapGate, iSwapGate
-from qiskit.quantum_info import Operator, average_gate_fidelity, random_unitary
+from qiskit.quantum_info import random_unitary
 
 from gulps.config import GulpsConfig
 from gulps.core.isa import ContinuousISA
 from gulps.gulps_decomposer import GulpsDecomposer
+from tests._common import assert_fidelity, count_2q
 
 try:
     import docplex  # noqa: F401
@@ -22,24 +23,10 @@ except ImportError:
 
 pytestmark = pytest.mark.skipif(not HAS_CPLEX, reason="CPLEX not installed")
 
-FIDELITY_TOL = 1 - 1e-8
 N_RANDOM = 10
 _CFG = GulpsConfig(flag_duration=0)
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-def _assert_fidelity(target, circuit, label=""):
-    fid = average_gate_fidelity(Operator(target), Operator(circuit))
-    assert fid > FIDELITY_TOL, (
-        f"Fidelity too low{' (' + label + ')' if label else ''}: {fid}"
-    )
-
-
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
 @pytest.fixture(
     params=[
         ("CX", CXGate()),
@@ -69,20 +56,17 @@ def continuous_decomposer_large_sqc(request):
     return GulpsDecomposer(isa=isa, config_options=_CFG)
 
 
-# ---------------------------------------------------------------------------
-# Tests
-# ---------------------------------------------------------------------------
 def test_random_unitaries(continuous_decomposer):
     """Random Haar unitaries should decompose correctly."""
     for seed in range(N_RANDOM):
         u = random_unitary(4, seed=seed)
-        _assert_fidelity(u, continuous_decomposer(u), f"seed={seed}")
+        assert_fidelity(u, continuous_decomposer(u), f"seed={seed}")
 
 
 def test_identity_target(continuous_decomposer):
     """Identity (zero entangling power) should decompose with no 2Q gates."""
     target = np.eye(4, dtype=complex)
-    _assert_fidelity(target, continuous_decomposer(target), "identity")
+    assert_fidelity(target, continuous_decomposer(target), "identity")
 
 
 def test_exact_base_gate():
@@ -92,8 +76,8 @@ def test_exact_base_gate():
         isa = ContinuousISA.from_base_gate(gate, name=name)
         decomposer = GulpsDecomposer(isa=isa, config_options=_CFG)
         circ = decomposer(gate)
-        _assert_fidelity(gate, circ, f"{name} exact gate")
-        depth = sum(1 for op in circ.data if op.operation.num_qubits == 2)
+        assert_fidelity(gate, circ, f"{name} exact gate")
+        depth = count_2q(circ)
         assert depth == 1, f"{name} exact gate should be depth 1, got {depth}"
 
 
@@ -105,8 +89,8 @@ def test_fractional_power_target():
         isa = ContinuousISA.from_base_gate(gate, name=name)
         decomposer = GulpsDecomposer(isa=isa, config_options=_CFG)
         circ = decomposer(half_gate)
-        _assert_fidelity(half_gate, circ, f"{name}^0.5")
-        depth = sum(1 for op in circ.data if op.operation.num_qubits == 2)
+        assert_fidelity(half_gate, circ, f"{name}^0.5")
+        depth = count_2q(circ)
         assert depth == 1, f"{name}^0.5 should be depth 1, got {depth}"
 
 
@@ -114,7 +98,7 @@ def test_large_single_qubit_cost(continuous_decomposer_large_sqc):
     """Decomposition must succeed with large single_qubit_cost."""
     for seed in range(5):
         u = random_unitary(4, seed=seed)
-        _assert_fidelity(u, continuous_decomposer_large_sqc(u), f"seed={seed}")
+        assert_fidelity(u, continuous_decomposer_large_sqc(u), f"seed={seed}")
 
 
 def test_swap_family_targets():
@@ -124,4 +108,4 @@ def test_swap_family_targets():
     decomposer = GulpsDecomposer(isa=isa, config_options=_CFG)
 
     half_swap = gate.power(0.5)
-    _assert_fidelity(half_swap, decomposer(half_swap), "SWAP^0.5")
+    assert_fidelity(half_swap, decomposer(half_swap), "SWAP^0.5")

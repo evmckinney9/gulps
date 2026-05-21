@@ -20,12 +20,12 @@ from qiskit.circuit import Gate
 from qiskit.circuit.library import UnitaryGate
 
 from gulps._accelerate import (
-    canonical_matrix as _canonical_matrix,
-    monodromy_from_weyl as _monodromy_from_weyl_rs,
-    weyl_coordinates as _rust_weyl,
-    weyl_from_monodromy as _weyl_from_monodromy_rs,
+    canonical_matrix,
+    is_unitary,
+    monodromy_from_weyl,
+    weyl_coordinates,
+    weyl_from_monodromy,
 )
-
 
 LEN_GATE_INVARIANTS = 3
 
@@ -80,11 +80,11 @@ class GateInvariants:
             raise ValueError(f"target must be a 4x4 matrix, got shape {U.shape}")
         if not np.all(np.isfinite(U)):
             raise ValueError("target contains non-finite entries (NaN or Inf)")
-        if not np.allclose(U.conj().T @ U, np.eye(4), atol=1e-8):
+        if not is_unitary(U):
             raise ValueError("target is not unitary within atol=1e-8")
 
-        c = _rust_weyl(U)
-        coords = tuple(_monodromy_from_weyl_rs(float(c[0]), float(c[1]), float(c[2])))
+        c = weyl_coordinates(U)
+        coords = tuple(monodromy_from_weyl(float(c[0]), float(c[1]), float(c[2])))
         inv = cls(logspec=coords, name=name)
         inv._matrix = U
         inv._gate_ref = gate if isinstance(gate, Gate) else None
@@ -95,7 +95,7 @@ class GateInvariants:
     @classmethod
     def from_weyl(cls, coords: tuple[np.float64, np.float64, np.float64]):
         """Create from weyl coordinates."""
-        return cls(tuple(_monodromy_from_weyl_rs(*coords)))
+        return cls(tuple(monodromy_from_weyl(*coords)))
 
     @property
     def matrix(self) -> np.ndarray:
@@ -122,7 +122,7 @@ class GateInvariants:
         """
         if self._weyl is None:
             mono = np.asarray(self.monodromy[:3], dtype=np.float64)
-            self._weyl = np.asarray(_weyl_from_monodromy_rs(mono))
+            self._weyl = np.asarray(weyl_from_monodromy(mono))
         return self._weyl
 
     @property
@@ -139,7 +139,7 @@ class GateInvariants:
     def canonical_matrix(self) -> np.ndarray:
         """Canonical gate matrix from Weyl coordinates."""
         if self._canonical_matrix is None:
-            self._canonical_matrix = _canonical_matrix(*self.weyl)
+            self._canonical_matrix = canonical_matrix(*self.weyl)
         return self._canonical_matrix
 
     @property
@@ -181,14 +181,19 @@ class GateInvariants:
     def __str__(self) -> str:
         return self.name
 
+    def __hash__(self) -> int:
+        # Round to 15-digit precision and convert to integers for stable hashing
+        return hash(self._key)
+
     def __eq__(self, other) -> bool:
         if not isinstance(other, GateInvariants):
             return NotImplemented
         return self._key == other._key
 
-    def __hash__(self) -> int:
-        # Round to 15-digit precision and convert to integers for stable hashing
-        return hash(self._key)
+    def __lt__(self, other) -> bool:
+        if not isinstance(other, GateInvariants):
+            return NotImplemented
+        return self._key < other._key
 
     def plot(self):
         """Scatter this gate in a 3-D Weyl chamber plot."""

@@ -12,20 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""QLR constraint builder for monodromy polytope feasibility.
+"""LP feasibility for ordered gate sentences via QLR monodromy polytope.
 
-Builds and solves the LP for QLR monodromy feasibility.
-
-Given a sequence of gates, this module assembles the block-tridiagonal constraint matrix A and right-hand side b from the QLR inequality tables. The LP variables are the intermediate invariants between gates. The first and last invariants are fixed (by the first gate and the target).
-
-The constraint matrix is built by stacking QLR blocks for each gate pair. Each block has 72 inequalities acting on two adjacent invariants. The resulting matrix is block-tridiagonal.
-
-A custom dual simplex solver is used for speed. The initial basis is chosen by picking constraints that act on individual components (standard basis vectors) so the basis matrix is the identity. This guarantees dual feasibility and makes the solver fast for repeated solves.
-
-Constraint structure:
-- For n gates, there are n-2 free intermediate invariants (each a 3-vector).
-- Each adjacent gate pair contributes a QLR block (72 rows, 3 columns per invariant).
-- The right-hand side b absorbs the fixed gate monodromy contributions.
+Block-tridiagonal constraint matrix ``A`` stacks QLR blocks (72 rows, 3
+columns per intermediate invariant) for each adjacent gate pair. The first
+and last invariants are fixed by the first gate and the target; the n-2
+interior invariants are LP variables. Gate-and-target data enters via the
+RHS ``b``, rebuilt per solve. A custom dual simplex starts from an
+identity basis (standard-basis-vector constraints) for dual feasibility +
+fast repeated solves.
 """
 
 from __future__ import annotations
@@ -39,10 +34,7 @@ from gulps.linear_program.lp_abc import ConstraintSolution, ISAConstraints
 from gulps.linear_program.qlr import len_qlr, qlr_inequalities
 
 _ci_block, _gi_block, _ciplus1_block, _bi = qlr_inequalities
-_d = LEN_GATE_INVARIANTS  # 3 -- dimension of each stage's invariant vector
-
-
-# --- Constraint matrix assembly ---
+_d = LEN_GATE_INVARIANTS  # 3, dimension of each stage's invariant vector
 
 
 def _build_constraint_matrix(n_gates: int) -> np.ndarray:
@@ -62,9 +54,6 @@ def _build_constraint_matrix(n_gates: int) -> np.ndarray:
         if i < n_gates - 2:
             A[rows, _d * i : _d * (i + 1)] += _ciplus1_block
     return np.ascontiguousarray(A, dtype=np.float64)
-
-
-# --- Initial basis selection for simplex ---
 
 
 def _identity_row_indices(block: np.ndarray) -> np.ndarray:
@@ -96,20 +85,16 @@ def _build_cold_start_basis(n_stages: int) -> np.ndarray:
     return basis
 
 
-# --- Solver cache and interface ---
-
-
 class LPSolverCache:
-    """Instance-owned cache for dual-simplex solvers, keyed by (n_gates, tol).
+    """Cache of dual-simplex solvers keyed by ``(n_gates, tol)``.
 
-    The constraint matrix A depends only on sentence length (block-tridiagonal
-    QLR structure), so solvers are safely shared across different ISAs and
-    targets. Gate- and target-specific data enter through the RHS vector b,
-    which is rebuilt per-solve in MinimalOrderedISAConstraints.
+    The constraint matrix A depends only on sentence length, so solvers
+    are safely shared across ISAs and targets. Per-call data enters via
+    the RHS, rebuilt in MinimalOrderedISAConstraints.
     """
 
     def __init__(self) -> None:
-        """Initialize an empty cache."""
+        """Empty cache; entries are built lazily by :meth:`get`."""
         self._cache: dict[tuple[int, float], DualSimplex] = {}
 
     def get(self, n_gates: int, tol: float) -> DualSimplex:
@@ -123,38 +108,40 @@ class LPSolverCache:
             # → exhausts MAX_PIVOTS on the QLR system). Maximizing
             # Σ monodromy also steers intermediates toward polytope interior.
             c = -np.ones(A.shape[1])
-            # c[::_d] -= 1e-12  # m0-prefer tiebreaker: breaks c1=c2 degeneracy
             basis = _build_cold_start_basis(n_stages)
             self._cache[key] = DualSimplex(A, c, basis.tolist(), tol)
         return self._cache[key]
 
 
-# --- Public interface ---
-
 _IDENTITY_GATE = GateInvariants((0, 0, 0, 0), name="I")
 
 
 class MinimalOrderedISAConstraints(ISAConstraints):
-    """LP feasibility checker for ordered, discrete gate sentences.
-
-    Parameters
-    ----------
-    isa_sequence : list[GateInvariants]
-        Ordered gate invariants forming the sentence (length >= 1).
-    config : GulpsConfig, optional
-        Solver configuration (tolerance, etc.).
-    """
+    """LP feasibility checker for an ordered, discrete gate sentence."""
 
     def __init__(
         self,
         isa_sequence: list[GateInvariants],
         config: GulpsConfig | None = None,
         solver_cache: LPSolverCache | None = None,
+        *,
+        parameters: tuple[float, ...] | None = None,
+        single_qubit_cost: float = 0.0,
     ) -> None:
-        """Initialize constraints for a fixed gate sentence."""
+        """Build the constraint matrix and cache cost metadata.
+
+        ``parameters`` and ``single_qubit_cost`` are sentence-fixed and
+        written into every successful :class:`ConstraintSolution` returned.
+        """
         self._config = config or GulpsConfig()
         self._sentence = tuple(isa_sequence)
         self._solver_cache = solver_cache or LPSolverCache()
+        self._parameters = parameters
+        self._cost = (
+            sum(parameters) + (len(self._sentence) + 1) * single_qubit_cost
+            if parameters is not None
+            else None
+        )
 
         # Pad 1-gate sentences so the QLR block math stays uniform.
         if len(isa_sequence) == 1:
@@ -166,8 +153,6 @@ class MinimalOrderedISAConstraints(ISAConstraints):
         self._solver = self._solver_cache.get(n, tol) if n > 2 else None
         self._b = self._build_base_rhs(isa_sequence)
         self._last_target_contrib = np.zeros(len_qlr)
-
-    # -- RHS construction --
 
     @staticmethod
     def _build_base_rhs(sequence: list[GateInvariants]) -> np.ndarray:
@@ -181,40 +166,44 @@ class MinimalOrderedISAConstraints(ISAConstraints):
             b[len_qlr * i : len_qlr * (i + 1)] = _bi - gi_contrib
         return b
 
-    def set_target(self, target: GateInvariants) -> None:
-        """Update the last QLR block of b vector for a new target."""
-        self._target = target
-        ct = _ciplus1_block @ target.monodromy
-        self._b[-len_qlr:] += self._last_target_contrib - ct
-        self._last_target_contrib = ct
-
-    # -- solve --
-
     def solve(
         self,
         target: GateInvariants,
         log_output: bool = False,
     ) -> ConstraintSolution:
-        """Try both rho orientations, most-slack first."""
+        """Try both rho orientations against this sentence; most-slack first."""
         ct_direct = _ciplus1_block @ target.monodromy
         ct_rho = _ciplus1_block @ target.rho_reflect.monodromy
 
         base_tail = self._b[-len_qlr:] + self._last_target_contrib
-        if np.min(base_tail - ct_direct) >= np.min(base_tail - ct_rho):
-            first, second = target, target.rho_reflect
+        if (base_tail - ct_direct).min() >= (base_tail - ct_rho).min():
+            first, first_ct = target, ct_direct
+            second, second_ct = target.rho_reflect, ct_rho
         else:
-            first, second = target.rho_reflect, target
+            first, first_ct = target.rho_reflect, ct_rho
+            second, second_ct = target, ct_direct
 
-        self.set_target(first)
-        result = self.solve_single()
+        self._apply_target(first, first_ct)
+        result = self._solve_current()
         if result.success:
             return result
+        self._apply_target(second, second_ct)
+        return self._solve_current()
 
-        self.set_target(second)
-        return self.solve_single()
+    def _apply_target(self, target: GateInvariants, ct: np.ndarray) -> None:
+        """Incremental RHS update for a new target.
 
-    def solve_single(self, log_output: bool = False) -> ConstraintSolution:
-        """Solve the LP for the current b vector."""
+        ``ct = _ciplus1_block @ target.monodromy`` is passed in by :meth:`solve`,
+        which already computed it for the orientation comparison. The
+        ``_b[-72:] += _last_target_contrib - ct`` delta reverses the previous
+        target's contribution instead of rebuilding ``_b`` from scratch.
+        """
+        self._target = target
+        self._b[-len_qlr:] += self._last_target_contrib - ct
+        self._last_target_contrib = ct
+
+    def _solve_current(self) -> ConstraintSolution:
+        """Run the LP on the current ``_b``, return the ConstraintSolution."""
         slack_tol = -10 * self._config.lp_feasibility_tol
 
         # 1- or 2-gate: no free variables, pure feasibility check.
@@ -231,6 +220,8 @@ class MinimalOrderedISAConstraints(ISAConstraints):
                 success=True,
                 sentence=self._sentence,
                 intermediates=intermediates,
+                parameters=self._parameters,
+                cost=self._cost,
             )
 
         # 3+ gate: delegate to dual simplex.
@@ -246,4 +237,6 @@ class MinimalOrderedISAConstraints(ISAConstraints):
             success=True,
             sentence=self._sentence,
             intermediates=(self._sequence[0], *lp_intermediates, self._target),
+            parameters=self._parameters,
+            cost=self._cost,
         )

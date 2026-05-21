@@ -15,10 +15,8 @@
 """ISA data structures: ContinuousISA, DiscreteISA, and their generators."""
 
 import heapq
-import itertools
 import warnings
 from abc import ABC
-from collections.abc import Generator
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -46,8 +44,20 @@ class ISAInvariants(ABC):
     # with adjustment it is 2+2eps versus 2+4eps
     MIN_COST_1Q = 1e-8
 
+    def sentence_cost(self, gates: list[GateInvariants]) -> float:
+        """Cost of an n-gate sentence: ``sum(gate_costs) + (n+1) * single_qubit_cost``.
 
-@dataclass
+        The ``(n+1)`` counts single-qubit layers as a function of 2q-depth:
+        depth 0 has one 1q layer (bare local decomposition), and each added
+        2q gate brings one more, so depths 0, 1, 2, … carry 1, 2, 3, … 1q
+        layers.
+        """
+        return (
+            sum(self.cost_dict[g] for g in gates)
+            + (len(gates) + 1) * self.single_qubit_cost
+        )
+
+
 class ContinuousISA(ISAInvariants):
     """ISA with continuous gate families G(k) = k * base, k in [k_lb, 1].
 
@@ -59,13 +69,29 @@ class ContinuousISA(ISAInvariants):
         cost_dict: Mapping from base gates to cost rates (cost = k * rate).
         k_lb: Minimum nonzero k value (gates with k < k_lb are pruned).
         single_qubit_cost: Cost offset per gate to prioritize shorter depth sequences.
+        max_sequence_length: Maximum gate sentence length for the LP.
     """
 
-    gate_set: list[GateInvariants]
-    cost_dict: dict[GateInvariants, float] = field(default_factory=dict)
-    k_lb: float = 0.1
-    single_qubit_cost: float = ISAInvariants.MIN_COST_1Q
-    max_sequence_length: int = 3
+    def __init__(
+        self,
+        gate_set: list[GateInvariants],
+        cost_dict: dict[GateInvariants, float] | None = None,
+        k_lb: float = 0.1,
+        single_qubit_cost: float = ISAInvariants.MIN_COST_1Q,
+        max_sequence_length: int = 3,
+    ):
+        """Validate gate_set and cost_dict, store fields."""
+        if not gate_set:
+            raise ValueError("gate_set can't be empty.")
+        cost_dict = cost_dict or {}
+        missing = [g for g in gate_set if g not in cost_dict]
+        if missing:
+            raise ValueError(f"cost_dict missing entries for: {missing}")
+        self.gate_set = gate_set
+        self.cost_dict = cost_dict
+        self.k_lb = k_lb
+        self.single_qubit_cost = single_qubit_cost
+        self.max_sequence_length = max_sequence_length
 
     @property
     def is_single_family(self) -> bool:
@@ -78,24 +104,13 @@ class ContinuousISA(ISAInvariants):
         base_gate: Gate | np.ndarray,
         name: str | None = None,
         single_qubit_cost: float = ISAInvariants.MIN_COST_1Q,
-        max_sequence_length: int = 8,
+        max_sequence_length: int = 3,
     ) -> "ContinuousISA":
-        """Create ContinuousISA from a single base gate.
-
-        Args:
-            base_gate: Base gate unitary or Qiskit Gate.
-            name: Optional name for the base gate.
-            single_qubit_cost: Cost offset per gate to prioritize shorter circuits.
-            max_sequence_length: Maximum gate sentence length for the LP.
-
-        Returns:
-            ContinuousISA instance.
-        """
+        """Create ContinuousISA from a single base gate."""
         base_inv = GateInvariants.from_unitary(base_gate, name=name)
-        cost_dict = {base_inv: 1.0}  # cost rate per unit k
         return cls(
             gate_set=[base_inv],
-            cost_dict=cost_dict,
+            cost_dict={base_inv: 1.0},  # cost rate per unit k
             single_qubit_cost=single_qubit_cost,
             max_sequence_length=max_sequence_length,
         )
@@ -131,7 +146,8 @@ class DiscreteISA(ISAInvariants):
             )
         if not isinstance(max_sequence_length, int) or max_sequence_length < 1:
             raise ValueError(
-                f"max_sequence_length must be a positive integer, got {max_sequence_length}"
+                f"max_sequence_length must be a positive integer, "
+                f"got {max_sequence_length}"
             )
         if names is None:
             names = [None] * len(gate_set)
@@ -144,69 +160,88 @@ class DiscreteISA(ISAInvariants):
         self.cost_dict = {g: c for g, c in zip(self.gate_set, costs)}
         self.single_qubit_cost = max(single_qubit_cost, self.MIN_COST_1Q)
         self.max_sequence_length = max_sequence_length
+
+        self.coverage_set: list = []
+        self._polytope_by_sentence: dict[tuple, object] = {}
         self._precompute_polytopes = precompute_polytopes
         if precompute_polytopes:
-            try:
-                from gulps.core.coverage import isa_to_coverage
-            except ImportError:
-                warnings.warn(
-                    "Coverage precomputation requires the 'monodromy' package, which is not "
-                    "installed.  Falling back to enumeration-based decomposition "
-                    "(precompute_polytopes=False).  "
-                    "Install with: pip install -r requirements-monodromy.txt",
-                    UserWarning,
-                    stacklevel=2,
-                )
-                self._precompute_polytopes = False
-            else:
-                self.coverage_set = isa_to_coverage(self)
+            self._build_coverage()
 
-    def enumerate(self) -> Generator[list[GateInvariants], None, None]:
-        """Generate all ordered gate sequences up to max_sequence_length (inclusive)."""
-        counter = itertools.count()  # acts as cost tie-breaker
-        # (cost, unique_index, sequence)
-        priority_queue = [(self.single_qubit_cost, next(counter), [])]
+        self._sentence_cache: list[tuple] = []
+        self._sentence_iter = self._enumerate_pq()
 
-        while priority_queue:
-            cost, _, sequence = heapq.heappop(priority_queue)
+    def _build_coverage(self) -> None:
+        """Populate ``coverage_set`` and ``_polytope_by_sentence`` via monodromy.
 
-            if len(sequence) < self.max_sequence_length:
-                for gate in self.gate_set:
-                    # skip if trying to reuse a zero-cost gate already in the sequence
-                    # used for example with SWAP-mirrors, cost 0.0 basis gates
-                    if self.cost_dict[gate] == 0.0 and gate in sequence:
-                        continue
-                    # enforce monotonic sequence cost order
-                    if sequence and self.cost_dict[gate] < self.cost_dict[sequence[-1]]:
-                        continue
-                    new_sequence = sequence + [gate]
-                    new_cost = cost + self.cost_dict[gate] + self.single_qubit_cost
-                    heapq.heappush(
-                        priority_queue, (new_cost, next(counter), new_sequence)
-                    )
-
-            if len(sequence) >= 1:
-                yield sequence
-
-    def polytope_lookup(self, target: GateInvariants) -> list[GateInvariants] | None:
-        """Return a gate sentence that spans the target via convex polytope lookup.
-
-        Checks both the direct monodromy and its ρ-reflected variant, since
-        the principal-branch convention may place the target in either alcove.
-
-        Returns:
-            Sorted list of gate invariants forming a valid sentence, or None if
-            no polytope contains the target.
+        Falls back to enumeration (``_precompute_polytopes = False``) when the
+        optional ``monodromy`` dependency is missing. ``isa_to_coverage`` sorts
+        each polytope's ``instructions`` by ``cost_dict.__getitem__``, matching
+        the non-decreasing-cost canonicalization the PQ enforces, so tuple
+        keys agree between the dict and ``candidate_sentences``.
         """
-        if not hasattr(self, "coverage_set"):
-            raise ValueError("Polytope coverage set not precomputed.")
+        try:
+            from gulps.core.coverage import isa_to_coverage
+        except ImportError:
+            warnings.warn(
+                "Coverage precomputation requires the 'monodromy' package, which "
+                "is not installed.  Falling back to enumeration-based decomposition "
+                "(precompute_polytopes=False).  "
+                "Install with: pip install -r requirements-monodromy.txt",
+                UserWarning,
+                stacklevel=3,
+            )
+            self._precompute_polytopes = False
+            return
+        self.coverage_set = isa_to_coverage(self)
+        self._polytope_by_sentence = {
+            tuple(p.instructions): p for p in self.coverage_set if p.instructions
+        }
 
-        candidates = [target.monodromy, target.rho_reflect.monodromy]
-        for convex_polytope in self.coverage_set:
-            for mono in candidates:
-                if convex_polytope.has_element(mono):
-                    return sorted(
-                        convex_polytope.instructions,
-                        key=lambda g: self.cost_dict[g],
-                    )
-        return None
+    def _enumerate_pq(self):
+        """Walk the cost-monotone PQ once; yield ``(sentence, polytope, strength)``.
+
+        Bounded by ``max_sequence_length``; prunes zero-cost gate reuse and
+        enforces non-decreasing cost within a sentence to canonicalize
+        permutations. ``strength`` is the sum of gate strengths along the
+        sentence.  One-shot generator: consumed lazily by :meth:`candidate_sentences`, which memoizes yields into ``_sentence_cache`` for replay across calls.
+        """
+        cost_dict = self.cost_dict
+        gate_set = self.gate_set
+        max_seq = self.max_sequence_length
+        s_q_c = self.single_qubit_cost
+        polytope_for = self._polytope_by_sentence
+        have_polytopes = bool(polytope_for)
+
+        pq: list[tuple[float, tuple]] = [(self.sentence_cost(()), ())]
+        while pq:
+            parent_cost, sequence = heapq.heappop(pq)
+            if len(sequence) < max_seq:
+                last_cost = cost_dict[sequence[-1]] if sequence else None
+                for gate in gate_set:
+                    gate_cost = cost_dict[gate]
+                    if gate_cost == 0.0 and gate in sequence:
+                        continue
+                    if last_cost is not None and gate_cost < last_cost:
+                        continue
+                    new_seq = sequence + (gate,)
+                    heapq.heappush(pq, (parent_cost + gate_cost + s_q_c, new_seq))
+            if not sequence:
+                continue
+            polytope = polytope_for.get(sequence)
+            if have_polytopes and polytope is None:
+                continue  # pruned from coverage_set: no target can match
+            strength = sum(g.strength for g in sequence)
+            yield sequence, polytope, strength
+
+    def candidate_sentences(self):
+        """Yield ``(sentence, polytope, strength)`` in cost-monotone order, memoized.
+
+        First replays ``_sentence_cache`` (free for already-walked sentences),
+        then lazily advances the underlying PQ generator, appending each new
+        entry to the cache as it goes. Subsequent calls hit the cache for
+        sentences past callers have already seen.
+        """
+        yield from self._sentence_cache
+        for entry in self._sentence_iter:
+            self._sentence_cache.append(entry)
+            yield entry

@@ -25,8 +25,6 @@ from typing import TYPE_CHECKING
 
 from numpy import ndarray
 
-from gulps.viz.weyl_chamber import weyl_linspace  # noqa: F401  — re-export for compat
-
 try:
     from monodromy.coordinates import unitary_to_monodromy_coordinate
     from monodromy.coverage import (
@@ -93,29 +91,25 @@ def isa_to_coverage(
     ]
     coverage_set = build_coverage_set(operations)
 
-    # NOTE slightly hacky modification to avoid modifying build_coverage_set
+    # Attach instructions and canonicalize cost via isa.sentence_cost.
+    # The cost-sort is load-bearing: build_coverage_set enqueues every
+    # permutation [A,B] / [B,A] / ... and trim_polytope_set drops the
+    # redundant ones (they cover the same volume), but doesn't guarantee
+    # that the surviving permutation lands in cost-monotone order.
+    # candidate_sentences emits cost-sorted tuples from the PQ, so we sort
+    # here to make the dict key shape agree.
     name_to_instruction = {n: g for n, g in zip(names, isa.gate_set)}
     for polytope in coverage_set:
-        # first, for each polytope, we need to attach instruction metadata
         instructions = [name_to_instruction[op_name] for op_name in polytope.operations]
+        instructions = sorted(instructions, key=isa.cost_dict.__getitem__)
         polytope.instructions = instructions
-        # second, a bit pedantic but we can fix the off by-one in cost here
-        polytope.cost += single_qubit_cost
+        polytope.cost = isa.sentence_cost(instructions)
 
     return sorted(coverage_set, key=lambda k: k.cost)
 
 
 def compute_coverage_statistics(coverage_set, chatty=False):
-    """Compute coverage statistics without plotting or printing.
-
-    Args:
-        coverage_set: List of CircuitPolytope objects.
-        chatty: Whether to print verbose output during integral calculation.
-
-    Returns:
-        dict: Coverage analysis containing volume_info, expected_cost,
-            expected_depth, expected_index, and total_coverage.
-    """
+    """Haar-averaged coverage stats (volume_info, expected cost/depth/index, total)."""
     # prune coverage_set with empty operations
     coverage_set = [p for p in coverage_set if p.operations]
 
@@ -160,16 +154,7 @@ def compute_coverage_statistics(coverage_set, chatty=False):
 
 
 def coverage_report(coverage_set, chatty=False):
-    """Analyze, plot, and print coverage statistics.
-
-    Args:
-        coverage_set: List of CircuitPolytope objects.
-        chatty: Whether to print verbose output during integral calculation.
-
-    Returns:
-        dict: Coverage analysis containing volume_info, expected_cost,
-            expected_depth, expected_index, and total_coverage.
-    """
+    """:func:`compute_coverage_statistics` plus a 3-D plot and a printed summary."""
     from gulps.viz.polytope_viz import plot_coverage_set
 
     report = compute_coverage_statistics(coverage_set, chatty=chatty)

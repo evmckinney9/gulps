@@ -27,7 +27,7 @@ repos:
         args: [--maxkb=2000]
       - id: name-tests-test
         args: [--pytest-test-first]
-        exclude: ^src/tests/fixtures/
+        exclude: ^src/tests/(fixtures/|_common\.py$)
 
   - repo: https://github.com/evmckinney9/jupyter-notebook-naming-hook
     rev: v0.1.2
