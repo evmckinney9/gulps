@@ -81,11 +81,11 @@ class GulpsTranslationPlugin(PassManagerStagePlugin):
             gate_set=gate_set,
             costs=costs,
             names=names,
-            precompute_polytopes=None,
+            precompute_polytopes=False,
             single_qubit_cost=sq_cost,
         )
 
-        # suppress warnings
+        # flag_duration=0 disables the per-call slow-decomposition warning
         decomposer = GulpsDecomposer(
             isa=isa, config_options=GulpsConfig(flag_duration=0)
         )
