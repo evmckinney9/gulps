@@ -384,19 +384,21 @@ fn recover_canonical_target(
 pub struct StitchResult {
     pub fused_u0s: Vec<Mat2>,
     pub fused_u1s: Vec<Mat2>,
-    pub intermediate_gphase: f64,
-    pub final_recovery: RecoveryResult,
+    /// The chain's realized unitary, with intermediate-stitch global phases
+    /// absorbed as a scalar multiplier. ``recover_local_equivalence(target, t)``
+    /// downstream gives the total recovery + correct global phase in one call.
+    pub t: Mat4,
 }
 
-/// Full stitch pipeline: accumulate P, recover intermediates (fusing corrections
-/// into next segment's u0/u1), and perform final recovery against the target.
+/// Stitch the chain: accumulate the product, recover canonical intermediates
+/// fusing corrections into adjacent locals, return the fused locals and the
+/// chain's phase-absorbed product T. Per-target recovery is the caller's job.
 pub fn stitch_segments(
     initial_p: &Mat4,
     u0s: &[Mat2],
     u1s: &[Mat2],
     basis_matrices: &[Mat4],
     target_weyl_coords: &[[f64; 3]],
-    final_target: &Mat4,
 ) -> Result<StitchResult, String> {
     let n = u0s.len();
     let mut p = *initial_p;
@@ -422,11 +424,15 @@ pub fn stitch_segments(
         }
     }
 
-    let final_recovery = recover_local_equivalence(final_target, &p)?;
+    // Absorb intermediate phase into T as a scalar multiplier so that
+    // recover_local_equivalence(target, T) returns the *total* gphase in one
+    // step, with no further bookkeeping required of the caller.
+    let phase = C64::new(intermediate_gphase.cos(), intermediate_gphase.sin());
+    let t = p * phase;
+
     Ok(StitchResult {
         fused_u0s,
         fused_u1s,
-        intermediate_gphase,
-        final_recovery,
+        t,
     })
 }

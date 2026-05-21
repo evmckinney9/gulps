@@ -109,11 +109,6 @@ impl DualSimplexSolver {
         self.basis = basis;
         None // iteration limit
     }
-
-    /// Reset the basis to a cold-start state.
-    pub fn reset_basis(&mut self, basis: Vec<usize>) {
-        self.basis = basis;
-    }
 }
 
 /// Extract the n×n submatrix A[basis, :].

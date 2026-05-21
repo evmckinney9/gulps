@@ -74,6 +74,24 @@ fn monodromy_from_weyl<'py>(py: Python<'py>, c1: f64, c2: f64, c3: f64) -> PyRes
     Ok(result.to_vec().into_pyarray(py).into_any().unbind())
 }
 
+/// Check if a 4x4 matrix is unitary.
+#[pyfunction]
+#[pyo3(signature = (u, atol=1e-8, rtol=1e-5))]
+fn is_unitary<'py>(u: PyReadonlyArray2<'py, Complex64>, atol: f64, rtol: f64) -> PyResult<bool> {
+    let mat = numpy_to_mat4(&u)?;
+    let prod = mat.adjoint() * mat;
+    for i in 0..4 {
+        for j in 0..4 {
+            let id_val = if i == j { 1.0 } else { 0.0 };
+            let diff = (prod[(i, j)] - C64::new(id_val, 0.0)).norm();
+            if diff > atol + rtol * id_val {
+                return Ok(false);
+            }
+        }
+    }
+    Ok(true)
+}
+
 /// Recover the local corrections between two 4×4 unitaries; returns `(k1, k2, k3, k4, global_phase)`.
 #[pyfunction]
 fn recover_local_equiv<'py>(
@@ -97,15 +115,17 @@ fn recover_local_equiv<'py>(
     ))
 }
 
-/// Solve and stitch all segments; parallel above `min_batch_size`. Returns `(u0s, u1s, k1, k2, k3, k4, global_phase)`.
+/// Solve and stitch all segments; parallel above `min_batch_size`. Returns
+/// `(u0s, u1s, T)`: the fused locals and the chain's phase-absorbed product
+/// matrix. Caller runs `recover_local_equiv(target, T)` to wrap it to a
+/// specific target.
 #[pyfunction]
-#[pyo3(signature = (initial_matrix, basis_matrices, target_matrices, final_target, makhlin_tol, weyl_tol, min_batch_size, target_weyl_coords, identity_warmstart=false))]
+#[pyo3(signature = (initial_matrix, basis_matrices, target_matrices, makhlin_tol, weyl_tol, min_batch_size, target_weyl_coords, identity_warmstart=false))]
 fn solve_and_stitch<'py>(
     py: Python<'py>,
     initial_matrix: PyReadonlyArray2<'py, Complex64>,
     basis_matrices: Vec<PyReadonlyArray2<'py, Complex64>>,
     target_matrices: Vec<PyReadonlyArray2<'py, Complex64>>,
-    final_target: PyReadonlyArray2<'py, Complex64>,
     makhlin_tol: f64,
     weyl_tol: f64,
     min_batch_size: usize,
@@ -114,14 +134,9 @@ fn solve_and_stitch<'py>(
 ) -> PyResult<(
     Vec<Py<PyAny>>, // u0s (fused with intermediate corrections)
     Vec<Py<PyAny>>, // u1s
-    Py<PyAny>,      // k1 (final recovery)
-    Py<PyAny>,      // k2
-    Py<PyAny>,      // k3
-    Py<PyAny>,      // k4
-    f64,            // global_phase
+    Py<PyAny>,      // T (4x4 chain product, intermediate phase absorbed)
 )> {
     let init = numpy_to_mat4(&initial_matrix)?;
-    let target = numpy_to_mat4(&final_target)?;
     let basis_mats: Vec<Mat4> = basis_matrices
         .iter()
         .map(numpy_to_mat4)
@@ -130,13 +145,12 @@ fn solve_and_stitch<'py>(
         .iter()
         .map(numpy_to_mat4)
         .collect::<PyResult<_>>()?;
-    let (u0s, u1s, recovery, gphase) = py
+    let (u0s, u1s, t) = py
         .detach(|| {
             pipeline::solve_segments(
                 &init,
                 &basis_mats,
                 &target_mats,
-                &target,
                 &target_weyl_coords,
                 makhlin_tol,
                 weyl_tol,
@@ -146,14 +160,11 @@ fn solve_and_stitch<'py>(
         })
         .map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
 
+    let t_np = Array2::from_shape_fn((4, 4), |(r, c)| t[(r, c)]);
     Ok((
         mat2_list_to_numpy(py, &u0s),
         mat2_list_to_numpy(py, &u1s),
-        mat2_to_numpy(py, &recovery.k1).into_any().unbind(),
-        mat2_to_numpy(py, &recovery.k2).into_any().unbind(),
-        mat2_to_numpy(py, &recovery.k3).into_any().unbind(),
-        mat2_to_numpy(py, &recovery.k4).into_any().unbind(),
-        gphase,
+        t_np.into_pyarray(py).into_any().unbind(),
     ))
 }
 
@@ -208,11 +219,6 @@ impl DualSimplex {
             None => Ok((None, false)),
         }
     }
-
-    /// Reset the basis to a cold-start state.
-    fn reset_basis(&mut self, basis: Vec<usize>) {
-        self.inner.reset_basis(basis);
-    }
 }
 
 #[pymodule]
@@ -221,6 +227,7 @@ fn _accelerate(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(canonical_matrix, m)?)?;
     m.add_function(wrap_pyfunction!(weyl_from_monodromy, m)?)?;
     m.add_function(wrap_pyfunction!(monodromy_from_weyl, m)?)?;
+    m.add_function(wrap_pyfunction!(is_unitary, m)?)?;
     m.add_function(wrap_pyfunction!(recover_local_equiv, m)?)?;
     m.add_function(wrap_pyfunction!(solve_and_stitch, m)?)?;
     m.add_class::<DualSimplex>()?;

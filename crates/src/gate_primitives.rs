@@ -1,7 +1,7 @@
 //! Basis matrices, two-qubit invariants, coordinate transforms, and the
 //! SU(2) parameterization.
 
-use crate::linalg::{eigenphases_4x4, normalize_quat};
+use crate::linalg::{eigenphases_4x4, normalize_quat, trace_of_square};
 use crate::{Mat2, Mat4, C0, C1, C64, CI, CM1};
 use std::f64::consts::{FRAC_1_SQRT_2, PI};
 
@@ -45,13 +45,7 @@ pub fn makhlin_invariants(u: &Mat4) -> [f64; 3] {
     let m = um.transpose() * um; // transpose, NOT adjoint
     let t1 = m.trace();
     let t1s = t1 * t1;
-    // tr(M^2) without forming M*M
-    let mut tr_m2 = C0;
-    for i in 0..4 {
-        for j in 0..4 {
-            tr_m2 += m[(i, j)] * m[(j, i)];
-        }
-    }
+    let tr_m2 = trace_of_square(&m);
     let g1 = t1s / (det_phase * 16.0);
     let g2 = (t1s - tr_m2) / (det_phase * 4.0);
     [g1.re, g1.im, g2.re]
