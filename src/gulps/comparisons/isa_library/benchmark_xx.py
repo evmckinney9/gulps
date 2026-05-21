@@ -133,10 +133,16 @@ def count_2q(qc: QuantumCircuit) -> int:
 def build_benchmark_circuits(
     num_qubits: int, seed: int = 42
 ) -> dict[str, QuantumCircuit]:
-    """Standard circuit families (Benchpress-inspired)."""
+    """Standard circuit families (Benchpress-inspired). All circuits are concrete:
+    EfficientSU2's rotation parameters are bound from a seeded RNG so that
+    ConsolidateBlocks fuses its 2q blocks into UnitaryGates (matching QFT/QV/Random).
+    """
+    esu2 = efficient_su2(num_qubits, reps=3, entanglement="circular")
+    rng = np.random.default_rng(seed)
+    esu2 = esu2.assign_parameters(rng.uniform(0, 2 * np.pi, len(esu2.parameters)))
     return {
         "QFT": synth_qft_full(num_qubits, approximation_degree=max(0, num_qubits - 4)),
-        "EfficientSU2": efficient_su2(num_qubits, reps=3, entanglement="circular"),
+        "EfficientSU2": esu2,
         "QV": quantum_volume(num_qubits, depth=num_qubits, seed=seed),
         "Random": random_circuit(
             num_qubits, depth=num_qubits * 4, max_operands=2, seed=seed
