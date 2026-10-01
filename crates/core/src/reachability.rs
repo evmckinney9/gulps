@@ -9,7 +9,7 @@
 //! Before the codimension shift, every allowed QLR row (I,J -> K,d) proposes
 //! `next[K] = max(next[K], prefix[I] + gate[J] - d)`.
 //! The fixed-size kernels below evaluate that rule table without a table loop.
-//! See the tutorial's [expanded update](https://evm9.dev/gulps/synthesis.html#region-storage)
+//! See the tutorial's [expanded update](https://evm9.dev/gulps/monodromy.html#reference-recurrence)
 //! and the explicit degree-carrying table in the rank-two regression test.
 
 use std::ops::Range;
