@@ -66,7 +66,7 @@ and any lockfile changes in GULPS.
 
 ## Releases
 
-Push a stable `vX.Y.Z` tag matching `pyproject.toml` and `crates/Cargo.toml`.
-The [release workflow](workflows/release.yml) builds and tests distributions.
+Push a stable `vX.Y.Z` tag matching the version in `pyproject.toml`.
+The [release workflow](../.github/workflows/release.yml) builds and tests distributions.
 Review the draft GitHub release and its distributions before publishing;
-publication triggers the [PyPI upload](workflows/publish.yml).
+publication triggers the [PyPI upload](../.github/workflows/publish.yml).
