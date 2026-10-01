@@ -5,15 +5,11 @@ labels: ["bug", "triage"]
 assignees:
   - evmckinney9
 body:
-  - type: markdown
-    attributes:
-      value: |
-        Thanks for taking the time to submit a bug report!
   - type: textarea
     id: bug-description
     attributes:
       label: Bug Description
-      placeholder: Describe the bug you encountered here...
+      placeholder: Describe the expected and actual behavior.
     validations:
       required: true
   - type: textarea
@@ -21,7 +17,7 @@ body:
     attributes:
       label: Minimal Reproducible Example
       placeholder: |
-        from gulps import GulpsDecomposer
+        from gulps.decomposition import GulpsDecomposer
         ...
       render: python
     validations:

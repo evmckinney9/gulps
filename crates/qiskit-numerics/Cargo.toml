@@ -1,0 +1,16 @@
+[package]
+name = "qiskit-numerics"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+publish = false
+
+[dependencies]
+nalgebra.workspace = true
+ndarray.workspace = true
+num-complex = "0.4"
+faer = { version = "0.24", default-features = false, features = ["std", "linalg"] }
+approx = { version = "0.5", features = ["num-complex"] }
+indexmap = "2.10.0"
+foldhash = "0.2.0"
+thiserror = "2.0"

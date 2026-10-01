@@ -1,4 +1,13 @@
-include pyproject.toml
-include crates/Cargo.toml
-recursive-include crates *.rs
-recursive-include src *
+recursive-include tests *.py
+include crates/Cargo.toml crates/Cargo.lock crates/README.md
+include crates/*/Cargo.toml
+recursive-include crates/core/src *.rs
+recursive-include crates/pyext/src *.rs
+recursive-include crates/can_sandwich/src *.rs
+include crates/can_sandwich/LICENSE
+recursive-include crates/qiskit-pyo3-ffi/src *.rs
+exclude crates/qiskit-pyo3-ffi/Cargo.lock
+include crates/qiskit-pyo3-ffi/LICENSE.txt crates/qiskit-pyo3-ffi/README.md
+recursive-include crates/qiskit-numerics/src *.rs
+include crates/qiskit-numerics/LICENSE.txt crates/qiskit-numerics/README.md
+include crates/qiskit-numerics/local.patch

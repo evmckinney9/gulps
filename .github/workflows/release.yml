@@ -13,22 +13,16 @@ jobs:
     name: Verify tag matches package version
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Check version consistency
         run: |
           TAG="${GITHUB_REF_NAME#v}"
-          TAG_BASE="${TAG%%-*}"
           PKG=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
-          RUST=$(python -c "import tomllib; print(tomllib.load(open('crates/Cargo.toml','rb'))['package']['version'])")
-          if [ "$TAG_BASE" != "$PKG" ]; then
-            echo "::error::Tag v$TAG (base: $TAG_BASE) does not match pyproject.toml version $PKG"
+          if [[ ! "$TAG" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || [ "$TAG" != "$PKG" ]; then
+            echo "::error::Tag v$TAG must be a stable version matching pyproject.toml version $PKG"
             exit 1
           fi
-          if [ "$PKG" != "$RUST" ]; then
-            echo "::error::crates/Cargo.toml version $RUST does not match pyproject.toml version $PKG"
-            exit 1
-          fi
-          echo "Version $PKG matches tag v$TAG and crates/Cargo.toml"
+          echo "Version $PKG matches tag v$TAG"
 
   build_wheels:
     needs: check_version
@@ -44,11 +38,17 @@ jobs:
     env:
       CIBW_BUILD: "cp310-*"
       CIBW_SKIP: "pp* *-win32 *-musllinux* *_i686"
-      CIBW_BEFORE_ALL_LINUX: "curl https://sh.rustup.rs -sSf | sh -s -- -y"
+      CIBW_BEFORE_ALL_LINUX: "curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain 1.97"
       CIBW_ENVIRONMENT_LINUX: 'PATH="$HOME/.cargo/bin:$PATH"'
+      CIBW_TEST_EXTRAS: test
+      CIBW_TEST_COMMAND: >-
+        python -m pytest {project}/tests/test_decomposer.py
+        {project}/tests/test_invariants.py {project}/tests/test_transpiler.py
     steps:
-      - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@1.97
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: crates
@@ -60,13 +60,25 @@ jobs:
           path: ./wheelhouse/*.whl
 
   build_sdist:
+    needs: check_version
     name: Build source distribution
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: dtolnay/rust-toolchain@1.97
       - name: Build sdist
         run: pipx run build --sdist
+      - name: Install and test sdist
+        run: |
+          for sdist in dist/*.tar.gz; do
+            python -m pip install "${sdist}[test]"
+          done
+          python -m pytest tests/test_decomposer.py tests/test_invariants.py tests/test_transpiler.py
       - uses: actions/upload-artifact@v7
         with:
           name: cibw-sdist
@@ -77,10 +89,10 @@ jobs:
     needs: [build_wheels, build_sdist]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
       - name: Generate changelog
         run: |
           npm install -g conventional-changelog-cli

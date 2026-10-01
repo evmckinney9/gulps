@@ -2,62 +2,71 @@
 
 ## Setup
 
-```bash
+Development uses Python 3.12 and Rust 1.97 or newer.
+
+```sh
+git clone --recurse-submodules https://github.com/evmckinney9/gulps.git
+cd gulps
 make init
 ```
 
-Creates `.venv`, installs all dependencies, and sets up pre-commit hooks.
+For an existing checkout, run `make submodules` to fetch the solver.
 
-**Requirements:** Python 3.10+ and a Rust toolchain (`rustup`).
+## Making changes
 
-## Make Commands
+Run `make test` and `make lint` before submitting changes. Tests rebuild the
+Rust extension. Use `make format` for formatting and `make help` for other commands.
 
-Run `make help` for the list of available targets.
+Test behavior through the public API, allowing different valid decompositions.
+Solver tests belong in `crates/can_sandwich`; GULPS tests cover its integration.
 
-## Commit Messages
+The oracle tests in `tests/test_analysis.py` compare against monodromy, which
+needs lrslib. CI requires them; elsewhere they are skipped when monodromy is
+not installed. To run them:
 
-This project uses [Conventional Commits](https://www.conventionalcommits.org/). A `commit-msg` hook rejects commits that don't match the format.
-
-```
-<type>[(<scope>)][!]: <description>
-```
-
-**Common types:** `feat`, `fix`, `perf`, `refactor`, `docs`, `chore`. See [`.pre-commit-config.yaml`](../.pre-commit-config.yaml) for the full enforced list.
-
-**Examples:**
-```bash
-git commit -m "feat: add batch decomposition API"
-git commit -m "fix: handle degenerate Weyl face in recovery"
-git commit -m "perf!: remove JAX dependency"   # breaking change
+```sh
+.venv/bin/python -m pip install "monodromy @ git+https://github.com/qiskit-community/monodromy"
+sudo apt-get install lrslib
 ```
 
-The `!` suffix or a `BREAKING CHANGE:` footer marks a breaking change, which appears in release notes regardless of type.
+Commit hooks enforce [Conventional Commits](https://www.conventionalcommits.org/).
 
-Only `feat`, `fix`, `perf`, and `merge` appear in the auto-generated changelog.
+Qiskit source updates are documented in
+[crates/qiskit-pyo3-ffi/README.md](../crates/qiskit-pyo3-ffi/README.md#upgrade)
+and [crates/qiskit-numerics/README.md](../crates/qiskit-numerics/README.md#update).
 
-## Pre-commit Hooks
+## Timing benchmarks
 
-Hooks defined in [`.pre-commit-config.yaml`](../.pre-commit-config.yaml) run on every commit. They enforce linting (`ruff`), formatting, conventional-commit messages, and basic safety checks. The same hooks run in CI on every PR.
+`make bench` saves timings in `.benchmarks/`:
 
-## Release Flow
-
-### 1. Tag and push
-
-```bash
-git tag v0.X.0
-git push origin main
-git push origin v0.X.0
+```sh
+make bench BENCH_ARGS='--benchmark-save=before'
+make bench BENCH_ARGS='--benchmark-save=after --benchmark-compare=0001'
 ```
 
-The tag push triggers the **Release** workflow (`release.yml`):
-- Builds wheels via `cibuildwheel`
-- Generates a changelog from conventional commits
-- Creates a **draft** GitHub Release with wheels attached
+Replace `0001` with the saved baseline number. Compare the same workloads
+and thread count on an idle machine; repeat each version in three processes.
+Use `BENCH_THREADS=4` to change the thread count.
 
-### 2. Review and publish
+## Documentation
 
-- Go to [Releases](https://github.com/evmckinney9/gulps/releases)
-- Edit the draft: add release notes, verify wheels are attached
-- Click **Publish release**
+Edit the [user guide](../docs/index.rst) and preview it with `make docs-serve`.
+Use `jupyter-execute` blocks for Python examples. Run `make docs` to check them.
 
-Publishing triggers the **Publish** workflow (`publish.yml`), which uploads the wheels to PyPI.
+For writing and presentation, follow the
+[Qiskit documentation style guide](https://github.com/Qiskit/documentation/blob/main/style-guide.md)
+and the [Qiskit Sphinx theme documentation](https://qiskit.github.io/qiskit_sphinx_theme/index.html).
+
+## Upgrade the solver
+
+`crates/can_sandwich` is a separate Git repository; commit solver changes there.
+Before updating GULPS to a new solver commit, run `make rebuild`, `make test`,
+and `make lint` from the GULPS root. If they pass, commit the submodule reference
+and any lockfile changes in GULPS.
+
+## Releases
+
+Push a stable `vX.Y.Z` tag matching `pyproject.toml` and `crates/Cargo.toml`.
+The [release workflow](workflows/release.yml) builds and tests distributions.
+Review the draft GitHub release and its distributions before publishing;
+publication triggers the [PyPI upload](workflows/publish.yml).

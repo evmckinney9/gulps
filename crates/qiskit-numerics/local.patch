@@ -1,0 +1,165 @@
+diff --git a/src/linalg/cos_sin_decomp.rs b/src/linalg/cos_sin_decomp.rs
+index 7cbeecd..fd09591 100644
+--- a/src/linalg/cos_sin_decomp.rs
++++ b/src/linalg/cos_sin_decomp.rs
+@@ -14,9 +14,6 @@
+ //
+ // https://github.com/CQCL/tket/blob/a61bbac1c07487521acd8da463023f3c85c799e8/tket/src/Utils/CosSinDecomposition.cpp
+ 
+-use numpy::PyReadonlyArray2;
+-use numpy::ToPyArray;
+-use pyo3::prelude::*;
+ 
+ use crate::linalg::faer_to_ndarray;
+ use faer::{Mat, MatRef};
+@@ -181,25 +178,3 @@ pub fn cos_sin_decomposition(u: MatRef<Complex64>) -> CosSinDecompReturn {
+         thetas,
+     }
+ }
+-
+-#[pyfunction]
+-pub fn cossin<'py>(py: Python<'py>, u: PyReadonlyArray2<Complex64>) -> PyResult<Bound<'py, PyAny>> {
+-    let array = u.as_array();
+-    let shape = array.shape();
+-    let mat: Mat<Complex64> = Mat::from_fn(shape[0], shape[1], |i, j| array[[i, j]]);
+-    let res = cos_sin_decomposition(mat.as_ref());
+-
+-    let arr0 = faer_to_ndarray(res.l0.as_ref()).to_pyarray(py);
+-    let arr1 = faer_to_ndarray(res.l1.as_ref()).to_pyarray(py);
+-    let arr2 = faer_to_ndarray(res.r0.as_ref()).to_pyarray(py);
+-    let arr3 = faer_to_ndarray(res.r1.as_ref()).to_pyarray(py);
+-
+-    Ok(((arr0, arr1), res.thetas, (arr2, arr3))
+-        .into_pyobject(py)?
+-        .into_any())
+-}
+-
+-pub fn cos_sin_decomp(m: &Bound<PyModule>) -> PyResult<()> {
+-    m.add_wrapped(wrap_pyfunction!(cossin))?;
+-    Ok(())
+-}
+diff --git a/src/linalg/mod.rs b/src/linalg/mod.rs
+index 0e6aa90..f51eafe 100644
+--- a/src/linalg/mod.rs
++++ b/src/linalg/mod.rs
+@@ -17,7 +17,7 @@ use nalgebra::{DMatrix, DMatrixView, Dim, Dyn, MatrixView, Scalar, ViewStorage};
+ use ndarray::ArrayView2;
+ use ndarray::ShapeBuilder;
+ use num_complex::Complex64;
+-use pyo3::PyErr;
++use crate::PyErr;
+ use thiserror::Error;
+ 
+ use crate::QiskitError;
+diff --git a/src/two_qubit_decompose/common.rs b/src/two_qubit_decompose/common.rs
+index 8094202..01e8c17 100644
+--- a/src/two_qubit_decompose/common.rs
++++ b/src/two_qubit_decompose/common.rs
+@@ -13,13 +13,11 @@
+ use std::f64::consts::FRAC_1_SQRT_2;
+ 
+ use nalgebra::{Matrix2, Matrix4};
+-use ndarray::{Array2, ArrayView2, array, aview2};
++use ndarray::{Array2, ArrayView1, ArrayView2, array, aview2};
+ use num_complex::{Complex64, ComplexFloat};
+-use numpy::{IntoPyArray, PyArray2, PyReadonlyArray1, PyReadonlyArray2};
+-use pyo3::prelude::*;
+ 
++use crate::PyResult;
+ use crate::linalg::ndarray_to_faer;
+-use qiskit_circuit::gate_matrix::{H_GATE, S_GATE, SDG_GATE};
+ use qiskit_util::alias::GateArray2Q;
+ use qiskit_util::complex::{C_M_ONE, C_ONE, C_ZERO, IM, M_IM, c64};
+ pub(super) const DEFAULT_FIDELITY: f64 = 1.0 - 1.0e-9;
+@@ -36,16 +34,7 @@ impl TraceToFidelity for Complex64 {
+     }
+ }
+ 
+-#[pyfunction]
+-#[pyo3(name = "trace_to_fid")]
+-/// Average gate fidelity is :math:`Fbar = (d + |Tr (Utarget \\cdot U^dag)|^2) / d(d+1)`
+-/// M. Horodecki, P. Horodecki and R. Horodecki, PRA 60, 1888 (1999)
+-pub fn py_trace_to_fid(trace: Complex64) -> PyResult<f64> {
+-    let fid = trace.trace_to_fid();
+-    Ok(fid)
+-}
+-
+-static MAGIC: GateArray2Q = [
++pub static MAGIC: GateArray2Q = [
+     [
+         c64(FRAC_1_SQRT_2, 0.),
+         C_ZERO,
+@@ -134,7 +123,7 @@ pub(crate) fn rz_matrix(theta: f64) -> Matrix2<Complex64> {
+ }
+ 
+ /// Generates the array :math:`e^{(i a XX + i b YY + i c ZZ)}`
+-pub(crate) fn ud(a: f64, b: f64, c: f64) -> Array2<Complex64> {
++pub fn ud(a: f64, b: f64, c: f64) -> Array2<Complex64> {
+     array![
+         [
+             (IM * c).exp() * (a - b).cos(),
+@@ -163,13 +152,6 @@ pub(crate) fn ud(a: f64, b: f64, c: f64) -> Array2<Complex64> {
+     ]
+ }
+ 
+-#[pyfunction]
+-#[pyo3(name = "Ud")]
+-pub fn py_ud(py: Python, a: f64, b: f64, c: f64) -> Py<PyArray2<Complex64>> {
+-    let ud_mat = ud(a, b, c);
+-    ud_mat.into_pyarray(py).unbind()
+-}
+-
+ /// Computes the local invariants for a two-qubit unitary.
+ ///
+ /// Based on:
+@@ -177,9 +159,7 @@ pub fn py_ud(py: Python, a: f64, b: f64, c: f64) -> Py<PyArray2<Complex64>> {
+ /// Y. Makhlin, Quant. Info. Proc. 1, 243-252 (2002).
+ ///
+ /// Zhang et al., Phys Rev A. 67, 042313 (2003).
+-#[pyfunction]
+-pub fn two_qubit_local_invariants(unitary: PyReadonlyArray2<Complex64>) -> [f64; 3] {
+-    let mat = unitary.as_array();
++pub fn two_qubit_local_invariants(mat: ArrayView2<Complex64>) -> [f64; 3] {
+     // Transform to bell basis
+     let bell_basis_unitary = aview2(&MAGIC_DAGGER).dot(&mat.dot(&aview2(&MAGIC)));
+     // Get determinate since +- one is allowed.
+@@ -198,9 +178,7 @@ pub fn two_qubit_local_invariants(unitary: PyReadonlyArray2<Complex64>) -> [f64;
+     [g1.re + 0., g1.im + 0., g2.re + 0.]
+ }
+ 
+-#[pyfunction]
+-pub fn local_equivalence(weyl: PyReadonlyArray1<f64>) -> PyResult<[f64; 3]> {
+-    let weyl = weyl.as_array();
++pub fn local_equivalence(weyl: ArrayView1<f64>) -> PyResult<[f64; 3]> {
+     let weyl_2_cos_squared_product: f64 = weyl.iter().map(|x| (x * 2.).cos().powi(2)).product();
+     let weyl_2_sin_squared_product: f64 = weyl.iter().map(|x| (x * 2.).sin().powi(2)).product();
+     let g0_equiv = weyl_2_cos_squared_product - weyl_2_sin_squared_product;
+@@ -232,14 +210,3 @@ pub(super) fn ndarray_to_matrix2<T: Copy>(view: ArrayView2<T>) -> Matrix2<T> {
+ pub(super) fn ndarray_to_matrix4(view: ArrayView2<Complex64>) -> Matrix4<Complex64> {
+     Matrix4::from_row_iterator(view.iter().copied())
+ }
+-
+-pub static HGATE: Matrix2<Complex64> =
+-    Matrix2::new(H_GATE[0][0], H_GATE[0][1], H_GATE[1][0], H_GATE[1][1]);
+-pub static SGATE: Matrix2<Complex64> =
+-    Matrix2::new(S_GATE[0][0], S_GATE[0][1], S_GATE[1][0], S_GATE[1][1]);
+-pub static SDGGATE: Matrix2<Complex64> = Matrix2::new(
+-    SDG_GATE[0][0],
+-    SDG_GATE[0][1],
+-    SDG_GATE[1][0],
+-    SDG_GATE[1][1],
+-);
+diff --git a/src/util.rs b/src/util.rs
+index 210731f..e86698a 100644
+--- a/src/util.rs
++++ b/src/util.rs
+@@ -12,9 +12,6 @@
+ 
+ use std::env;
+ 
+-#[cfg(feature = "py")]
+-pub mod py;
+-
+ /// A common type alias to use IndexMap with Qiskit's default hasher all
+ /// internal crate usage of IndexMap should use this instead of the indexmap
+ /// crate directly.

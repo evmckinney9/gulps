@@ -1,0 +1,562 @@
+[
+  {
+    "circuit": "QFT",
+    "qubits": 4,
+    "gulps_s": [
+      0.0010720390127971768,
+      0.00043805799214169383
+    ],
+    "xx_s": [
+      0.046786676975898445,
+      0.0527245529810898
+    ],
+    "qiskit_s": [
+      0.0004995499912183732,
+      0.0005201500025577843
+    ],
+    "gulps_duration_us": 6.528200000000003,
+    "gulps_2q_duration_us": 4.749999999999999,
+    "xx_duration_us": 6.528200000000003,
+    "xx_2q_duration_us": 4.749999999999999,
+    "qiskit_duration_us": 11.091999999999999,
+    "qiskit_2q_duration_us": 9.000000000000002,
+    "same_cost": true,
+    "blocks_gulps_inexact": 0,
+    "blocks_xx_inexact": 0,
+    "blocks_differing": 0,
+    "blocks_differing_unexplained": 0,
+    "xx_max_infidelity": 0.0
+  },
+  {
+    "circuit": "EfficientSU2",
+    "qubits": 4,
+    "gulps_s": [
+      0.0006261089874897152,
+      0.00038727899664081633
+    ],
+    "xx_s": [
+      0.0246645669976715,
+      0.028613756003323942
+    ],
+    "qiskit_s": [
+      0.0007130990270525217,
+      0.000477680005133152
+    ],
+    "xx_duration_us": 7.464400000000004,
+    "xx_2q_duration_us": 6.000000000000001,
+    "qiskit_duration_us": 7.464400000000004,
+    "qiskit_2q_duration_us": 6.000000000000001,
+    "gulps_duration_us": 7.464400000000004,
+    "gulps_2q_duration_us": 6.000000000000001,
+    "same_cost": true,
+    "blocks_gulps_inexact": 0,
+    "blocks_xx_inexact": 0,
+    "blocks_differing": 0,
+    "blocks_differing_unexplained": 0,
+    "xx_max_infidelity": 0.0
+  },
+  {
+    "circuit": "QV",
+    "qubits": 4,
+    "gulps_s": [
+      0.000747419020626694,
+      0.0004997799987904727
+    ],
+    "xx_s": [
+      0.10932615099591203,
+      0.04745247701066546
+    ],
+    "qiskit_s": [
+      0.0004833489947486669,
+      0.0006514179985970259
+    ],
+    "qiskit_duration_us": 14.719599999999994,
+    "qiskit_2q_duration_us": 12.000000000000004,
+    "gulps_duration_us": 9.221333333333332,
+    "gulps_2q_duration_us": 6.083333333333336,
+    "xx_duration_us": 9.221333333333332,
+    "xx_2q_duration_us": 6.083333333333336,
+    "same_cost": true,
+    "blocks_gulps_inexact": 0,
+    "blocks_xx_inexact": 0,
+    "blocks_differing": 0,
+    "blocks_differing_unexplained": 0,
+    "xx_max_infidelity": 0.0
+  },
+  {
+    "circuit": "Random",
+    "qubits": 4,
+    "gulps_s": [
+      0.0006301399844232947,
+      0.0005844100087415427
+    ],
+    "xx_s": [
+      0.03426220701658167,
+      0.03190553799504414
+    ],
+    "qiskit_s": [
+      0.0005690589896403253,
+      0.0005411390156950802
+    ],
+    "gulps_duration_us": 7.936833333333339,
+    "gulps_2q_duration_us": 5.583333333333336,
+    "xx_duration_us": 8.302933333333337,
+    "xx_2q_duration_us": 5.583333333333336,
+    "qiskit_duration_us": 15.928799999999992,
+    "qiskit_2q_duration_us": 13.000000000000004,
+    "same_cost": true,
+    "blocks_gulps_inexact": 0,
+    "blocks_xx_inexact": 0,
+    "blocks_differing": 0,
+    "blocks_differing_unexplained": 0,
+    "xx_max_infidelity": 0.0
+  },
+  {
+    "circuit": "QFT",
+    "qubits": 8,
+    "gulps_s": [
+      0.00033567901118658483,
+      0.0004895700258202851
+    ],
+    "xx_s": [
+      0.07735276099992916,
+      0.08134566599619575
+    ],
+    "qiskit_s": [
+      0.0008127499895635992,
+      0.0008582689915783703
+    ],
+    "gulps_duration_us": 16.123666666666658,
+    "gulps_2q_duration_us": 11.416666666666671,
+    "xx_duration_us": 16.123666666666658,
+    "xx_2q_duration_us": 11.416666666666671,
+    "qiskit_duration_us": 29.439199999999936,
+    "qiskit_2q_duration_us": 23.99999999999998,
+    "same_cost": true,
+    "blocks_gulps_inexact": 0,
+    "blocks_xx_inexact": 0,
+    "blocks_differing": 0,
+    "blocks_differing_unexplained": 0,
+    "xx_max_infidelity": 0.0
+  },
+  {
+    "circuit": "EfficientSU2",
+    "qubits": 8,
+    "gulps_s": [
+      0.0007453089929185808,
+      0.0005000099772587419
+    ],
+    "xx_s": [
+      0.034708463004790246,
+      0.03752581699518487
+    ],
+    "qiskit_s": [
+      0.0007010989938862622,
+      0.0005134190141689032
+    ],
+    "xx_duration_us": 14.928799999999995,
+    "xx_2q_duration_us": 12.000000000000004,
+    "qiskit_duration_us": 14.928799999999995,
+    "qiskit_2q_duration_us": 12.000000000000004,
+    "gulps_duration_us": 14.928799999999995,
+    "gulps_2q_duration_us": 12.000000000000004,
+    "same_cost": true,
+    "blocks_gulps_inexact": 0,
+    "blocks_xx_inexact": 0,
+    "blocks_differing": 0,
+    "blocks_differing_unexplained": 0,
+    "xx_max_infidelity": 0.0
+  },
+  {
+    "circuit": "QV",
+    "qubits": 8,
+    "gulps_s": [
+      0.0020144290174357593,
+      0.0013461380149237812
+    ],
+    "xx_s": [
+      0.14390384999569505,
+      0.1674518479849212
+    ],
+    "qiskit_s": [
+      0.0011121889983769506,
+      0.0009367180173285306
+    ],
+    "qiskit_duration_us": 51.20479999999985,
+    "qiskit_2q_duration_us": 41.99999999999993,
+    "gulps_duration_us": 32.18873333333322,
+    "gulps_2q_duration_us": 21.833333333333297,
+    "xx_duration_us": 32.18873333333322,
+    "xx_2q_duration_us": 21.833333333333297,
+    "same_cost": true,
+    "blocks_gulps_inexact": 0,
+    "blocks_xx_inexact": 0,
+    "blocks_differing": 0,
+    "blocks_differing_unexplained": 0,
+    "xx_max_infidelity": 0.0
+  },
+  {
+    "circuit": "Random",
+    "qubits": 8,
+    "gulps_s": [
+      0.0026134169893339276,
+      0.0017680680030025542
+    ],
+    "xx_s": [
+      0.1908142989850603,
+      0.20148431800771505
+    ],
+    "qiskit_s": [
+      0.002620888000819832,
+      0.0014204290055204183
+    ],
+    "gulps_duration_us": 45.238199999999836,
+    "gulps_2q_duration_us": 32.99999999999994,
+    "xx_duration_us": 46.28419999999982,
+    "xx_2q_duration_us": 32.99999999999994,
+    "qiskit_duration_us": 80.77789999999975,
+    "qiskit_2q_duration_us": 66.49999999999987,
+    "same_cost": true,
+    "blocks_gulps_inexact": 0,
+    "blocks_xx_inexact": 0,
+    "blocks_differing": 0,
+    "blocks_differing_unexplained": 0,
+    "xx_max_infidelity": 0.0
+  },
+  {
+    "circuit": "QFT",
+    "qubits": 16,
+    "gulps_s": [
+      0.000756238994654268,
+      0.0006675389886368066
+    ],
+    "xx_s": [
+      0.19739766098791733,
+      0.18500071100424975
+    ],
+    "qiskit_s": [
+      0.0021071060036774725,
+      0.001657718006754294
+    ],
+    "gulps_duration_us": 35.31459999999988,
+    "gulps_2q_duration_us": 24.749999999999968,
+    "xx_duration_us": 35.31459999999988,
+    "xx_2q_duration_us": 24.749999999999968,
+    "qiskit_duration_us": 66.1335999999998,
+    "qiskit_2q_duration_us": 53.99999999999989,
+    "same_cost": true,
+    "blocks_gulps_inexact": 0,
+    "blocks_xx_inexact": 0,
+    "blocks_differing": 0,
+    "blocks_differing_unexplained": 0,
+    "xx_max_infidelity": 0.0
+  },
+  {
+    "circuit": "EfficientSU2",
+    "qubits": 16,
+    "gulps_s": [
+      0.0007969690195750445,
+      0.001190198992844671
+    ],
+    "xx_s": [
+      0.08667320001404732,
+      0.08092810600646771
+    ],
+    "qiskit_s": [
+      0.001215378986671567,
+      0.0012304580013733357
+    ],
+    "xx_duration_us": 29.857599999999938,
+    "xx_2q_duration_us": 23.99999999999998,
+    "qiskit_duration_us": 29.857599999999938,
+    "qiskit_2q_duration_us": 23.99999999999998,
+    "gulps_duration_us": 29.857599999999938,
+    "gulps_2q_duration_us": 23.99999999999998,
+    "same_cost": true,
+    "blocks_gulps_inexact": 0,
+    "blocks_xx_inexact": 0,
+    "blocks_differing": 0,
+    "blocks_differing_unexplained": 0,
+    "xx_max_infidelity": 0.0
+  },
+  {
+    "circuit": "QV",
+    "qubits": 16,
+    "gulps_s": [
+      0.005481029016664252,
+      0.004142146004596725
+    ],
+    "xx_s": [
+      0.6334479929937515,
+      0.6187787649978418
+    ],
+    "qiskit_s": [
+      0.005690094985766336,
+      0.003935555985663086
+    ],
+    "qiskit_duration_us": 207.61000000000115,
+    "qiskit_2q_duration_us": 171.0000000000009,
+    "gulps_duration_us": 130.12906666666703,
+    "gulps_2q_duration_us": 88.91666666666697,
+    "xx_duration_us": 130.12906666666703,
+    "xx_2q_duration_us": 88.91666666666697,
+    "same_cost": true,
+    "blocks_gulps_inexact": 0,
+    "blocks_xx_inexact": 0,
+    "blocks_differing": 0,
+    "blocks_differing_unexplained": 0,
+    "xx_max_infidelity": 0.0
+  },
+  {
+    "circuit": "Random",
+    "qubits": 16,
+    "gulps_s": [
+      0.005356267996830866,
+      0.007539487007306889
+    ],
+    "xx_s": [
+      0.940132730989717,
+      0.8481592190219089
+    ],
+    "qiskit_s": [
+      0.006994983006734401,
+      0.006029243988450617
+    ],
+    "gulps_duration_us": 204.49770000000188,
+    "gulps_2q_duration_us": 152.25000000000117,
+    "xx_duration_us": 208.42020000000196,
+    "xx_2q_duration_us": 152.25000000000117,
+    "qiskit_duration_us": 336.9421000000035,
+    "qiskit_2q_duration_us": 278.0000000000035,
+    "same_cost": true,
+    "blocks_gulps_inexact": 0,
+    "blocks_xx_inexact": 11,
+    "blocks_differing": 0,
+    "blocks_differing_unexplained": 0,
+    "xx_max_infidelity": 4.440892098500626e-16
+  },
+  {
+    "circuit": "QFT",
+    "qubits": 32,
+    "gulps_s": [
+      0.0019249979814048856,
+      0.001544049009680748
+    ],
+    "xx_s": [
+      0.38931617699563503,
+      0.3751561329991091
+    ],
+    "qiskit_s": [
+      0.0031310270132962614,
+      0.003777854988584295
+    ],
+    "gulps_duration_us": 73.69646666666637,
+    "gulps_2q_duration_us": 51.41666666666656,
+    "xx_duration_us": 73.69646666666637,
+    "xx_2q_duration_us": 51.41666666666656,
+    "qiskit_duration_us": 139.5223999999999,
+    "qiskit_2q_duration_us": 113.99999999999973,
+    "same_cost": true,
+    "blocks_gulps_inexact": 0,
+    "blocks_xx_inexact": 0,
+    "blocks_differing": 0,
+    "blocks_differing_unexplained": 0,
+    "xx_max_infidelity": 0.0
+  },
+  {
+    "circuit": "EfficientSU2",
+    "qubits": 32,
+    "gulps_s": [
+      0.001900169998407364,
+      0.0017316880112048239
+    ],
+    "xx_s": [
+      0.17289816099219024,
+      0.20810912901652046
+    ],
+    "qiskit_s": [
+      0.002822248003212735,
+      0.0023343779903370887
+    ],
+    "xx_duration_us": 59.71519999999982,
+    "xx_2q_duration_us": 47.999999999999915,
+    "qiskit_duration_us": 59.71519999999982,
+    "qiskit_2q_duration_us": 47.999999999999915,
+    "gulps_duration_us": 59.71519999999982,
+    "gulps_2q_duration_us": 47.999999999999915,
+    "same_cost": true,
+    "blocks_gulps_inexact": 0,
+    "blocks_xx_inexact": 0,
+    "blocks_differing": 0,
+    "blocks_differing_unexplained": 0,
+    "xx_max_infidelity": 0.0
+  },
+  {
+    "circuit": "QV",
+    "qubits": 32,
+    "gulps_s": [
+      0.018814694019965827,
+      0.020085361000383273
+    ],
+    "xx_s": [
+      3.330602355999872,
+      3.005174155026907
+    ],
+    "qiskit_s": [
+      0.01901998699759133,
+      0.014218008000170812
+    ],
+    "qiskit_duration_us": 897.6908000000506,
+    "qiskit_2q_duration_us": 740.9999999999874,
+    "gulps_duration_us": 568.8642666666854,
+    "gulps_2q_duration_us": 390.41666666666094,
+    "xx_duration_us": 568.8642666666854,
+    "xx_2q_duration_us": 390.41666666666094,
+    "same_cost": true,
+    "blocks_gulps_inexact": 0,
+    "blocks_xx_inexact": 0,
+    "blocks_differing": 0,
+    "blocks_differing_unexplained": 0,
+    "xx_max_infidelity": 0.0
+  },
+  {
+    "circuit": "Random",
+    "qubits": 32,
+    "gulps_s": [
+      0.027692395000485703,
+      0.02735622599720955
+    ],
+    "xx_s": [
+      3.7919332289893646,
+      3.6624415619880892
+    ],
+    "qiskit_s": [
+      0.026516446989262477,
+      0.028942011995241046
+    ],
+    "gulps_duration_us": 860.2559333334193,
+    "gulps_2q_duration_us": 642.5833333333254,
+    "xx_duration_us": 879.5546333334308,
+    "xx_2q_duration_us": 642.5833333333254,
+    "qiskit_duration_us": 1417.937600000186,
+    "qiskit_2q_duration_us": 1171.4999999999934,
+    "same_cost": true,
+    "blocks_gulps_inexact": 0,
+    "blocks_xx_inexact": 38,
+    "blocks_differing": 0,
+    "blocks_differing_unexplained": 0,
+    "xx_max_infidelity": 6.661338147750939e-16
+  },
+  {
+    "circuit": "QFT",
+    "qubits": 64,
+    "gulps_s": [
+      0.00231877900660038,
+      0.002190208004321903
+    ],
+    "xx_s": [
+      0.6989805449848063,
+      0.6961881909810472
+    ],
+    "qiskit_s": [
+      0.007728324009804055,
+      0.007987363991560414
+    ],
+    "gulps_duration_us": 150.4602000000001,
+    "gulps_2q_duration_us": 104.74999999999974,
+    "xx_duration_us": 150.4602000000001,
+    "xx_2q_duration_us": 104.74999999999974,
+    "qiskit_duration_us": 286.3000000000025,
+    "qiskit_2q_duration_us": 234.00000000000244,
+    "same_cost": true,
+    "blocks_gulps_inexact": 0,
+    "blocks_xx_inexact": 0,
+    "blocks_differing": 0,
+    "blocks_differing_unexplained": 0,
+    "xx_max_infidelity": 0.0
+  },
+  {
+    "circuit": "EfficientSU2",
+    "qubits": 64,
+    "gulps_s": [
+      0.003635796980233863,
+      0.0038922849926166236
+    ],
+    "xx_s": [
+      0.3385413629875984,
+      0.34726744002546184
+    ],
+    "qiskit_s": [
+      0.005575065006269142,
+      0.0038437780167441815
+    ],
+    "xx_duration_us": 119.43039999999958,
+    "xx_2q_duration_us": 95.99999999999979,
+    "qiskit_duration_us": 119.43039999999958,
+    "qiskit_2q_duration_us": 95.99999999999979,
+    "gulps_duration_us": 119.43039999999958,
+    "gulps_2q_duration_us": 95.99999999999979,
+    "same_cost": true,
+    "blocks_gulps_inexact": 0,
+    "blocks_xx_inexact": 0,
+    "blocks_differing": 0,
+    "blocks_differing_unexplained": 0,
+    "xx_max_infidelity": 0.0
+  },
+  {
+    "circuit": "QV",
+    "qubits": 64,
+    "gulps_s": [
+      0.06887605701922439,
+      0.09861791200819425
+    ],
+    "xx_s": [
+      11.699158343981253,
+      11.967375987995183
+    ],
+    "qiskit_s": [
+      0.053821471985429525,
+      0.060965135984588414
+    ],
+    "qiskit_duration_us": 3667.223200000832,
+    "qiskit_2q_duration_us": 3030.00000000024,
+    "gulps_duration_us": 2328.2504000005842,
+    "gulps_2q_duration_us": 1604.0000000001653,
+    "xx_duration_us": 2328.2504000005842,
+    "xx_2q_duration_us": 1604.0000000001653,
+    "same_cost": true,
+    "blocks_gulps_inexact": 0,
+    "blocks_xx_inexact": 1,
+    "blocks_differing": 0,
+    "blocks_differing_unexplained": 0,
+    "xx_max_infidelity": 1.021221077679435e-05
+  },
+  {
+    "circuit": "Random",
+    "qubits": 64,
+    "gulps_s": [
+      0.137891935009975,
+      0.1208774090046063
+    ],
+    "xx_s": [
+      15.430852277990198,
+      15.321848527004477
+    ],
+    "qiskit_s": [
+      0.12260405698907562,
+      0.122924969997257
+    ],
+    "gulps_duration_us": 3592.9128666672887,
+    "gulps_2q_duration_us": 2693.6666666666856,
+    "xx_duration_us": 3673.476133334015,
+    "xx_2q_duration_us": 2693.5833333333517,
+    "qiskit_duration_us": 5903.667900000042,
+    "qiskit_2q_duration_us": 4879.999999999641,
+    "same_cost": false,
+    "blocks_gulps_inexact": 0,
+    "blocks_xx_inexact": 122,
+    "blocks_differing": 1,
+    "blocks_differing_unexplained": 0,
+    "xx_max_infidelity": 9.459100169806334e-13
+  }
+]

@@ -12,13 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""GULPS python module."""
+"""GULPS two-qubit compilation."""
 
-import logging
+from importlib.metadata import PackageNotFoundError as _PackageNotFoundError
+from importlib.metadata import version as _version
 
-logging.getLogger(__name__).addHandler(logging.NullHandler())
-
-from .core.invariants import GateInvariants
-from .gulps_decomposer import GulpsDecomposer
-from .qiskit_ext.decomposer_pass import GulpsDecompositionPass
-from .qiskit_ext.translation_plugin import GulpsTranslationPlugin
+try:
+    __version__ = _version("gulps")
+except _PackageNotFoundError:
+    __version__ = "0+unknown"

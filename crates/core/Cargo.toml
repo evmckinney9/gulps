@@ -1,0 +1,22 @@
+[package]
+name = "gulps-core"
+description = "Two-qubit gate synthesis core: gate classes, KAK frames, Horn-DP search, compilation"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+categories = ["science::quantum-computing"]
+
+[lib]
+name = "gulps_core"
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+can_sandwich.workspace = true
+nalgebra.workspace = true
+qiskit-numerics.workspace = true
+ndarray.workspace = true
+rayon.workspace = true

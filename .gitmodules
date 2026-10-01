@@ -1,0 +1,3 @@
+[submodule "crates/can_sandwich"]
+	path = crates/can_sandwich
+	url = https://github.com/evmckinney9/can_sandwich.git

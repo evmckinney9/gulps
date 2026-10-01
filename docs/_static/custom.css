@@ -1,0 +1,81 @@
+/* jupyter-sphinx hard-codes light colours for its cells. Use the theme's
+   variables instead, which follow the light/dark toggle. */
+div.jupyter_container {
+  background-color: var(--color-background-primary);
+  border: 1px solid var(--color-background-border);
+  box-shadow: none;
+}
+.jupyter_container div.code_cell,
+.jupyter_container div.code_cell pre,
+div.jupyter_container div.highlight {
+  background-color: var(--color-code-background);
+  border-color: var(--color-background-border);
+}
+.jupyter_container div.output pre,
+.jupyter_container .output .highlight {
+  background-color: var(--color-background-secondary);
+  color: var(--color-foreground-primary);
+}
+.jupyter_container .code_cell td.linenos {
+  border-right-color: var(--color-background-border);
+  color: var(--color-foreground-secondary);
+}
+.jupyter_container .stderr {
+  background-color: var(--color-background-secondary);
+  border-left: 3px solid var(--color-problematic);
+}
+
+/* Keep explanations readable on wide screens without constraining diagrams. */
+.content {
+  max-width: 52rem;
+}
+article p,
+article li {
+  line-height: 1.65;
+}
+article h2 {
+  margin-top: 2.25rem;
+}
+article .highlight pre {
+  font-size: 0.85rem;
+  line-height: 1.55;
+}
+div.jupyter_container {
+  margin: 1.25rem 0;
+  border-radius: 0.35rem;
+}
+.jupyter_container .output {
+  border-top: 1px solid var(--color-background-border);
+}
+article figure {
+  margin: 1.75rem 0;
+}
+article figure img,
+.jupyter_container .output img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0.5rem auto;
+}
+article figcaption {
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--color-foreground-secondary);
+}
+article details {
+  margin: 1.25rem 0;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--color-background-border);
+  border-radius: 0.35rem;
+}
+article summary {
+  cursor: pointer;
+  color: var(--color-brand-content);
+}
+article summary:focus-visible {
+  outline: 2px solid var(--color-brand-content);
+  outline-offset: 0.25rem;
+}
+article details[open] > summary {
+  margin-bottom: 1rem;
+}

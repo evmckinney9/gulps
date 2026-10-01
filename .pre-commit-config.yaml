@@ -1,4 +1,4 @@
-exclude: ".*deprecated/"
+exclude: "^dev/"
 fail_fast: true
 
 repos:
@@ -9,7 +9,7 @@ repos:
         stages: [commit-msg]
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.12
+    rev: v0.16.7
     hooks:
       - id: ruff-check
         args: [--fix]
@@ -20,16 +20,13 @@ repos:
     hooks:
       - id: trailing-whitespace
         args: [--markdown-linebreak-ext=md]
+        exclude: ^crates/qiskit-numerics/  # upstream bytes; patch context
       - id: end-of-file-fixer
+        exclude: ^crates/qiskit-numerics/
       - id: check-merge-conflict
       - id: detect-private-key
       - id: check-added-large-files
         args: [--maxkb=2000]
       - id: name-tests-test
         args: [--pytest-test-first]
-        exclude: ^src/tests/fixtures/
-
-  - repo: https://github.com/evmckinney9/jupyter-notebook-naming-hook
-    rev: v0.1.2
-    hooks:
-      - id: enforce-notebook-naming
+        exclude: ^tests/(fixtures/|_common\.py$)
