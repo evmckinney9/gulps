@@ -37,19 +37,18 @@ The calculation extends a two-gate result of Peterson, Crooks, and Smith,
 Coordinates in which products are tractable
 -------------------------------------------
 
-Weyl coordinates describe a single gate, but they give no formula for
-the class of a product of two gates. Eigenvalues have such a theory,
-going back to Horn, which describes the possible eigenvalues of a product
-of two matrices whose eigenvalues are fixed. The eigenvalues of a
+Weyl coordinates describe a single gate, but they are not convenient for
+computing the class of a product of two gates. Eigenvalues are better
+suited to products, through the multiplicative version of Horn's problem,
+which :ref:`the two-gate section <multiplicative-horn>` states. The eigenvalues of a
 two-qubit gate, however, are not invariants of its class. Local gates
 :math:`L` and :math:`R` around :math:`U` change its eigenvalues in
 general, because :math:`R` need not equal :math:`L^{-1}`.
 
-Real matrices have the same difficulty, and singular values resolve it.
-Orthogonal factors in :math:`O_LXO_R` change the eigenvalues of :math:`X`
-but not those of :math:`XX^T`, which are the squared singular values of
-:math:`X`. The *Cartan double* applies this construction to two-qubit
-gates.
+For a real matrix :math:`X`, orthogonal factors in :math:`O_LXO_R`
+likewise change the eigenvalues of :math:`X`, but not those of
+:math:`XX^T`, which are the squared singular values of :math:`X`. The
+*Cartan double* is the two-qubit analog of :math:`XX^T`.
 
 In the *magic basis*, a phased Bell basis, local special unitaries become
 real orthogonal matrices. Fix :math:`\det U=1`
@@ -84,14 +83,7 @@ The first three phases :math:`(x,y,z)` are the
 all four phases alike.
 
 The phases are linear in the Weyl coordinates
-:math:`c=(c_1,c_2,c_3)`. Since :math:`XX`, :math:`YY`, and :math:`ZZ`
-commute, :math:`\operatorname{CAN}(c)` is diagonal in the Bell basis. On
-each Bell state :math:`\operatorname{CAN}(c)` multiplies by
-:math:`e^{i\pi(\pm c_1\pm c_2\pm c_3)/2}`, with the signs given by that
-state's :math:`XX`, :math:`YY`, and :math:`ZZ` eigenvalues, and the Cartan
-double squares this factor. The four phases are therefore half of
-:math:`\pm c_1\pm c_2\pm c_3` for the four Bell sign patterns. When they
-satisfy the alcove conditions, each Weyl coordinate is the sum of two
+:math:`c=(c_1,c_2,c_3)`. When they satisfy the alcove conditions, each Weyl coordinate is the sum of two
 phases, so a bound on a pair sum of phases reads directly as a bound on a
 Weyl coordinate:
 
@@ -169,6 +161,8 @@ spectrum or its :math:`\rho` partner lies in the region of the direct
 representative. :meth:`~gulps.analysis.region.ReachableRegion.reaches`
 checks the target against both ``region`` and ``region.rho``.
 
+.. _multiplicative-horn:
+
 Two gates as a multiplicative Horn problem
 ------------------------------------------
 
@@ -198,31 +192,25 @@ Similarity preserves eigenvalues, so :math:`M(V)` has the spectrum of
 and the middle layer :math:`O` sets only their relative eigenvectors.
 
 The *multiplicative Horn problem* asks which spectra a product of two
-matrices can have when the eigenvalues of each factor are fixed and the
-eigenvectors are free. Horn's original problem asks the same question for
-sums of Hermitian matrices. Peterson, Crooks, and Smith call the answer
-for special unitaries the *monodromy polytope*. Its points are the triples
+special unitaries can have when the eigenvalues of each factor are fixed
+and the eigenvectors are free. The original problem of `Horn
+<https://doi.org/10.2140/pjm.1962.12.225>`_ asks the same question for
+sums of Hermitian matrices. `Klyachko
+<https://doi.org/10.1007/s000290050037>`_ and `Knutson and Tao
+<https://doi.org/10.1090/S0894-0347-99-00299-4>`_ proved that its answer
+is a polytope cut out by linear inequalities. `Agnihotri and Woodward
+<https://doi.org/10.4310/MRL.1998.v5.n6.a10>`_ and `Belkale
+<https://doi.org/10.1023/A:1013195625868>`_ solved the multiplicative
+problem. Peterson, Crooks, and Smith call the answer the *monodromy
+polytope*. Its points are the triples
 :math:`(a,b,\delta)` of alcove points such that some special unitaries
 with eigenphases :math:`a` and :math:`b` have a product with eigenphases
 :math:`\delta`. Their Theorem 23 lists its faces as linear inequalities,
-one per entry of a fixed table derived below. On the rest of this page, :math:`\delta`
-denotes the spectrum of a product.
-
-The problem lets the relative eigenbasis be any *unitary*, but a local
-middle layer supplies only a *real orthogonal* one. Peterson, Crooks, and
-Smith's `Theorem 13 and Corollary 14
-<https://quantum-journal.org/papers/q-2020-03-26-247/pdf/#page=7>`_ prove
-that the restriction loses no spectra. Corollary 25 combines the two: a two-gate sentence
-reaches a target exactly when the target's spectrum, or its :math:`\rho`
-partner, satisfies Theorem 23.
-
-.. details:: Math detail: orientation-reversing middle layers
-
-   An orthogonal :math:`O` with determinant :math:`-1` is not a local
-   gate. Replacing :math:`O` by :math:`OJ`, with
-   :math:`J=\operatorname{diag}(-1,1,1,1)`, fixes the determinant, and because :math:`J` commutes with the diagonal
-   :math:`D_a^2`, it leaves :math:`O D_a^2 O^T` unchanged. A local layer
-   therefore reaches the same product spectra as any orthogonal matrix.
+one per entry of a fixed table derived below, and their `Corollary 25
+<https://quantum-journal.org/papers/q-2020-03-26-247/pdf/#page=11>`_
+proves that a two-gate sentence reaches a target exactly when the
+target's spectrum, or its :math:`\rho` partner, satisfies them. On the
+rest of this page, :math:`\delta` denotes the spectrum of a product.
 
 A warm-up with 2×2 matrices
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -241,8 +229,9 @@ vectors :math:`\mathbf n,\mathbf m` and the Pauli matrices,
    U&=\cos(2\pi a)I+i\sin(2\pi a)\,\mathbf n\cdot\boldsymbol\sigma,\\
    V&=\cos(2\pi b)I+i\sin(2\pi b)\,\mathbf m\cdot\boldsymbol\sigma.
 
-The axes :math:`\mathbf n` and :math:`\mathbf m` are the eigenvectors of
-the two matrices, drawn as directions on the Bloch sphere. The product has
+:math:`U` rotates the Bloch sphere about the axis :math:`\mathbf n`, and
+:math:`V` rotates it about :math:`\mathbf m`. The eigenvectors of each
+matrix are the two states on its axis. The product has
 eigenvalues :math:`e^{\pm2\pi i\delta}`, with :math:`\delta\in[0,1/2]`.
 Since :math:`(\mathbf n\cdot\boldsymbol\sigma)(\mathbf m\cdot\boldsymbol\sigma)
 =(\mathbf n\cdot\mathbf m)I+i(\mathbf n\times\mathbf m)\cdot\boldsymbol\sigma`
@@ -505,11 +494,14 @@ The fourteen lower bounds pair into seven two-sided bounds, on
 
    x,\quad y,\quad z,\quad x+y,\quad x+z,\quad y+z,\quad x+y+z.
 
-Each two-sided bound confines the spectrum to a slab between two parallel
-planes, and by Theorem 23 the region of the direct representative is the
-intersection of the seven slabs with the alcove. The slabs below use the
-ranges each phase sum attains on the region, which can be tighter than
-the table's bounds (see :ref:`reference-recurrence`).
+Each two-sided bound confines one phase sum to an interval, and by
+Theorem 23 a spectrum in the alcove lies in the region of the direct
+representative exactly when each of its seven phase sums lies in its
+interval. The figure draws the plane :math:`c_3=0`, where
+:math:`x+y+z=x`, :math:`z=-y`, and :math:`y+z=0`, so four intervals
+remain: those of :math:`x`, :math:`y`, :math:`x+y`, and :math:`x+z`. Each
+interval appears as a band between two parallel lines, at the range its
+phase sum attains on the region.
 
 .. jupyter-execute::
 
@@ -526,9 +518,9 @@ the table's bounds (see :ref:`reference-recurrence`).
    plane = np.column_stack([c1.ravel(), c2.ravel(), np.zeros(c1.size)])
    in_chamber = (c2 <= c1) & (c1 + c2 <= 1)
    sums = np.array([phase_sums(p) for p in plane]).reshape(*c1.shape, -1)
-   in_slabs = np.all((lower <= sums + 1e-12) & (sums <= upper + 1e-12), axis=-1)
+   in_intervals = np.all((lower <= sums + 1e-12) & (sums <= upper + 1e-12), axis=-1)
    inside = mixed.contains(plane).reshape(c1.shape)
-   disagree = in_chamber & (in_slabs != inside)
+   disagree = in_chamber & (in_intervals != inside)
    print(f"{(in_chamber & inside).sum()} grid points in the region, {disagree.sum()} disagree")
 
 .. jupyter-execute::
@@ -542,49 +534,27 @@ the table's bounds (see :ref:`reference-recurrence`).
    .. jupyter-execute::
       :hide-output:
 
-      from itertools import combinations
+      from matplotlib.patches import Patch
 
       # Each phase sum as a linear function of (c1, c2) on the plane c3 = 0.
-      normals = {"x": (0.5, 0.5), "y": (0.5, -0.5), "z": (-0.5, 0.5), "w": (-0.5, -0.5),
-                 "x+y": (1, 0), "x+z": (0, 1)}
-      lines = {}  # (unit normal, offset) -> bound labels, as  n . c >= offset
-      for k, name in enumerate(sum_names):
-          if name not in normals:
-              continue
-          n = np.array(normals[name], float)
-          scale = np.linalg.norm(n)
-          for sign, bound, text in ((1, lower[k], "≥"), (-1, upper[k], "≤")):
-              key = (tuple(np.round(sign * n / scale, 9)), round(sign * bound / scale, 9))
-              lines.setdefault(key, []).append(f"${name}$ {text} {fraction_text(Fraction(bound).limit_denominator(48))}")
-      chamber = [((0, 1), 0), ((np.sqrt(0.5), -np.sqrt(0.5)), 0), ((-np.sqrt(0.5), -np.sqrt(0.5)), -np.sqrt(0.5))]
-      walls = [(np.array(n), v) for n, v in list(lines) + chamber]
-      corners = []
-      for (n1, v1), (n2, v2) in combinations(walls, 2):
-          matrix = np.array([n1, n2])
-          if abs(np.linalg.det(matrix)) < 1e-9:
-              continue
-          point = np.linalg.solve(matrix, [v1, v2])
-          if all(n @ point >= v - 1e-9 for n, v in walls):
-              corners.append(point)
-      corners = np.unique(np.round(corners, 9), axis=0)
+      intervals = {"x": (0.5, 0.5), "y": (0.5, -0.5), "x+y": (1, 0), "x+z": (0, 1)}
+      colors = ["tab:purple", "tab:green", "tab:orange", "tab:brown"]
 
-      slab_figure, ax = plt.subplots(figsize=(7, 4.1), layout="constrained")
-      triangle, = ax.fill([0, 1, 0.5], [0, 0, 0.5], color="0.95")
+      interval_figure, ax = plt.subplots(figsize=(7, 4.1), layout="constrained")
+      ax.fill([0, 1, 0.5], [0, 0, 0.5], color="0.95")
       ax.plot([0, 1, 0.5, 0], [0, 0, 0.5, 0], color="0.4", linewidth=1)
-      ax.contourf(c1, c2, in_chamber & inside, levels=[0.5, 1.5], colors=["#8bbde0"])
-      span = np.linspace(-1, 2, 2)
-      colors = iter(["tab:purple", "tab:green", "tab:orange", "tab:brown", "tab:olive"])
-      for (n, v), names in lines.items():
-          n = np.array(n)
-          on_line = sum(abs(n @ p - v) < 1e-7 for p in corners)
-          tight = on_line >= 2
-          if abs(n[1]) > 1e-9:
-              xs, ys = span, (v - n[0] * span) / n[1]
-          else:
-              xs, ys = [v / n[0]] * 2, [-1, 2]
-          ax.plot(xs, ys, color=next(colors) if tight else "0.75",
-                  linewidth=1.8 if tight else 0.9, clip_path=triangle,
-                  label=", ".join(names) if tight else None, zorder=2 if tight else 1)
+      handles = []
+      for (name, (n1, n2)), color in zip(intervals.items(), colors):
+          k = sum_names.index(name)
+          value = np.where(in_chamber, n1 * c1 + n2 * c2, np.nan)
+          ax.contourf(c1, c2, (lower[k] <= value) & (value <= upper[k]),
+                      levels=[0.5, 1.5], colors=[color], alpha=0.13)
+          ax.contour(c1, c2, value, levels=[lower[k], upper[k]], colors=[color], linewidths=1.4)
+          lo, hi = (fraction_text(Fraction(v).limit_denominator(48)) for v in (lower[k], upper[k]))
+          handles.append(Patch(facecolor=color, edgecolor=color, alpha=0.5,
+                               label=f"{lo} ≤ ${name}$ ≤ {hi}"))
+      ax.contourf(c1, c2, in_chamber & inside, levels=[0.5, 1.5], colors=["tab:blue"])
+      handles.append(Patch(color="tab:blue", label="Region of AB"))
       for name, point, offset in (("Identity", (0, 0), (6, 8)),
                                   ("B", (1 / 6, 1 / 6), (-14, 6)),
                                   ("CX", (1 / 2, 0), (6, 8))):
@@ -592,146 +562,41 @@ the table's bounds (see :ref:`reference-recurrence`).
           ax.annotate(name, point, xytext=offset, textcoords="offset points", fontsize=9)
       ax.set(xlim=(-0.02, 1.02), ylim=(-0.02, 0.52), xlabel=r"$c_1$", ylabel=r"$c_2$")
       ax.set_aspect("equal")
-      ax.legend(loc="upper right", fontsize=8.5, title="Bounds that cut an edge",
-                title_fontsize=8.5)
-      plt.close(slab_figure)
+      ax.legend(handles=handles, loc="upper right", fontsize=8.5)
+      plt.close(interval_figure)
 
 .. jupyter-execute::
    :hide-code:
-   :alt: The plane c3 = 0 of the Weyl chamber, with the region of √CX followed by ∛iSWAP for the direct representative shaded blue. Four coloured lines, x+y ≥ 1/6, x+z ≤ 1/6, x ≥ 1/8 (which coincides with w ≤ −1/8 on this plane), and y ≤ 1/8 (which coincides with z ≥ −1/8), each contain an edge of the quadrilateral region, and the region touches the chamber wall c2 = 0 only at its corner (1/4, 0). The remaining bound lines are light gray; two of them meet the region only at its corner (5/12, 1/6). B sits at the region's corner (1/6, 1/6), and the identity and CX lie outside it.
+   :alt: The plane c3 = 0 of the Weyl chamber. Four tinted bands, each between two parallel lines of one colour, show the intervals 1/8 ≤ x ≤ 7/24, 0 ≤ y ≤ 1/8, 1/6 ≤ x+y ≤ 5/12, and 0 ≤ x+z ≤ 1/6. Their intersection is the blue region of √CX followed by ∛iSWAP for the direct representative. B sits at its corner (1/6, 1/6), and the identity and CX lie outside it.
 
-   display(slab_figure)
+   display(interval_figure)
 
 The reflected representative contributes the mirror image of this
 quadrilateral under :math:`c_1\mapsto1-c_1`, which also misses CX.
-
-.. _pair-sums:
-
-Why the pair sums are needed
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Since the phases sum to zero, each three-phase sum is minus the
-remaining phase, as in :math:`x+y+z=-w`. The one-phase and three-phase
-bounds therefore give one interval for each of :math:`x,y,z,w`. A target
-can lie in all four intervals and still be unreachable.
-
-For ``AB``, the individual phases attain the ranges
-
-.. math::
-
-   1/8\le x\le7/24,\qquad 0\le y\le1/8,\qquad
-   -1/8\le z\le1/24,\qquad -7/24\le w\le-1/8.
-
-Take the target with phases :math:`(1/6,1/24,1/24,-1/4)`, or Weyl
-coordinates :math:`(5/24,5/24,1/12)`. Each phase lies in its interval,
-and the phases satisfy the alcove conditions.
-``AB`` does not reach the target, which fails the pair-sum bound
-
-.. math::
-
-   y+w\ge-1/6
-   \quad\Longleftrightarrow\quad
-   x+z\le1/6
-   \quad\Longleftrightarrow\quad
-   c_2\le1/6.
-
-The target has :math:`x+z=c_2=5/24`, which exceeds the bound by
-:math:`1/24`. The reflection :math:`\rho` leaves :math:`c_2` unchanged,
-so the reflected representative fails the same bound.
-
-.. jupyter-execute::
-
-   pair_target = LocalEquivalenceClass((5 / 24, 5 / 24, 1 / 12))
-   print("AB reaches the target:", mixed.reaches(pair_target))
-
-.. jupyter-execute::
-   :hide-code:
-   :hide-output:
-
-   np.testing.assert_allclose(24 * lower[:4], [3, 0, -3, -7], atol=1e-9)
-   np.testing.assert_allclose(24 * upper[:4], [7, 3, 1, -3], atol=1e-9)
-   values = phase_sums(pair_target.weyl)
-   failed = [sum_names[k] for k in range(len(sum_names)) if not lower[k] - 1e-9 <= values[k] <= upper[k] + 1e-9]
-   assert failed == ["x+z"], failed
 
 .. _partition-labels:
 
 Where the 72 rules come from
 ----------------------------
 
-For sums of Hermitian matrices, Horn's inequalities are indexed by counts
-of subspaces that meet the eigenspaces of the summands in prescribed
-dimensions. Those counts are the Littlewood–Richardson coefficients. For
-products of unitaries they become quantum Littlewood–Richardson (QLR)
-coefficients, which also count curves and so carry a degree.
-
-Each phase subset :math:`I` labels a Schubert class :math:`\sigma_I`, and the
-quantum product :math:`\star` of two classes expands as
-
-.. math::
-
-   \sigma_I\star\sigma_J=\sum_{K,d}N_{IJ}^{K,d}q^d\sigma_K.
-
-Each nonzero coefficient :math:`N_{IJ}^{K,d}` supplies one rule
-:math:`(I,J)\to(K,d)`. The symbol :math:`q` records the degree and is
-not a circuit parameter. Reachability uses only whether a coefficient is nonzero.
-
-The table has one block for each subset size. For sizes one and three,
-the four labels form a cycle, in the orders :math:`w,z,y,x` and
-:math:`yzw,xzw,xyw,xyz`. The product of the labels in positions
-:math:`i,j\in\{0,1,2,3\}` is the label in position :math:`(i+j)\bmod4`,
-with degree :math:`\lfloor(i+j)/4\rfloor`. The six size-two labels have
-no such cycle, and some of their products have two outputs. The size-two products come from Peterson, Crooks, and Smith's Figure 14.
-
-.. jupyter-execute:: _includes/qlr_rules.py
-
-.. details:: Math detail: partition labels in Theorem 23
-
-   Theorem 23 writes these rules with *partitions* rather than
-   phase-subset labels. For a sum of :math:`r` phases, put :math:`k=4-r`.
-   A partition :math:`\lambda=(\lambda_1,\ldots,\lambda_r)`, with
-   :math:`k\ge\lambda_1\ge\cdots\ge\lambda_r\ge0`, selects
-
-   .. math::
-
-      I(\lambda)=\{k+j-\lambda_j:\ j=1,\ldots,r\}.
-
-   Larger parts of :math:`\lambda` select larger phases. For two-phase
-   sums the dictionary is
-
-   .. list-table:: Partition labels and phase sums
-      :header-rows: 1
-
-      * - Partition :math:`\lambda`
-        - Phase positions
-        - Phase sum
-      * - :math:`(0,0)`
-        - :math:`\{3,4\}`
-        - :math:`z+w`
-      * - :math:`(1,0)`
-        - :math:`\{2,4\}`
-        - :math:`y+w`
-      * - :math:`(1,1)`
-        - :math:`\{2,3\}`
-        - :math:`y+z`
-      * - :math:`(2,0)`
-        - :math:`\{1,4\}`
-        - :math:`x+w`
-      * - :math:`(2,1)`
-        - :math:`\{1,3\}`
-        - :math:`x+z`
-      * - :math:`(2,2)`
-        - :math:`\{1,2\}`
-        - :math:`x+y`
-
-   Thus ``yw + xz -> xy`` is the term with partitions
-   :math:`(1,0),(2,1),(2,2)` and degree zero. Theorem 23 calls these
-   partitions :math:`a,b,c`. Here those letters keep their meanings as
-   gate spectra and Weyl coordinates.
-
-Each rule comes from a subspace that every arrangement of the
-eigenbases must contain. The detail below derives ``yw + xz -> xy`` for
-Hermitian sums in a few lines.
+Each rule comes from a subspace in a constrained position. Take
+Hermitian matrices with :math:`H+K=S`, with eigenvalues
+:math:`\alpha,\beta,\delta`, and a subspace :math:`W` of dimension
+:math:`r`. The trace of each matrix over :math:`W` is a weighted sum of
+its eigenvalues, and the traces of :math:`H` and :math:`K` over :math:`W`
+add to the trace of :math:`S`. When :math:`W` meets the eigenspaces of
+:math:`H`, :math:`K`, and :math:`S` in prescribed dimensions, each trace
+is bounded by a sum of :math:`r` eigenvalues, and together the bounds give
+:math:`f_K(\delta)\ge f_I(\alpha)+f_J(\beta)`. The subsets :math:`I`,
+:math:`J`, and :math:`K` record the prescribed dimensions. The
+Littlewood–Richardson coefficient counts the subspaces in that position,
+and when it is nonzero such a :math:`W` exists for every arrangement of
+the eigenvectors, so the inequality always holds. For products of
+unitaries, the coefficients become quantum Littlewood–Richardson (QLR)
+coefficients (Agnihotri and Woodward, `Theorem 3.1
+<https://arxiv.org/pdf/alg-geom/9712013#page=5>`_; Belkale, `Theorem 7
+<https://doi.org/10.1023/A:1013195625868>`_). Each carries an integer
+degree :math:`d`, which corrects for phases that wrap around the circle.
 
 .. details:: Math detail: the geometry behind one inequality
 
@@ -806,18 +671,82 @@ Hermitian sums in a few lines.
    <https://quantum-journal.org/papers/q-2020-03-26-247/pdf/#page=31>`_
    gives the geometric construction.
 
+Each phase subset :math:`I` labels a Schubert class :math:`\sigma_I`, and
+the quantum product :math:`\star` of two classes expands over classes
+:math:`\sigma_K` and degrees :math:`d` as
+
+.. math::
+
+   \sigma_I\star\sigma_J=\sum_{K,d}N_{IJ}^{K,d}q^d\sigma_K.
+
+Each nonzero coefficient :math:`N_{IJ}^{K,d}` supplies one rule
+:math:`(I,J)\to(K,d)`. The table has 16 rules for single phases, 40 for
+pairs, and 16 for triples, and the code below lists them, with the pair
+rules from Peterson, Crooks, and Smith's Figure 14.
+
+.. jupyter-execute:: _includes/qlr_rules.py
+
+.. details:: Math detail: partition labels in Theorem 23
+
+   Theorem 23 writes these rules with *partitions* rather than
+   phase-subset labels. For a sum of :math:`r` phases, put :math:`k=4-r`.
+   A partition :math:`\lambda=(\lambda_1,\ldots,\lambda_r)`, with
+   :math:`k\ge\lambda_1\ge\cdots\ge\lambda_r\ge0`, selects
+
+   .. math::
+
+      I(\lambda)=\{k+j-\lambda_j:\ j=1,\ldots,r\}.
+
+   Larger parts of :math:`\lambda` select larger phases. For two-phase
+   sums the dictionary is
+
+   .. list-table:: Partition labels and phase sums
+      :header-rows: 1
+
+      * - Partition :math:`\lambda`
+        - Phase positions
+        - Phase sum
+      * - :math:`(0,0)`
+        - :math:`\{3,4\}`
+        - :math:`z+w`
+      * - :math:`(1,0)`
+        - :math:`\{2,4\}`
+        - :math:`y+w`
+      * - :math:`(1,1)`
+        - :math:`\{2,3\}`
+        - :math:`y+z`
+      * - :math:`(2,0)`
+        - :math:`\{1,4\}`
+        - :math:`x+w`
+      * - :math:`(2,1)`
+        - :math:`\{1,3\}`
+        - :math:`x+z`
+      * - :math:`(2,2)`
+        - :math:`\{1,2\}`
+        - :math:`x+y`
+
+   Thus ``yw + xz -> xy`` is the term with partitions
+   :math:`(1,0),(2,1),(2,2)` and degree zero. Theorem 23 calls these
+   partitions :math:`a,b,c`. Here those letters keep their meanings as
+   gate spectra and Weyl coordinates.
+
 .. _max-plus-recurrence:
 
 Longer sentences: the max-plus recurrence
 -----------------------------------------
 
-With three gates, the prefix reaches a region of spectra, not one
-spectrum. The two-gate inequalities with each prefix phase sum replaced
-by its lower bound still hold for every output. They look too weak,
-because no single prefix spectrum attains all fourteen bounds at once.
-The Horn theorem for products of many factors shows that they are
-enough. For fixed input spectra :math:`a^{(1)},\ldots,a^{(n)}`, its inequalities still
-use only the fourteen output subsets:
+A two-gate sentence reaches a region, not a single spectrum, so
+appending a third gate means combining a whole region with the new gate.
+One natural shortcut is to apply the two-gate rules with each phase sum
+of the prefix replaced by its lower bound :math:`\beta_I`. That shortcut
+might seem to lose information, because different prefix spectra attain
+different bounds. For ``AA``, the identity attains :math:`x\ge0` and CX
+attains :math:`w\ge-1/4`, but no spectrum attains both, since
+:math:`x=0` forces all four ordered phases, which sum to zero, to be
+zero. The Horn theorem for products of many factors shows that the
+shortcut is nevertheless exact. For fixed input spectra
+:math:`a^{(1)},\ldots,a^{(n)}`, its inequalities use only the fourteen
+output subsets:
 
 .. math::
 
@@ -839,23 +768,10 @@ gives
    \max_{J_1,\ldots,J_n,d:\,[q^d\sigma_K]\prod_t\sigma_{J_t}>0}
       \left(\sum_{t=1}^n f_{J_t}(a^{(t)})-d\right).
 
-The many-factor theorem lets each factor's eigenbasis be any unitary, but
-a circuit has only local layers. Corollary 14, applied one gate at a
-time, closes the gap. Suppose some unitaries with the native Cartan-double spectra
-multiply to the target spectrum. Their partial products give a spectrum
-for each prefix. At each step, absorb the outer local factors of the
-prefix into the next middle layer. Corollary 14 then supplies a middle
-local layer that takes the current prefix class and the next native gate
-to the next prefix spectrum. The circuit has to match only the prefix
-spectra, not the matrices of those unitaries, so the argument never needs
-one orthogonal change of basis for all factors at once.
-
 Peterson, Crooks, and Smith's `Corollary 26
 <https://quantum-journal.org/papers/q-2020-03-26-247/pdf/#page=11>`_
 handles longer circuits by adding an intermediate spectrum and projecting
-it away with Fourier–Motzkin elimination. Their construction lets each
-native class range over a polytope, which covers continuous gate
-families. For a sentence of fixed gates, the recurrence below gives the
+it away with Fourier–Motzkin elimination. For a sentence of fixed gates, the recurrence below gives the
 same region without the projection, because it groups the multiple-factor
 inequalities by their fourteen output labels and keeps the strongest
 bound in each.
@@ -870,7 +786,7 @@ starting from one gate,
 
    \beta_I^{(1)}=f_I(a^{(1)}),
 
-and appends :math:`a^{(n+1)}` with the binary QLR table:
+and appends :math:`a^{(n+1)}` with the 72 rules of the two-gate table:
 
 .. math::
 
@@ -902,13 +818,6 @@ keeps that value. For three gates the expanded recurrence reads
       \left[f_{J_1}(a^{(1)})+f_{J_2}(a^{(2)})
             +f_{J_3}(a^{(3)})-(d_1+d_2)\right].
 
-The intermediate label :math:`I` selects a term of this expansion, not a
-gate or an intermediate spectrum. Each final bound can use a different
-maximizing path, and no single prefix spectrum needs to attain all the
-prefix bounds at once. For ``AA``, the identity attains :math:`x=0` and CX
-attains :math:`w=-1/4`, but :math:`x=0` forces all four ordered, zero-sum
-phases to zero, so no spectrum attains both bounds.
-
 .. _reference-recurrence:
 
 The recurrence in exact fractions
@@ -916,22 +825,7 @@ The recurrence in exact fractions
 
 .. jupyter-execute:: _includes/recurrence.py
 
-Two of the bounds for ``AB`` are never attained by the region. The
-alcove and the other bounds already force :math:`y\ge0` and
-:math:`y+z\ge0`, while the table gives only :math:`\beta_y=-1/24` and
-:math:`\beta_{yz}=-1/6`.
-
 .. jupyter-execute:: _includes/prefix_bounds.py
-
-.. jupyter-execute::
-   :hide-code:
-   :hide-output:
-
-   vertex_spectra = [phases(v) for v in mixed.vertices]
-   unattained = [label for label in labels
-                 if abs(min(phase_sum(s, label) for s in vertex_spectra) - float(mixed_bounds[label])) > 1e-9]
-   assert unattained == ["y", "yz"]
-   assert mixed_bounds["y"] == -Fraction(1, 24) and mixed_bounds["yz"] == -Fraction(1, 6)
 
 The search in :ref:`guiding-selection` uses these bounds to choose
 between ``AAA`` and ``AAB`` for a target with Weyl coordinates

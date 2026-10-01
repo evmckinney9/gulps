@@ -213,13 +213,11 @@ of the last instruction:
 
    C_{i-1}\in\mathcal R_{i-1}\cap\operatorname{Reach}(C_i,G_i^{-1}).
 
-The inverse :math:`G_i^{-1}` only computes which classes can precede
-:math:`G_i`. The circuit uses :math:`G_i`, so the inverse need not be a
-native instruction. If :math:`G_i` has ordered eigenphases
+If :math:`G_i` has ordered eigenphases
 :math:`(x,y,z,w)`, its inverse has :math:`(-w,-z,-y,-x)`.
 
 Both regions bound the same fourteen sums, so their intersection keeps the
-larger lower bound of each. Any point in it works: being in the backward
+larger lower bound of each. Any point in the intersection works: being in the backward
 region connects it to :math:`C_i`, and being in the prefix region means
 the earlier gates can reach it, so no look-ahead is needed. GULPS takes
 the point with the smallest :math:`x`, then the largest :math:`y`, then
@@ -275,10 +273,11 @@ extra native instruction. It splits the construction into two steps:
 Recovering the middle local gate
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The region bounds show that a local gate exists between each pair of
-canonical inputs, but not its matrix. The
+Each step has a middle local gate that takes :math:`C_{i-1}` and
+:math:`G_i` to :math:`C_i`, because :math:`C_i` lies in the region of
+that pair. The
 `can_sandwich <https://github.com/evmckinney9/can_sandwich>`_ solver
-finds it by solving the inverse spectral problem below. The unknowns are
+finds this gate by solving the inverse spectral problem below. The unknowns are
 the two single-qubit gates :math:`u_i` and :math:`v_i` between the prefix
 and the next native instruction.
 
@@ -314,7 +313,6 @@ in the :ref:`magic basis <cartan-double>` is
    D(m)=\operatorname{diag}
    (e^{i\pi y},e^{i\pi x},e^{i\pi w},e^{i\pi z}).
 
-The diagonal follows the magic-basis column order, not the phase order.
 For a class :math:`C`, :math:`D(C)` means :math:`D` at the monodromy
 coordinates of :math:`C`. The solver finds :math:`O\in SO(4)` such that
 
@@ -345,12 +343,9 @@ In the computational basis, the factorization for each step is
    \operatorname{CAN}(G_i)V_i\operatorname{CAN}(C_{i-1})
    =L_i\operatorname{CAN}(C_i)R_i e^{i\eta_i}.
 
-``solve_with_factors`` takes classes as inputs, and a native instruction can differ from its canonical
-gate by local factors.
-
-GULPS therefore assembles the canonical sentence first and substitutes
-the native instructions afterward, which keeps the class-dependent solve
-separate from those local factors. Write the accumulated canonical prefix
+GULPS assembles the canonical sentence first and substitutes the native
+instructions afterward, which keeps the class-dependent solve separate
+from the local factors of each native instruction. Write the accumulated canonical prefix
 as :math:`P_{i-1}=E_{i-1}\operatorname{CAN}(C_{i-1})F_{i-1}e^{i\phi_{i-1}}`.
 For the first gate, :math:`C_1=G_1`, :math:`E_1=F_1=I`, and
 :math:`\phi_1=0`. For each later gate, GULPS inserts the layer
