@@ -1,65 +1,76 @@
 PYTHON_VERSION = python3.12
-PIP = .venv/bin/pip
-PYTEST = .venv/bin/pytest
-PRE_COMMIT = .venv/bin/pre-commit
+VENV           = .venv
+RUST_BIN      ?= $(HOME)/.cargo/bin
+BENCH_THREADS ?= 1
+BENCH_ARGS    ?= --benchmark-autosave
+export PATH   := $(RUST_BIN):$(PATH)
+
+UV := $(shell command -v uv 2>/dev/null)
+ifdef UV
+  INSTALL = uv pip install --python $(VENV)/bin/python
+else
+  INSTALL = $(VENV)/bin/pip install
+endif
 
 .DEFAULT_GOAL := help
+.PHONY: help init submodules update-hooks reset-venv rebuild test bench format lint docs docs-serve docs-draft clean
 
-help:  ## Show this help message
-	@awk 'BEGIN {FS = ":.*##"; printf "Targets:\n"} /^[a-zA-Z_-]+:.*?##/ {printf "  %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+help:  ## List targets
+	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z_-]+:.*?##/ {printf "  %-24s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-init:  ## Create venv, install deps, set up pre-commit hooks (removes existing .venv/)
-	rm -rf .venv
-	$(PYTHON_VERSION) -m venv .venv
-	@$(PIP) install --upgrade pip
-# 	@$(PIP) install setuptools_rust
-	$(PIP) install -e .[cplex,dev] --quiet
-	$(PIP) install -r requirements-monodromy.txt --quiet
-	@$(PRE_COMMIT) install && $(PRE_COMMIT) install --hook-type commit-msg
-	@$(PRE_COMMIT) autoupdate
-	chmod +x .git/hooks/pre-commit
+$(VENV)/bin/python:
+	$(PYTHON_VERSION) -m venv $(VENV)
 
-upgrade:  ## Upgrade all packages to latest versions
-	$(PIP) install --upgrade pip
-	$(PIP) install -e .[cplex,dev] --upgrade
-	$(PIP) install -r requirements-monodromy.txt --upgrade
+submodules:  ## Fetch the solver commit pinned by this checkout
+	git submodule update --init --recursive
 
-clean:  ## Remove temporary files and build artifacts
-	@find ./ -type f -name '*.pyc' -exec rm -f {} \; 2>/dev/null || true
-	@find ./ -type d -name '__pycache__' -exec rm -rf {} \; 2>/dev/null || true
-	@find ./ -type f -name 'Thumbs.db' -exec rm -f {} \; 2>/dev/null || true
-	@find ./ -type f -name '*~' -exec rm -f {} \; 2>/dev/null || true
-	@rm -rf .cache
-	@rm -rf .pytest_cache
-	@rm -rf .mypy_cache
-	@rm -rf build
-	@rm -rf dist
-	@rm -rf *.egg-info
-	@rm -rf htmlcov
-	@rm -rf .tox/
-	@rm -rf docs/_build
-	@rm -rf .ruff_cache
-	@rm -rf src/__pycache__
-	@rm -rf src/*.egg-info
+init: submodules $(VENV)/bin/python  ## Create the development environment and install git hooks
+	@$(VENV)/bin/pip install --upgrade pip --quiet
+	$(INSTALL) -e .[dev] --quiet
+	@$(VENV)/bin/pre-commit install --hook-type pre-commit --hook-type commit-msg
 
-ab:
-	.venv/bin/python ./scripts/simple_speed.py
-	.venv/bin/python ./scripts/xx_compare.py
-	.venv/bin/python ./scripts/weyl_speed.py
+update-hooks:  ## Bump hook revisions in .pre-commit-config.yaml
+	@$(VENV)/bin/pre-commit autoupdate
 
-test:  ## Run pytest
-	@$(PIP) install -e .[test] --quiet
-	$(PYTEST) src/tests
+reset-venv:  ## Delete the environment
+	rm -rf $(VENV)
 
-format:  ## Run all pre-commit hooks on all files
-	@$(PIP) install -e .[format] --quiet
-	$(PRE_COMMIT) run --all-files
+rebuild:  ## Rebuild the Rust extension
+	$(INSTALL) -e . --quiet --no-deps
 
-precommit:  ## Run tests, then format
+test: rebuild  ## Run Rust and Python tests
+	cargo test --manifest-path crates/Cargo.toml --locked --workspace --all-targets
+	$(VENV)/bin/pytest tests
 
-# 	@$(PIP) install -e .[test] --quiet
-	$(PYTEST) src/tests
-# 	@$(PIP) install -e .[format] --quiet
-	$(PRE_COMMIT) run --all-files
+bench: rebuild  ## Measure fixed compiler workloads and save timings (.benchmarks/)
+	PYTHONHASHSEED=0 RAYON_NUM_THREADS=$(BENCH_THREADS) OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 \
+	QISKIT_IN_PARALLEL=FALSE QISKIT_FORCE_THREADS=FALSE \
+	$(VENV)/bin/pytest tests/test_benchmarks.py --benchmark-enable --benchmark-only \
+		--benchmark-warmup=on --benchmark-disable-gc --benchmark-min-rounds=20 \
+		--benchmark-min-time=0.005 --benchmark-max-time=0.5 \
+		--benchmark-save-data --benchmark-columns=median,iqr,mean,stddev,rounds,iterations $(BENCH_ARGS)
 
-.PHONY: help init upgrade clean test precommit format
+format:  ## Format Rust and Python in place
+	cargo fmt --manifest-path crates/Cargo.toml -p gulps-core -p gulps-pyext
+	$(VENV)/bin/pre-commit run --all-files
+
+lint:  ## Check formatting, clippy, and ruff without changing anything
+	cargo fmt --manifest-path crates/Cargo.toml -p gulps-core -p gulps-pyext --check
+	cargo clippy --manifest-path crates/Cargo.toml --workspace --all-targets --all-features -- -D warnings
+	$(VENV)/bin/ruff check src tests docs
+	$(VENV)/bin/ruff format --check src tests docs
+
+docs: rebuild  ## Run the doc examples and build docs/_build/html
+	@rm -rf docs/_build/html docs/_build/jupyter_execute
+	$(VENV)/bin/sphinx-build -b html -W --keep-going docs docs/_build/html
+
+docs-serve: rebuild  ## Serve docs at http://localhost:8000/ and rebuild on every edit
+	$(VENV)/bin/sphinx-autobuild --port 8000 docs docs/_build/html
+
+docs-draft: rebuild  ## Like docs-serve, but examples are shown unexecuted (about 1 s per rebuild)
+	GULPS_DOCS_NOEXEC=1 $(VENV)/bin/sphinx-autobuild --port 8000 docs docs/_build/draft
+
+clean:  ## Remove build artifacts and caches
+	rm -rf build dist src/*.egg-info .pytest_cache .ruff_cache crates/target \
+	       docs/_build docs/apidocs/stubs src/gulps/_accelerate*.so src/gulps/_accelerate*.pyd
+	find src tests docs -name __pycache__ -type d -prune -exec rm -rf {} +

@@ -1,0 +1,26 @@
+[package]
+name = "gulps-pyext"
+description = "Python extension for gulps: bindings and Qiskit C API interop around gulps-core"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "_accelerate"
+crate-type = ["cdylib"]
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+indexmap = "2.10.0"
+gulps-core.workspace = true
+qiskit-pyo3-ffi.workspace = true
+qiskit-numerics.workspace = true
+pyo3 = { workspace = true, features = ["num-complex"] }
+numpy.workspace = true
+
+[features]
+extension-module = ["pyo3/extension-module"]

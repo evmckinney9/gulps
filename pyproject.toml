@@ -3,14 +3,14 @@ requires = ["setuptools", "wheel", "setuptools_rust"]
 build-backend = "setuptools.build_meta"
 
 [project.entry-points."qiskit.transpiler.translation"]
-"gulps" = "gulps:GulpsTranslationPlugin"
+"gulps" = "gulps.transpiler:GulpsTranslationPlugin"
 
 [project]
 name = "gulps"
 description = "optimally compile arbitrary two-qubit unitaries into heterogeneous native gate sets"
-version = "0.3.7"
+version = "0.4.0"
 authors = [{ name = "Evan McKinney", email = "evmckinney9@gmail.com" }]
-license = { text = "Apache-2.0" }
+license = "Apache-2.0"
 readme = "README.md"
 requires-python = ">=3.10"
 keywords = [
@@ -25,7 +25,6 @@ keywords = [
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -34,53 +33,70 @@ classifiers = [
     "Programming Language :: Rust",
     "Topic :: Scientific/Engineering :: Physics",
 ]
-dependencies = ["qiskit>=2.0,<3", "numpy"]
+dependencies = ["qiskit>=2.5,<2.6", "numpy"]
+
+[tool.setuptools]
+include-package-data = false
+
+[tool.distutils.bdist_wheel]
+py_limited_api = "cp310"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["gulps", "gulps.*"]
+namespaces = false
 
 [project.urls]
 Homepage = "https://github.com/evmckinney9/gulps"
+Documentation = "https://evm9.dev/gulps/"
 Repository = "https://github.com/evmckinney9/gulps"
 Issues = "https://github.com/evmckinney9/gulps/issues"
+Paper = "https://doi.org/10.1109/QCE68830.2026.00091"
 [project.optional-dependencies]
-cplex = ["qiskit-optimization[cplex]"]
-dev = [
-    "matplotlib",
-    "lusca",
-    "ipykernel",
-    "pre-commit",
-    "pylatexenc",
-    "tqdm",
-    "snakeviz",
-    "ipywidgets",
-    "qutip",
-]
+viz = ["matplotlib", "pylatexenc"]
 format = ["pre-commit", "ruff"]
-test = ["pytest"]
+test = ["pytest", "pytest-benchmark>=5.2,<6"]
+docs = [
+    "gulps[viz]",
+    "sphinx",
+    "jupyter-sphinx",
+    "myst-parser",
+    "ipykernel",
+    "sphinx-autobuild",
+    "sphinx-copybutton>=0.5,<1",
+    "sphinx-sitemap>=2.9,<3",
+    "qiskit-sphinx-theme>=2",
+]
+dev = ["gulps[format,test,docs]"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--import-mode=importlib --benchmark-disable"
+filterwarnings = ["error"]
 
 [tool.ruff]
-target-version = "py312"
-fix = true
-extend-include = ["*.ipynb"]
+extend-exclude = ["dev", "docs/_includes"]
+target-version = "py310"
 
 [tool.ruff.lint]
-select = ["D"]
-ignore = ["D105"] # magic methods like __init__ don't need docstrings
+select = ["D", "ANN", "F", "I"]
+ignore = [
+    "D105",   # magic methods like __init__ don't need docstrings
+    "ANN401", # Any is legitimate at the PyO3 FFI / numpy / Qiskit seam
+    "ANN002", # *args doesn't need type annotations
+    "ANN003", # **kwargs doesn't need type annotations
+]
 
 [tool.ruff.lint.per-file-ignores]
-"scripts/**" = ["D"]
-"src/tests/**/*.py" = ["D1"]
-"src/gulps/comparisons/**" = ["D"] # third-party driver wrappers
-"**/*.ipynb" = ["D"]
+"tests/**/*.py" = ["D1", "ANN"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
 [[tool.setuptools-rust.ext-modules]]
-# Private Rust extension module to be nested into the Python package
-# https://github.com/PyO3/setuptools-rust?tab=readme-ov-file
 target = "gulps._accelerate"
-path = "crates/Cargo.toml"
+path = "crates/pyext/Cargo.toml"
 binding = "PyO3"
+features = ["extension-module"]
+cargo-manifest-args = ["--locked"]
 debug = false
-
-[tool.distutils.bdist_wheel]
-py_limited_api = "cp310"
