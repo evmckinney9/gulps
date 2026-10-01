@@ -6,6 +6,16 @@
 {%- endblock -%}
 {%- block extrahead -%}
   {{ super() }}
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-0S6658MQKV"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-0S6658MQKV', {
+      allow_google_signals: false,
+      allow_ad_personalization_signals: false,
+    });
+  </script>
   {%- if pagename == master_doc %}
     <script type="application/ld+json">
       {
