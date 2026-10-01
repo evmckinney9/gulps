@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gulps"
-description = "optimally compile arbitrary two-qubit unitaries into heterogeneous native gate sets"
+description = "A Qiskit transpiler plugin for least-cost two-qubit gate synthesis into arbitrary native gate sets."
 version = "0.4.0"
 authors = [{ name = "Evan McKinney", email = "evmckinney9@gmail.com" }]
 license = "Apache-2.0"

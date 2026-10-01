@@ -1,0 +1,26 @@
+{% extends "!base.html" %}
+{%- block htmltitle -%}
+  {%- if pagename == master_doc -%}
+    <title>GULPS: Two-Qubit Gate Synthesis for Arbitrary Native Gates</title>
+  {%- else -%}{{ super() }}{%- endif -%}
+{%- endblock -%}
+{%- block extrahead -%}
+  {{ super() }}
+  {%- if pagename == master_doc %}
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareSourceCode",
+        "name": "GULPS",
+        "description": "A Qiskit transpiler plugin for least-cost two-qubit gate synthesis into arbitrary native gate sets.",
+        "url": "https://evm9.dev/gulps/",
+        "codeRepository": "https://github.com/evmckinney9/gulps",
+        "programmingLanguage": ["Python", "Rust"],
+        "softwareVersion": "{{ release }}",
+        "license": "https://www.apache.org/licenses/LICENSE-2.0",
+        "author": {"@type": "Person", "name": "Evan McKinney", "url": "https://evm9.dev/"},
+        "citation": "https://doi.org/10.1109/QCE68830.2026.00091"
+      }
+    </script>
+  {%- endif -%}
+{%- endblock -%}

@@ -120,6 +120,18 @@ def _hide_generated_source_links(
         context["show_source"] = False
 
 
+def _canonical_landing_url(
+    app: Any,
+    pagename: str,
+    _templatename: str,
+    context: dict[str, Any],
+    _doctree: Any,
+) -> None:
+    """Point the landing page's canonical link at the directory URL that inbound links use."""
+    if pagename == app.config.root_doc:
+        context["pageurl"] = app.config.html_baseurl
+
+
 def _restore_explicit_init_signature(
     _app: Any,
     what: str,
@@ -214,6 +226,7 @@ def setup(app: Any) -> None:
     app.add_directive("jupyter-execute", _AccessibleJupyterCell, override=True)
     app.connect("doctree-resolved", _describe_cell_images)
     app.connect("html-page-context", _hide_generated_source_links)
+    app.connect("html-page-context", _canonical_landing_url)
     app.connect("autodoc-process-signature", _restore_explicit_init_signature)
     if os.environ.get("GULPS_DOCS_NOEXEC"):
         app.add_directive("jupyter-execute", _Unexecuted, override=True)

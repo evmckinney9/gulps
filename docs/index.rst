@@ -1,5 +1,5 @@
 .. meta::
-   :description: Compile two-qubit gates into your native instruction set and choose pulse durations for your workload with GULPS.
+   :description: GULPS is a Qiskit transpiler plugin that decomposes two-qubit unitaries into least-cost circuits of arbitrary native gates, such as fractional iSWAP or √CX.
 
 GULPS
 =====
