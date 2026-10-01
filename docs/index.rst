@@ -1,5 +1,5 @@
 .. meta::
-   :description: GULPS is a Qiskit transpiler plugin that decomposes two-qubit unitaries into least-cost circuits of arbitrary native gates, such as fractional iSWAP or √CX.
+   :description: GULPS is a Qiskit transpiler plugin that decomposes two-qubit unitaries into least-cost circuits of arbitrary native gates.
 
 GULPS
 =====
