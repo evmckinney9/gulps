@@ -40,9 +40,7 @@ jobs:
           cache: pip
           cache-dependency-path: "**/pyproject.toml"
 
-      - uses: dtolnay/rust-toolchain@1.97
-        with:
-          components: rustfmt, clippy
+      - run: rustup toolchain install  # version from rust-toolchain.toml
 
       - uses: Swatinem/rust-cache@v2
         with:

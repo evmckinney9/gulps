@@ -2,7 +2,8 @@
 
 ## Setup
 
-Development uses Python 3.12 and Rust 1.97 or newer.
+Development uses Python 3.12 and the Rust version in
+[rust-toolchain.toml](../rust-toolchain.toml), which rustup installs automatically.
 
 ```sh
 git clone --recurse-submodules https://github.com/evmckinney9/gulps.git
