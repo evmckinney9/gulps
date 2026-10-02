@@ -3,9 +3,9 @@
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python&logoColor=white)](https://www.python.org/downloads/)
 [![PyPI - Version](https://img.shields.io/pypi/v/gulps)](https://pypi.org/project/gulps/)
 [![CI](https://github.com/evmckinney9/gulps/actions/workflows/ci.yml/badge.svg)](https://github.com/evmckinney9/gulps/actions/workflows/ci.yml)
+[![Docs](https://github.com/evmckinney9/gulps/actions/workflows/docs.yml/badge.svg?branch=main)](https://evm9.dev/gulps/)
 [![DOI](https://img.shields.io/badge/DOI-10.1109%2FQCE68830.2026.00091-blue)](https://doi.org/10.1109/QCE68830.2026.00091)
 [![Qiskit Ecosystem](https://qisk.it/e-0a8128d0)](https://qisk.it/e)
-[![Docs](https://github.com/evmckinney9/gulps/actions/workflows/docs.yml/badge.svg?branch=main)](https://evm9.dev/gulps/)
 
 GULPS is a two-qubit gate synthesis package for arbitrary native instruction sets.
 Given a set of native two-qubit gates and a cost for each, it selects the least-cost sentence, an ordered list of native gates with single-qubit gates before, between, and after them, that implements a target unitary.
