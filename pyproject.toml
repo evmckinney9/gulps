@@ -33,7 +33,7 @@ classifiers = [
     "Programming Language :: Rust",
     "Topic :: Scientific/Engineering :: Physics",
 ]
-dependencies = ["qiskit>=2.5,<2.6", "numpy"]
+dependencies = ["qiskit>=2.5,<3", "numpy"]
 
 [tool.setuptools]
 include-package-data = false
