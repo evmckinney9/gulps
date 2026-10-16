@@ -1,11 +1,22 @@
 exclude: "^dev/"
 fail_fast: true
+default_install_hook_types: [pre-commit, commit-msg]
 
 repos:
   - repo: https://github.com/compilerla/conventional-pre-commit
     rev: v4.4.0
     hooks:
       - id: conventional-pre-commit
+        stages: [commit-msg]
+
+  - repo: local
+    hooks:
+      # Subject line only: fail if any non-comment line follows it.
+      - id: no-commit-body
+        name: commit message is one line
+        language: pygrep
+        entry: '\A[^\n]*\n(?:[ \t]*\n|#[^\n]*\n)*[^#\s]'
+        args: [--multiline]
         stages: [commit-msg]
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
