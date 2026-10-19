@@ -3,7 +3,7 @@
 
 use gulps_core::Mat4;
 use numpy::{AllowTypeChange, IntoPyArray, PyArrayLike2, PyUntypedArrayMethods};
-use pyo3::exceptions::PyValueError;
+use pyo3::exceptions::{PyImportError, PyValueError};
 use pyo3::prelude::*;
 
 mod analysis;
@@ -12,9 +12,23 @@ mod invariants;
 mod qiskit;
 mod transpiler;
 
+/// The Qiskit major and minor version that `qiskit-pyo3-ffi` was generated
+/// from. The C API may change between minor versions, so the loaded Qiskit
+/// must match.
+const QISKIT_VERSION: (u32, u32) = (2, 6);
+
 #[pymodule]
 fn _accelerate(m: &Bound<'_, PyModule>) -> PyResult<()> {
     qiskit_pyo3_ffi::qk_import(m.py())?;
+    // SAFETY: `qk_import` succeeded.
+    let version = unsafe { qiskit_pyo3_ffi::qk_api_version() };
+    let loaded = (version >> 24, (version >> 16) & 0xff);
+    if loaded != QISKIT_VERSION {
+        return Err(PyImportError::new_err(format!(
+            "gulps was built for Qiskit {}.{}, but Qiskit {}.{} is installed",
+            QISKIT_VERSION.0, QISKIT_VERSION.1, loaded.0, loaded.1
+        )));
+    }
     decomposer::register(m)?;
     m.add_class::<transpiler::BlockSynthesizer>()?;
     m.add_class::<invariants::LocalEquivalenceClass>()?;

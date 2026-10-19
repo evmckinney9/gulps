@@ -220,12 +220,6 @@ impl BlockSynthesizer {
     /// Replace every two-qubit unitary of `dag` in place, and return it. No
     /// other thread may use `dag` until this returns.
     fn run(&self, py: Python<'_>, dag: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-        if dag.getattr("num_vars")?.extract::<usize>()? != 0 {
-            return Err(PyNotImplementedError::new_err(
-                "DAGs with classical variables are not supported; see \
-                 https://github.com/evmckinney9/gulps/issues/23",
-            ));
-        }
         qiskit::replace(
             dag,
             |pair| self.get(pair),

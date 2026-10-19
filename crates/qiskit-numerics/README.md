@@ -1,8 +1,8 @@
 # Qiskit numerics
 
 Qiskit's canonical two-qubit gate, Makhlin invariants, magic basis, closest
-unitary, and utility types, copied from Qiskit revision
-[`c1c01ada`](https://github.com/Qiskit/qiskit/tree/c1c01ada399af13e495c27b9b22b4ff942bbad7e).
+unitary, and utility types, copied from Qiskit 2.6.0, revision
+[`65094a01`](https://github.com/Qiskit/qiskit/tree/65094a013073e4bda53c2b341056ab9ade0eb1bd).
 Qiskit's C API does not expose these routines. When it does, GULPS will call
 them through `qiskit-pyo3-ffi` and this crate will be removed. The KAK
 decomposition itself is in `gulps-core`, which needs the local rotations in the
@@ -25,6 +25,8 @@ applied. The patch makes these changes:
 - It makes `ud` and `MAGIC` public. `two_qubit_local_invariants` and
   `local_equivalence` take array views instead of NumPy arrays.
 - It imports `PyErr` and `PyResult` from this crate instead of pyo3.
+- It drops the `dyn_types` module declaration from `util.rs`; that module is
+  not copied.
 
 `src/lib.rs` and `Cargo.toml` are local. `lib.rs` declares the upstream module
 paths, names the crate `qiskit_util` for the upstream imports, and replaces
@@ -37,7 +39,7 @@ From this directory, with a Qiskit Git repository that contains the revision:
 
 ```sh
 qiskit=/path/to/qiskit
-rev=c1c01ada399af13e495c27b9b22b4ff942bbad7e
+rev=65094a013073e4bda53c2b341056ab9ade0eb1bd
 out=$(mktemp -d)
 mkdir -p "$out/src/two_qubit_decompose" "$out/src/linalg"
 for f in two_qubit_decompose/common.rs linalg/mod.rs linalg/cos_sin_decomp.rs; do
