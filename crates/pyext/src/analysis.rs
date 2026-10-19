@@ -69,11 +69,10 @@ fn coverage_candidate<'py>(
     decomposer: &GulpsDecomposer,
     row: usize,
 ) -> PyResult<(f64, Bound<'py, PyTuple>, [f64; 14])> {
-    let (slots, cost, region) = decomposer
-        .edge
-        .binding
-        .decomposer()
-        .coverage_candidate(row)
+    // Reaching a late row can grow the search for a long time; release the GIL as `select` does.
+    let walk = decomposer.edge.binding.decomposer();
+    let (slots, cost, region) = py
+        .detach(|| walk.coverage_candidate(row))
         .map_err(|err| compile_error(py, err, None))?;
     let gates = decomposer.gates.bind(py);
     let gates = slots
