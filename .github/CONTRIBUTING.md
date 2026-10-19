@@ -22,12 +22,15 @@ Test behavior through the public API, allowing different valid decompositions.
 Solver tests belong in `crates/can_sandwich`; GULPS tests cover its integration.
 
 The oracle tests in `tests/test_analysis.py` compare against monodromy, which
-needs lrslib. CI requires them; elsewhere they are skipped when monodromy is
-not installed. To run them:
+needs `lrsgmp` from lrslib 7.1 (monodromy is archived and fails with lrslib
+7.3). CI requires them; elsewhere they are skipped when monodromy is not
+installed. To run them, build `lrsgmp` (needs GMP) as CI does:
 
 ```sh
 .venv/bin/python -m pip install "monodromy @ git+https://github.com/qiskit-community/monodromy"
-sudo apt-get install lrslib
+curl -sfL https://cgm.cs.mcgill.ca/~avis/C/lrslib/archive/lrslib-071b.tar.gz | tar xz
+make -C lrslib-071b lrsgmp
+LRS_PATH=$PWD/lrslib-071b/lrsgmp make test
 ```
 
 Commit hooks enforce [Conventional Commits](https://www.conventionalcommits.org/).
