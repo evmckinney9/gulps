@@ -9,11 +9,10 @@
 
 use std::cmp::{Ordering, Reverse};
 use std::collections::BinaryHeap;
-use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Mutex, MutexGuard};
 
 use crate::class::Mono;
-use crate::reachability::{Region, covers, project};
+use crate::reachability::{BASE_STATE, Region, covers, project};
 
 /// A covering sequence; gate indices refer to the configured ISA.
 pub struct Selection {
@@ -70,60 +69,10 @@ struct WalkRow {
     region: Region,
 }
 
-/// Rows in the first chunk; chunk `k` holds `FIRST_CHUNK << k` rows.
-const FIRST_CHUNK: usize = 64;
-
-/// Emitted rows, readable without a lock while one grower appends. Chunks never
-/// move, so a published row stays valid while later rows are added.
-struct Rows {
-    chunks: [OnceLock<Box<[OnceLock<WalkRow>]>>; usize::BITS as usize],
-    len: AtomicUsize,
-}
-
-impl Rows {
-    fn new() -> Self {
-        Self {
-            chunks: std::array::from_fn(|_| OnceLock::new()),
-            len: AtomicUsize::new(0),
-        }
-    }
-
-    /// Number of published rows. Every row below it is readable.
-    fn len(&self) -> usize {
-        self.len.load(AtomicOrdering::Acquire)
-    }
-
-    fn slot(index: usize) -> (usize, usize) {
-        let block = index / FIRST_CHUNK + 1;
-        let chunk = (usize::BITS - 1 - block.leading_zeros()) as usize;
-        (chunk, index - FIRST_CHUNK * ((1 << chunk) - 1))
-    }
-
-    /// A published row; `index` must be below `len()`.
-    fn get(&self, index: usize) -> &WalkRow {
-        let (chunk, offset) = Self::slot(index);
-        self.chunks[chunk]
-            .get()
-            .and_then(|rows| rows[offset].get())
-            .expect("rows below len are published")
-    }
-
-    /// Append and publish a row. Only the holder of the frontier lock appends.
-    fn push(&self, row: WalkRow) -> usize {
-        let index = self.len.load(AtomicOrdering::Relaxed);
-        let (chunk, offset) = Self::slot(index);
-        let rows = self.chunks[chunk]
-            .get_or_init(|| (0..FIRST_CHUNK << chunk).map(|_| OnceLock::new()).collect());
-        if rows[offset].set(row).is_err() {
-            unreachable!("each row index is written once");
-        }
-        self.len.store(index + 1, AtomicOrdering::Release);
-        index
-    }
-}
-
-/// Pending candidates, cheapest first, and the dominance screen.
-struct Frontier {
+/// The walk so far: emitted rows in candidate order, the pending candidates,
+/// cheapest first, and the dominance screen.
+struct WalkState {
+    rows: Vec<WalkRow>,
     heap: BinaryHeap<Reverse<Candidate>>,
     /// Smallest coefficient maximum among emitted rows.
     min_max_bound: f64,
@@ -131,12 +80,11 @@ struct Frontier {
 
 /// Persistent cost-ordered Horn search for one fixed ISA, shared across threads.
 ///
-/// Queries scan the emitted rows without a lock and return the first covering
-/// row, which is the cheapest up to `tie` per gate, with fewer gates preferred.
-/// A query that reaches the last row grows the walk
-/// under the frontier lock, one row at a time, while other queries keep
-/// scanning. Rows are emitted in the same order regardless of which queries
-/// cause growth, so results do not depend on thread timing.
+/// A query scans the emitted rows under one lock and returns the first
+/// covering row, which is the cheapest up to `tie` per gate, with fewer gates
+/// preferred. A query that reaches the last row grows the walk one row at a
+/// time. Rows are emitted in the same order regardless of which queries cause
+/// growth, so results do not depend on thread timing.
 pub struct Walk {
     /// Canonical gates: class and cost.
     slots: Vec<(Mono, f64)>,
@@ -154,9 +102,7 @@ pub struct Walk {
     tie: f64,
     /// Slot indices in canonical extension order: cost, then slot.
     gates: Vec<usize>,
-    /// Emitted nodes, in candidate order.
-    rows: Rows,
-    frontier: Mutex<Frontier>,
+    state: Mutex<WalkState>,
 }
 
 impl Walk {
@@ -192,8 +138,8 @@ impl Walk {
             max_depth,
             tie,
             gates,
-            rows: Rows::new(),
-            frontier: Mutex::new(Frontier {
+            state: Mutex::new(WalkState {
+                rows: Vec::new(),
                 heap,
                 min_max_bound: f64::INFINITY,
             }),
@@ -215,23 +161,21 @@ impl Walk {
         self.max_depth
     }
 
-    /// Make at least one row beyond `seen` available, unless the walk is
-    /// exhausted. Another thread may already have grown the walk while this
-    /// one waited for the lock; then nothing is grown here.
-    fn grow_past(&self, seen: usize) -> bool {
-        let mut frontier = self.frontier.lock().expect("a walk grower panicked");
-        self.rows.len() > seen || self.grow_one(&mut frontier)
+    /// The walk's state. A panic while it is held poisons the lock, and
+    /// every later query on this walk then panics too.
+    fn lock(&self) -> MutexGuard<'_, WalkState> {
+        self.state.lock().expect("a walk query panicked")
     }
 
     /// Emit the next cost-ordered sentence as a DP node. False when exhausted.
-    fn grow_one(&self, frontier: &mut Frontier) -> bool {
+    fn grow_one(&self, state: &mut WalkState) -> bool {
         while let Some(Reverse(Candidate {
             key: _,
             cost,
             depth,
             gate_rank,
             parent,
-        })) = frontier.heap.pop()
+        })) = state.heap.pop()
         {
             let (class, _) = self.slots[self.gates[gate_rank]];
             let native = project(&class.0);
@@ -239,7 +183,7 @@ impl Walk {
             // exact up to rounding; see `Region::tighten`. A one-gate region
             // is a single point whose subset sums are already tight.
             let region = match parent {
-                Some(p) => self.rows.get(p).region.product(&native).tighten(),
+                Some(p) => state.rows[p].region.product(&native).tighten(),
                 None => native,
             };
 
@@ -254,16 +198,17 @@ impl Walk {
             // region's, so a new minimum rules out every prior row, avoiding
             // a quadratic scan on long expanding sequences.
             let max_bound = region.max_bound();
-            let dominated = max_bound >= frontier.min_max_bound
-                && (0..self.rows.len()).map(|i| self.rows.get(i)).any(|row| {
+            let dominated = max_bound >= state.min_max_bound
+                && state.rows.iter().any(|row| {
                     row.gate_rank <= gate_rank && row.region.contains_by_bounds(&region)
                 });
             if dominated {
                 continue;
             }
 
-            frontier.min_max_bound = frontier.min_max_bound.min(max_bound);
-            let row = self.rows.push(WalkRow {
+            state.min_max_bound = state.min_max_bound.min(max_bound);
+            let row = state.rows.len();
+            state.rows.push(WalkRow {
                 parent,
                 gate_rank,
                 depth,
@@ -276,7 +221,7 @@ impl Walk {
                     let cost = cost + (self.slots[self.gates[next_rank]].1 + self.local_layer_cost);
                     #[allow(clippy::cast_precision_loss)] // depth <= max_depth, far below 2^52
                     let key = cost + (depth + 1) as f64 * self.tie;
-                    frontier.heap.push(Reverse(Candidate {
+                    state.heap.push(Reverse(Candidate {
                         key,
                         cost,
                         depth: depth + 1,
@@ -290,79 +235,69 @@ impl Walk {
         false
     }
 
-    /// Cheapest covering row of a nonidentity target, and whether it covers
-    /// the reflection.
-    fn cover(&self, target: Mono) -> Option<(usize, bool)> {
-        let direct = project(&target.0);
-        let reflected = project(&target.rho().0);
-        let mut row = 0;
-        loop {
-            while row < self.rows.len() {
-                let region = &self.rows.get(row).region;
-                if covers(region, &direct) {
-                    return Some((row, false));
-                }
-                if covers(region, &reflected) {
-                    return Some((row, true));
-                }
-                row += 1;
-            }
-            if !self.grow_past(row) {
+    /// One target-independent coverage candidate. Grows the cost-ordered Horn
+    /// walk only as far as requested and returns its sentence, cost, and region.
+    pub fn coverage_candidate(&self, row: usize) -> Option<(Vec<usize>, f64, Region)> {
+        let mut state = self.lock();
+        while row >= state.rows.len() {
+            if !self.grow_one(&mut state) {
                 return None;
             }
         }
+        let emitted = &state.rows[row];
+        Some((self.sentence(&state, row), emitted.cost, emitted.region))
     }
 
     /// Slot indices of the sentence at `row`, reconstructed from its DP parents.
-    fn sentence(&self, row: usize) -> Vec<usize> {
-        let mut sentence = Vec::with_capacity(self.rows.get(row).depth);
+    fn sentence(&self, state: &WalkState, row: usize) -> Vec<usize> {
+        let mut sentence = Vec::with_capacity(state.rows[row].depth);
         let mut cursor = Some(row);
         while let Some(i) = cursor {
-            let row = self.rows.get(i);
-            sentence.push(self.gates[row.gate_rank]);
-            cursor = row.parent;
+            sentence.push(self.gates[state.rows[i].gate_rank]);
+            cursor = state.rows[i].parent;
         }
         sentence.reverse();
         sentence
-    }
-
-    /// One target-independent coverage candidate. Grows the cost-ordered Horn
-    /// walk only as far as requested and returns its sentence and cost.
-    pub fn coverage_candidate(&self, row: usize) -> Option<(Vec<usize>, f64)> {
-        while row >= self.rows.len() {
-            if !self.grow_past(self.rows.len()) {
-                return None;
-            }
-        }
-        Some((self.sentence(row), self.rows.get(row).cost))
-    }
-
-    /// Cached reach region of an emitted coverage candidate.
-    pub fn coverage_region(&self, row: usize) -> Region {
-        self.rows.get(row).region
     }
 
     /// The cheapest sentence and its cost, without a trajectory or realization.
     /// `None` marks an unreachable target; the identity orbit selects the empty
     /// sentence at the local-layer cost.
     pub fn select(&self, target: Mono) -> Option<Selection> {
-        let identity = |reflected| Selection {
-            gates: Vec::new(),
-            cost: self.local_layer_cost,
-            reflected,
+        let direct = project(&target.0);
+        let rho = project(&target.rho().0);
+        // Whether `region` covers the target, and if so, whether only its reflection.
+        let reaches = |region: &Region| {
+            if covers(region, &direct) {
+                Some(false)
+            } else {
+                covers(region, &rho).then_some(true)
+            }
         };
-        if target.is_identity() {
-            return Some(identity(false));
+        if let Some(reflected) = reaches(&BASE_STATE) {
+            return Some(Selection {
+                gates: Vec::new(),
+                cost: self.local_layer_cost,
+                reflected,
+            });
         }
-        if target.rho().is_identity() {
-            return Some(identity(true));
+        let mut state = self.lock();
+        let mut row = 0;
+        loop {
+            while let Some(WalkRow { region, cost, .. }) = state.rows.get(row) {
+                if let Some(reflected) = reaches(region) {
+                    return Some(Selection {
+                        gates: self.sentence(&state, row),
+                        cost: *cost,
+                        reflected,
+                    });
+                }
+                row += 1;
+            }
+            if !self.grow_one(&mut state) {
+                return None;
+            }
         }
-        let (row, reflected) = self.cover(target)?;
-        Some(Selection {
-            gates: self.sentence(row),
-            cost: self.rows.get(row).cost,
-            reflected,
-        })
     }
 }
 
@@ -372,8 +307,6 @@ mod tests {
 
     #[test]
     fn pruned_search_matches_exhaustive_ordered_sequences() {
-        use crate::reachability::BASE_STATE;
-
         let monos = [
             Mono([0.125, 0.125, -0.125]), // sqrt(CX)
             Mono([0.25, 0.0, 0.0]),       // sqrt(iSWAP)
@@ -426,9 +359,10 @@ mod tests {
                         .min_by(f64::total_cmp);
                     assert_eq!(selection.map(|s| s.cost), expected, "target {target:?}");
                 }
-                while walk.grow_past(walk.rows.len()) {}
+                let mut state = walk.lock();
+                while walk.grow_one(&mut state) {}
                 // Three gate types have 34 nonempty multisets through depth 4.
-                saw_pruning |= walk.rows.len() < 34;
+                saw_pruning |= state.rows.len() < 34;
             }
         }
         assert!(saw_pruning, "the comparison must exercise subtree pruning");
@@ -452,7 +386,7 @@ mod tests {
             let expected_cost =
                 (1..depth).fold(0.1 + 0.003 + 0.003, |cost, _| cost + (0.1 + 0.003));
             assert_eq!(selection.cost.to_bits(), f64::to_bits(expected_cost));
-            let Some((sentence, coverage_cost)) = walk.coverage_candidate(depth - 1) else {
+            let Some((sentence, coverage_cost, _)) = walk.coverage_candidate(depth - 1) else {
                 panic!("selection must retain its coverage row");
             };
             assert_eq!(sentence, selection.gates);
