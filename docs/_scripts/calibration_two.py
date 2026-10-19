@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from calibration_one import BASE, HERE, STATIC, ZZ, label
 
-from gulps.analysis.calibration import GRID, calibrate
+from gulps.analysis.calibration import GRID, calibrate, power_candidates
 from gulps.analysis.coverage import coverage_report
 from gulps.decomposition import GulpsDecomposer
 
@@ -26,7 +26,7 @@ PAIR_OVERHEADS = (0.03, 1.0)
 def budget_runs(workload: list | None) -> list:
     """Run calibrate at budget 3 for each value of b + ell in BUDGET_OVERHEADS."""
     return [
-        calibrate(BASE, 3, workload=workload, pulse_overhead=r)
+        calibrate(power_candidates(BASE, pulse_overhead=r), 3, workload=workload)
         for r in BUDGET_OVERHEADS
     ]
 
@@ -46,8 +46,11 @@ def compute() -> dict:
         scale = 1 if workload is None else len(workload)
         runs = budget_runs(workload)
         data["budgets"][name] = {
-            "costs": [[c / scale for c in run.budget_costs] for run in runs],
-            "strengths": [[list(s) for s in run.budget_strengths] for run in runs],
+            "costs": [[c / scale for c in run.budget_scores] for run in runs],
+            "strengths": [
+                [[GRID[i] for i in choice] for choice in run.budget_choices]
+                for run in runs
+            ],
         }
         print(f"budgets {name}", flush=True)
     data["pairs"] = {}
@@ -56,11 +59,11 @@ def compute() -> dict:
         for i, weak in enumerate(GRID):
             for j in range(i, len(GRID)):
                 costs[j, i] = pair_cost(sorted({weak, GRID[j]}), r)
-        greedy = calibrate(BASE, 2, pulse_overhead=r)
+        greedy = calibrate(power_candidates(BASE, pulse_overhead=r), 2)
         data["pairs"][str(r)] = {
             "costs": [[None if np.isnan(c) else c for c in row] for row in costs],
-            "greedy": list(greedy.strengths),
-            "greedy_cost": greedy.cost,
+            "greedy": [GRID[i] for i in greedy.choices],
+            "greedy_cost": greedy.score,
         }
         print(f"pairs {r}", flush=True)
     return data

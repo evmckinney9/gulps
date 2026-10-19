@@ -67,16 +67,16 @@ def plot_calibration(calibration: Calibration, ax: Axes | None = None) -> Axes:
     """Plot cost vs calibration budget (number of calibrated gates)."""
     if ax is None:
         _fig, ax = plt.subplots(figsize=_FIGSIZE)
-    budgets = list(range(1, len(calibration.budget_costs) + 1))
-    ax.plot(budgets, calibration.budget_costs, "-o", markersize=6)
+    budgets = list(range(1, len(calibration.budget_scores) + 1))
+    ax.plot(budgets, calibration.budget_scores, "-o", markersize=6)
     ax.set_xlabel("calibration budget (# distinct gates)")
     ax.set_ylabel("cost")
     ax.set_xticks(budgets)
     for b, c, ks in zip(
-        budgets, calibration.budget_costs, calibration.budget_strengths, strict=True
+        budgets, calibration.budget_scores, calibration.budget_choices, strict=True
     ):
         ax.annotate(
-            "\n".join(f"{k:.3f}" for k in ks),
+            "\n".join(str(i) for i in ks),
             (b, c),
             textcoords="offset points",
             xytext=(6, 0),
@@ -87,13 +87,13 @@ def plot_calibration(calibration: Calibration, ax: Axes | None = None) -> Axes:
 
 
 def plot_strength_sweep(sweep: StrengthSweep, ax: Axes | None = None) -> Axes:
-    """Plot cost against calibrated strength ``G^k``, marking the optimum."""
+    """Plot score against candidate cost, marking the optimum."""
     if ax is None:
         _fig, ax = plt.subplots(figsize=_FIGSIZE)
-    ax.plot(sweep.strengths, sweep.costs, "-o", markersize=3)
-    k, c = sweep.best
-    ax.plot([k], [c], marker="*", color="crimson", markersize=14, linestyle="none")
-    ax.set_xlabel(r"calibrated strength $k$  ($G^{k}$)")
-    ax.set_ylabel("cost")
-    ax.set_title(rf"best: $k={k:.3f}$  (cost ${c:.3f}$)")
+    ax.plot(sweep.scores, "-o", markersize=3)
+    i, c = sweep.best
+    ax.plot([i], [c], marker="*", color="crimson", markersize=14, linestyle="none")
+    ax.set_xlabel("candidate")
+    ax.set_ylabel("score")
+    ax.set_title(f"best: candidate {i} (score {c:.3f})")
     return ax

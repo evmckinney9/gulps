@@ -43,24 +43,26 @@ With one calibrated duration, the QFT costs least at
 
 .. jupyter-execute::
 
-   from gulps.analysis.calibration import strength_sweep
+   from gulps.analysis.calibration import GRID, power_candidates, strength_sweep
 
    local_layer_cost = 0.1
    qft_sweep = strength_sweep(
-       base, local_layer_cost=local_layer_cost, workload=workload
+       power_candidates(base), local_layer_cost=local_layer_cost, workload=workload
    )
-   print(f"Duration fraction: {qft_sweep.best[0]:.4f}")
+   print(f"Duration fraction: {GRID[qft_sweep.best[0]]:.4f}")
    print(f"Total QFT block cost: {qft_sweep.best[1]:.4f}")
 
 .. jupyter-execute::
    :hide-code:
    :hide-output:
 
-   assert np.isclose(qft_sweep.best[0], 1 / 6)
+   assert np.isclose(GRID[qft_sweep.best[0]], 1 / 6)
    assert round(qft_sweep.best[1], 4) == 18.3333
 
 The sweep tests the fractions in ``gulps.analysis.calibration.GRID``. Pass
-``strengths=`` to test the durations your device can calibrate.
+``power_candidates(base, strengths)`` to test the durations your device can
+calibrate, or a list of ``(cost, gate)`` pairs taken from a measured
+trajectory.
 
 .. _calibration-targets:
 .. _haar-coverage:
@@ -88,18 +90,18 @@ uniform over all two-qubit gates, and selects
            local_layer_cost=local_layer_cost,
        )
 
-   haar_sweep = strength_sweep(base, local_layer_cost=local_layer_cost)
-   print(f"Haar-selected duration: {haar_sweep.best[0]:.4f}")
+   haar_sweep = strength_sweep(power_candidates(base), local_layer_cost=local_layer_cost)
+   print(f"Haar-selected duration: {GRID[haar_sweep.best[0]]:.4f}")
    for name, sweep in (("Haar choice", haar_sweep), ("QFT choice", qft_sweep)):
-       device = instruction_set([sweep.best[0]])
+       device = instruction_set([GRID[sweep.best[0]]])
        print(f"{name}: QFT cost {empirical_cost(device, blocks).total_cost:.4f}")
 
 .. jupyter-execute::
    :hide-code:
    :hide-output:
 
-   assert np.isclose(haar_sweep.best[0], 1 / 3)
-   haar_on_qft = empirical_cost(instruction_set([haar_sweep.best[0]]), blocks).total_cost
+   assert np.isclose(GRID[haar_sweep.best[0]], 1 / 3)
+   haar_on_qft = empirical_cost(instruction_set([GRID[haar_sweep.best[0]]]), blocks).total_cost
    assert round(haar_on_qft, 1) == 21.3
    assert round(100 * (haar_on_qft / qft_sweep.best[1] - 1)) == 16
 
@@ -120,10 +122,10 @@ own targets, so compare durations along one curve.
           ("Haar targets", haar_sweep, 1, "-", "o"),
           ("QFT blocks", qft_sweep, len(blocks), "--", "s"),
       ):
-          values = np.asarray(sweep.costs) / count
-          ax.plot(sweep.strengths, values, linestyle=style, color=colors[name], label=name)
-          k, cost = sweep.best
-          ax.scatter(k, cost / count, marker=marker, color=colors[name], zorder=3)
+          values = np.asarray(sweep.scores) / count
+          ax.plot(GRID, values, linestyle=style, color=colors[name], label=name)
+          i, cost = sweep.best
+          ax.scatter(GRID[i], cost / count, marker=marker, color=colors[name], zorder=3)
       ax.set(xlabel="Pulse duration / full iSWAP", ylabel="Mean cost per target")
       ax.legend()
       plt.close(fig)
@@ -146,9 +148,10 @@ rotations need little interaction time.
 .. jupyter-execute::
 
    layer_costs = np.geomspace(0.03, 1.0, 12)
+   candidates = power_candidates(base)
    selected = {
        name: [
-           strength_sweep(base, local_layer_cost=ell, workload=sample).best[0]
+           GRID[strength_sweep(candidates, local_layer_cost=ell, workload=sample).best[0]]
            for ell in layer_costs
        ]
        for name, sample in (("Haar targets", None), ("QFT blocks", workload))
@@ -157,8 +160,6 @@ rotations need little interaction time.
 .. jupyter-execute::
    :hide-code:
    :hide-output:
-
-   from gulps.analysis.calibration import GRID
 
    assert all(np.diff(s).min() >= 0 for s in selected.values())
    assert all(q < h for q, h in zip(selected["QFT blocks"], selected["Haar targets"]))
@@ -200,17 +201,18 @@ each earlier one.
    from gulps.analysis.calibration import calibrate
 
    pair = calibrate(
-       base, budget=2, local_layer_cost=local_layer_cost, workload=workload
+       power_candidates(base), budget=2, local_layer_cost=local_layer_cost,
+       workload=workload,
    )
-   print("Duration fractions:", [round(k, 4) for k in pair.strengths])
-   print(f"Total QFT block cost: {pair.cost:.4f}")
+   print("Duration fractions:", [round(GRID[i], 4) for i in pair.choices])
+   print(f"Total QFT block cost: {pair.score:.4f}")
 
 .. jupyter-execute::
    :hide-code:
    :hide-output:
 
-   assert np.allclose(pair.strengths, (1 / 6, 1 / 2))
-   assert round(pair.cost, 4) == 16.5333
+   assert np.allclose([GRID[i] for i in pair.choices], (1 / 6, 1 / 2))
+   assert round(pair.score, 4) == 16.5333
 
 A second duration, :math:`\sqrt{\mathrm{iSWAP}}`, lowers the cost from
 18.3333 to 16.5333 without saving any interaction time. It saves pulses,
@@ -219,7 +221,10 @@ and with them local layers:
 .. jupyter-execute::
 
    print(f"{'Calibration':13} {'Pulses':>6} {'Interaction':>13} {'Local layers':>15} {'Total':>7}")
-   choices = {"One duration": [qft_sweep.best[0]], "Two durations": pair.strengths}
+   choices = {
+       "One duration": [GRID[qft_sweep.best[0]]],
+       "Two durations": [GRID[i] for i in pair.choices],
+   }
    table = {}
    for name, strengths in choices.items():
        sequences = instruction_set(strengths).select(blocks)
@@ -248,19 +253,19 @@ the QFT reaches the cost of the best continuous-duration construction.
 
 .. jupyter-execute::
 
-   from gulps.analysis.calibration import GRID
-
    budgets = calibrate(
-       base, budget=6, local_layer_cost=local_layer_cost, workload=workload
+       power_candidates(base), budget=6, local_layer_cost=local_layer_cost,
+       workload=workload,
    )
    tailored = (1 / 64, 1 / 32, 1 / 16, 1 / 8, 1 / 4, 1 / 2)
+   expanded_grid = sorted(set(GRID) | set(tailored))
    expanded = calibrate(
-       base, budget=6, strengths=sorted(set(GRID) | set(tailored)),
+       power_candidates(base, expanded_grid), budget=6,
        local_layer_cost=local_layer_cost, workload=workload,
    )
    reference = empirical_cost(instruction_set(tailored), blocks).total_cost
    print("Durations    Default grid    Expanded grid")
-   for count, original, extended in zip(range(1, 7), budgets.budget_costs, expanded.budget_costs):
+   for count, original, extended in zip(range(1, 7), budgets.budget_scores, expanded.budget_scores):
        print(f"{count:9} {original:15.4f} {extended:16.4f}")
    print(f"Continuous-duration optimum: {reference:.5f}")
 
@@ -269,10 +274,10 @@ the QFT reaches the cost of the best continuous-duration construction.
    :hide-output:
 
    assert np.isclose(reference, 14.23125)
-   assert np.isclose(expanded.cost, reference)
-   assert round(100 * (expanded.budget_costs[3] / reference - 1), 1) == 1.5
-   assert np.allclose(np.diff(expanded.budget_costs)[3:], (-0.1875, -0.03125))
-   assert round(budgets.budget_costs[-1], 4) == 14.9667
+   assert np.isclose(expanded.score, reference)
+   assert round(100 * (expanded.budget_scores[3] / reference - 1), 1) == 1.5
+   assert np.allclose(np.diff(expanded.budget_scores)[3:], (-0.1875, -0.03125))
+   assert round(budgets.budget_scores[-1], 4) == 14.9667
 
 .. details:: Plotting code
 
@@ -281,9 +286,9 @@ the QFT reaches the cost of the best continuous-duration construction.
 
       fig, ax = plt.subplots(figsize=(7, 4), layout="constrained")
       counts = np.arange(1, 7)
-      ax.plot(counts, budgets.budget_costs, "s--", color=colors["QFT blocks"],
+      ax.plot(counts, budgets.budget_scores, "s--", color=colors["QFT blocks"],
               label="Default duration grid")
-      ax.plot(counts, expanded.budget_costs, "o-", color=colors["QFT blocks"],
+      ax.plot(counts, expanded.budget_scores, "o-", color=colors["QFT blocks"],
               label="Grid + QFT-tailored durations")
       ax.axhline(reference, color="0.3", linestyle=":", label="Continuous-duration optimum")
       ax.set(xlabel="Number of calibrated durations", ylabel="Total QFT block cost",
@@ -356,10 +361,12 @@ saves the result:
    exact_cost = qft_costs[j, i] * len(blocks)
    print("Best QFT pair:", [round(float(k), 4) for k in (grid[i], grid[j])])
    print(f"Total QFT block cost: {exact_cost:.4f}")
-   print(f"Greedy cost above optimum: {100 * (pair.cost / exact_cost - 1):.2f}%")
+   print(f"Greedy cost above optimum: {100 * (pair.score / exact_cost - 1):.2f}%")
 
-   haar_pair = calibrate(base, budget=2, local_layer_cost=local_layer_cost)
-   print("Greedy Haar pair:", [round(k, 4) for k in haar_pair.strengths])
+   haar_pair = calibrate(
+       power_candidates(base), budget=2, local_layer_cost=local_layer_cost
+   )
+   print("Greedy Haar pair:", [round(GRID[i], 4) for i in haar_pair.choices])
 
 .. jupyter-execute::
    :hide-code:
@@ -367,11 +374,11 @@ saves the result:
 
    assert np.allclose((grid[i], grid[j]), (2 / 15, 1 / 4))
    assert round(exact_cost, 4) == 16.2667
-   assert round(100 * (pair.cost / exact_cost - 1), 1) == 1.6
-   assert np.allclose(haar_pair.strengths, (1 / 3, 29 / 60))
+   assert round(100 * (pair.score / exact_cost - 1), 1) == 1.6
+   assert np.allclose([GRID[i] for i in haar_pair.choices], (1 / 3, 29 / 60))
    haar_costs = landscapes["Haar targets"]
    hj, hi = np.unravel_index(np.nanargmin(haar_costs), haar_costs.shape)
-   assert np.allclose((grid[hi], grid[hj]), haar_pair.strengths)
+   assert (hi, hj) == haar_pair.choices
 
 .. details:: Plotting code
 
@@ -391,7 +398,7 @@ saves the result:
           )
           ax.plot(grid[i], grid[j], "*", color="white", markeredgecolor="black",
                   markersize=13, label="Grid minimum")
-          ax.plot(*greedy_pairs[name].strengths, "o", markerfacecolor="none",
+          ax.plot(*grid[list(greedy_pairs[name].choices)], "o", markerfacecolor="none",
                   markeredgecolor="red", markersize=12, label="calibrate")
           ax.set(title=name, xlabel="First pulse duration / full iSWAP")
           ax.legend(fontsize=9, loc="lower right")
@@ -430,7 +437,7 @@ parameter :math:`-\pi k`.
    )
    from gulps.transpiler import GulpsDecompositionPass
 
-   decomposer = instruction_set(expanded.strengths)
+   decomposer = instruction_set([expanded_grid[i] for i in expanded.choices])
    pipeline = PassManager([
        HighLevelSynthesis(),
        Unroll3qOrMore(),

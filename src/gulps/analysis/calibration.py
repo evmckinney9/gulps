@@ -12,12 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Which fractional powers of a gate to calibrate.
+"""Which pulses of an interaction to calibrate.
 
-Each candidate set configures a :class:`~gulps.decomposition.GulpsDecomposer`,
+A candidate is a pulse given as ``(cost, gate)``: a fractional power of a gate
+(see :func:`power_candidates`), or a point of a measured trajectory. Each set
+of candidates configures a :class:`~gulps.decomposition.GulpsDecomposer`,
 which we score by its Haar-average cost or its total cost for a supplied
-workload. If a candidate cannot reach the required targets within the depth
-bound, it receives infinite cost.
+workload. If a set cannot reach the required targets within the depth bound,
+it scores infinity.
 """
 
 from __future__ import annotations
@@ -45,28 +47,44 @@ if TYPE_CHECKING:
 GRID: tuple[float, ...] = tuple((np.arange(6, 61) / 60).tolist())
 
 
-@dataclass(frozen=True)
-class Calibration:
-    """Strengths and scores returned by :func:`~gulps.analysis.calibration.calibrate`.
+def power_candidates(
+    base_gate: Gate, strengths: Sequence[float] = GRID, pulse_overhead: float = 0.0
+) -> list[tuple[float, Gate]]:
+    """The pulses ``base_gate ** k`` for each ``k`` in ``strengths``.
 
     Args:
-        budget_costs: The score at each budget from one through the requested
+        base_gate: The Qiskit gate to power.
+        strengths: The powers, in ``(0, 1]``.
+        pulse_overhead: Fixed cost per entangling pulse. A pulse of strength k
+            costs k + pulse_overhead.
+    """
+    if not math.isfinite(pulse_overhead) or pulse_overhead < 0:
+        raise ValueError("pulse_overhead must be finite and non-negative")
+    return [(float(k) + pulse_overhead, base_gate.power(k)) for k in strengths]
+
+
+@dataclass(frozen=True)
+class Calibration:
+    """The candidates chosen by :func:`~gulps.analysis.calibration.calibrate`.
+
+    Args:
+        budget_scores: The score at each budget from one through the requested
             maximum.
-        budget_strengths: The strengths chosen at each budget.
+        budget_choices: The indices of the candidates chosen at each budget.
     """
 
-    budget_costs: tuple[float, ...]
-    budget_strengths: tuple[tuple[float, ...], ...]
+    budget_scores: tuple[float, ...]
+    budget_choices: tuple[tuple[int, ...], ...]
 
     @property
-    def strengths(self) -> tuple[float, ...]:
-        """The strengths chosen at the full budget."""
-        return self.budget_strengths[-1]
+    def choices(self) -> tuple[int, ...]:
+        """The indices of the candidates chosen at the full budget."""
+        return self.budget_choices[-1]
 
     @property
-    def cost(self) -> float:
+    def score(self) -> float:
         """The score at the full budget."""
-        return self.budget_costs[-1]
+        return self.budget_scores[-1]
 
     def plot(self, ax: matplotlib.axes.Axes | None = None) -> matplotlib.axes.Axes:
         """Plot score against budget on ``ax``, or on new axes."""
@@ -77,24 +95,22 @@ class Calibration:
 
 @dataclass(frozen=True)
 class StrengthSweep:
-    """The score of every single strength on a grid.
+    """The score of each candidate on its own.
 
     Args:
-        strengths: The grid of powers.
-        costs: The score at each strength.
+        scores: The score of each candidate, in input order.
     """
 
-    strengths: tuple[float, ...]
-    costs: tuple[float, ...]
+    scores: tuple[float, ...]
 
     @property
-    def best(self) -> tuple[float, float]:
-        """The cheapest ``(strength, cost)`` on the grid."""
-        i = min(range(len(self.costs)), key=self.costs.__getitem__)
-        return self.strengths[i], self.costs[i]
+    def best(self) -> tuple[int, float]:
+        """The ``(index, score)`` of the best candidate."""
+        i = min(range(len(self.scores)), key=self.scores.__getitem__)
+        return i, self.scores[i]
 
     def plot(self, ax: matplotlib.axes.Axes | None = None) -> matplotlib.axes.Axes:
-        """Plot cost against strength and mark the best point."""
+        """Plot score against candidate index and mark the best point."""
         from gulps.analysis.viz.report_viz import plot_strength_sweep
 
         return plot_strength_sweep(self, ax=ax)
@@ -104,31 +120,29 @@ def _depth_error(max_depth: int, workload: object) -> SearchDepthError:
     """No candidate covers the Haar measure or the workload within ``max_depth``."""
     covered = "the Haar measure" if workload is None else "the workload"
     return SearchDepthError(
-        f"no strength set covers {covered} within max_depth={max_depth}; increase max_depth"
+        f"no candidate set covers {covered} within max_depth={max_depth}; increase max_depth"
     )
 
 
 def _scorer(
-    base_gate: Gate,
+    candidates: Sequence[tuple[float, Gate]],
     local_layer_cost: float,
     workload: QuantumCircuit | Targets | None,
     max_depth: int,
-    pulse_overhead: float,
-) -> Callable[[tuple[float, ...]], float]:
-    """Memoized score of a strength set: Haar expected cost, or total cost over ``workload``."""
-    if not math.isfinite(pulse_overhead) or pulse_overhead < 0:
-        raise ValueError("pulse_overhead must be finite and non-negative")
+) -> Callable[[tuple[int, ...]], float]:
+    """Memoized score of a set of candidate indices: Haar or workload cost."""
+    if not candidates:
+        raise ValueError("candidates must not be empty")
     if isinstance(workload, QuantumCircuit):
         workload = two_qubit_blocks(workload)
     if workload is not None:
         workload = LocalEquivalenceClass.from_unitaries(workload)
-    gate = cache(base_gate.power)
 
     @cache
-    def score(strengths: tuple[float, ...]) -> float:
+    def score(chosen: tuple[int, ...]) -> float:
         decomposer = GulpsDecomposer(
-            [gate(k) for k in strengths],
-            [k + pulse_overhead for k in strengths],
+            [candidates[i][1] for i in chosen],
+            [candidates[i][0] for i in chosen],
             local_layer_cost,
             max_depth,
         )
@@ -141,93 +155,81 @@ def _scorer(
         except SearchDepthError:
             return math.inf
 
-    return lambda strengths: score(tuple(sorted(strengths)))
+    return lambda chosen: score(tuple(sorted(chosen)))
 
 
 def strength_sweep(
-    base_gate: Gate,
-    strengths: Sequence[float] = GRID,
+    candidates: Sequence[tuple[float, Gate]],
     local_layer_cost: float = 0.0,
     workload: QuantumCircuit | Targets | None = None,
     max_depth: int = MAX_DEPTH,
-    *,
-    pulse_overhead: float = 0.0,
 ) -> StrengthSweep:
-    """Score ``base_gate ** k`` for every ``k`` in ``strengths``.
+    """Score each candidate on its own.
 
     Args:
-        base_gate: The Qiskit gate to power.
-        strengths: The powers to score, in ``(0, 1]``.
+        candidates: The pulses to score, each as ``(cost, gate)``; see
+            :func:`power_candidates`.
         local_layer_cost: The cost of one simultaneous local-gate layer. A
             sentence of n pulses has n + 1 such layers.
         workload: A circuit or a list of targets to score instead of the Haar
             average.
         max_depth: Maximum two-qubit sentence depth. Candidates that exceed it
             score infinity; an all-infinite search raises ``SearchDepthError``.
-        pulse_overhead: Fixed cost per entangling pulse, added to its strength.
-            A pulse of strength k costs k + pulse_overhead.
     """
-    grid = tuple(float(k) for k in strengths)
-    if not grid:
-        raise ValueError("strengths must not be empty")
-    score = _scorer(base_gate, local_layer_cost, workload, max_depth, pulse_overhead)
-    costs = tuple(score((k,)) for k in grid)
-    if all(cost == math.inf for cost in costs):
+    score = _scorer(candidates, local_layer_cost, workload, max_depth)
+    scores = tuple(score((i,)) for i in range(len(candidates)))
+    if all(value == math.inf for value in scores):
         raise _depth_error(max_depth, workload)
-    return StrengthSweep(grid, costs)
+    return StrengthSweep(scores)
 
 
 def calibrate(
-    base_gate: Gate,
+    candidates: Sequence[tuple[float, Gate]],
     budget: int = 1,
-    strengths: Sequence[float] = GRID,
     local_layer_cost: float = 0.0,
     workload: QuantumCircuit | Targets | None = None,
     max_depth: int = MAX_DEPTH,
-    *,
-    pulse_overhead: float = 0.0,
 ) -> Calibration:
-    """Choose up to ``budget`` powers of ``base_gate`` from ``strengths``.
+    """Choose up to ``budget`` of the candidates.
 
-    At each step, the search adds the grid point that lowers the score most,
-    then revisits each chosen strength once while holding the others fixed.
-    It stops adding strengths when it reaches ``budget`` or exhausts the grid.
+    At each step, the search adds the candidate that lowers the score most,
+    then revisits each chosen candidate once while holding the others fixed.
+    It stops adding candidates when it reaches ``budget`` or exhausts them.
 
     Args:
-        base_gate: The Qiskit gate to power.
-        budget: The maximum number of distinct powers.
-        strengths: The powers to choose from, in ``(0, 1]``.
+        candidates: The pulses to choose from, each as ``(cost, gate)``; see
+            :func:`power_candidates`.
+        budget: The maximum number of candidates.
         local_layer_cost: The cost of one simultaneous local-gate layer. A
             sentence of n pulses has n + 1 such layers.
         workload: A circuit or a list of targets to score instead of the Haar
             average.
         max_depth: Maximum two-qubit sentence depth. Candidates that exceed it
             score infinity; an all-infinite search raises ``SearchDepthError``.
-        pulse_overhead: Fixed cost per entangling pulse, added to its strength.
-            A pulse of strength k costs k + pulse_overhead.
     """
-    grid = [float(k) for k in strengths]
     if budget < 1:
         raise ValueError(f"budget must be positive, got {budget}")
-    if not grid:
-        raise ValueError("strengths must not be empty")
-    score = _scorer(base_gate, local_layer_cost, workload, max_depth, pulse_overhead)
-    chosen: list[float] = []
-    costs: list[float] = []
-    sets: list[tuple[float, ...]] = []
-    for _ in range(min(budget, len(set(grid)))):
+    score = _scorer(candidates, local_layer_cost, workload, max_depth)
+    indices = range(len(candidates))
+    chosen: list[int] = []
+    scores: list[float] = []
+    sets: list[tuple[int, ...]] = []
+    for _ in range(min(budget, len(candidates))):
         chosen.append(
-            min((k for k in grid if k not in chosen), key=lambda k: score((*chosen, k)))
-        )
-        for i in range(len(chosen)):
-            others = chosen[:i] + chosen[i + 1 :]
-            chosen[i] = min(
-                (k for k in grid if k not in others),
-                key=lambda k: score((*others, k)),
+            min(
+                (i for i in indices if i not in chosen),
+                key=lambda i: score((*chosen, i)),
             )
-        selected_cost = score(tuple(chosen))
-        if selected_cost == math.inf:
+        )
+        for j in range(len(chosen)):
+            others = chosen[:j] + chosen[j + 1 :]
+            chosen[j] = min(
+                (i for i in indices if i not in others),
+                key=lambda i: score((*others, i)),
+            )
+        selected = score(tuple(chosen))
+        if selected == math.inf:
             raise _depth_error(max_depth, workload)
-        costs.append(selected_cost)
+        scores.append(selected)
         sets.append(tuple(sorted(chosen)))
-    return Calibration(tuple(costs), tuple(sets))
+    return Calibration(tuple(scores), tuple(sets))
