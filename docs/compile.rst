@@ -145,8 +145,22 @@ the Target.
 .. warning::
 
    Optimization levels 2 and 3 can undo the least-cost sentences. Their
-   later passes resynthesize two-qubit blocks with Qiskit's own decomposers,
-   which minimize the number of two-qubit gates instead of your costs.
+   optimization stage runs
+   :class:`~qiskit.transpiler.passes.TwoQubitPeepholeOptimization`, which
+   resynthesizes two-qubit blocks with Qiskit's own decomposers and keeps the
+   version with fewer two-qubit gates, whatever their durations. It does not
+   use synthesis plugins. To keep the least-cost sentences with the layout and
+   routing of a higher level, use the optimization stage of level 1:
+
+   .. code-block:: python
+
+      from qiskit.transpiler import generate_preset_pass_manager
+
+      pm = generate_preset_pass_manager(3, target=target, translation_method="gulps")
+      pm.optimization = generate_preset_pass_manager(
+          1, target=target, translation_method="gulps"
+      ).optimization
+      compiled = pm.run(circuit)
 
 A pass built from a Target minimizes the Target property named by ``cost``,
 ``"duration"`` (the default) or ``"error"``. With these error rates,
