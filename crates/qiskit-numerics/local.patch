@@ -39,7 +39,7 @@ index 7cbeecd..fd09591 100644
 -    Ok(())
 -}
 diff --git a/src/linalg/mod.rs b/src/linalg/mod.rs
-index 0e6aa90..f51eafe 100644
+index 67e6aa4..1df6feb 100644
 --- a/src/linalg/mod.rs
 +++ b/src/linalg/mod.rs
 @@ -17,7 +17,7 @@ use nalgebra::{DMatrix, DMatrixView, Dim, Dyn, MatrixView, Scalar, ViewStorage};
@@ -150,13 +150,14 @@ index 8094202..01e8c17 100644
 -    SDG_GATE[1][1],
 -);
 diff --git a/src/util.rs b/src/util.rs
-index 210731f..e86698a 100644
+index 808799e..e86698a 100644
 --- a/src/util.rs
 +++ b/src/util.rs
-@@ -12,9 +12,6 @@
+@@ -12,10 +12,6 @@
  
  use std::env;
  
+-pub mod dyn_types;
 -#[cfg(feature = "py")]
 -pub mod py;
 -
