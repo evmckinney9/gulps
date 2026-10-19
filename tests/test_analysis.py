@@ -8,7 +8,7 @@ import pytest
 from qiskit import QuantumCircuit
 from qiskit.circuit.library import CXGate, SwapGate, UnitaryGate, iSwapGate
 
-from gulps.analysis.calibration import strength_sweep
+from gulps.analysis.calibration import power_candidates, strength_sweep
 from gulps.analysis.coverage import coverage_report, empirical_cost
 from gulps.analysis.region import ReachableRegion
 from gulps.decomposition import GulpsDecomposer
@@ -79,7 +79,9 @@ def test_calibration_preserves_distinct_targets_with_equal_class_keys():
     isa = GulpsDecomposer([CXGate()], [1.0])
     expected = sum(cost for cost, _ in isa.select(targets))
     assert expected == 3.0
-    assert strength_sweep(CXGate(), [1.0], workload=targets).costs == (expected,)
+    assert strength_sweep(
+        power_candidates(CXGate(), [1.0]), workload=targets
+    ).scores == (expected,)
 
 
 @pytest.mark.parametrize("width", [3])
@@ -95,8 +97,8 @@ def test_workload_counts_each_nested_branch_and_loop_body_once(width):
     targets = [CXGate()] * (width - 1) + [iSwapGate()]
     assert empirical_cost(REPORT_ISA, circuit) == empirical_cost(REPORT_ISA, targets)
     assert (
-        strength_sweep(BASE, [0.5, 1.0], workload=circuit).costs
-        == strength_sweep(BASE, [0.5, 1.0], workload=targets).costs
+        strength_sweep(power_candidates(BASE, [0.5, 1.0]), workload=circuit).scores
+        == strength_sweep(power_candidates(BASE, [0.5, 1.0]), workload=targets).scores
     )
 
 
@@ -108,22 +110,20 @@ def test_pulse_overhead_and_local_layers_have_different_counts(search):
     # Identity needs no pulse; CX needs one; SWAP needs three CX pulses.
     workload = [np.eye(4), CXGate(), SwapGate()]
     result = search(
-        CXGate(),
-        strengths=[1.0],
+        power_candidates(CXGate(), [1.0], pulse_overhead=0.2),
         workload=workload,
-        pulse_overhead=0.2,
         local_layer_cost=0.07,
     )
-    cost = result.best[1] if search is strength_sweep else result.cost
+    cost = result.best[1] if search is strength_sweep else result.score
     assert cost == pytest.approx(4 * 1.2 + 7 * 0.07)
 
 
 @pytest.mark.parametrize("workload", [None, [CXGate()]])
 def test_unreachable_targets_cannot_win_a_strength_search(workload):
-    sweep = strength_sweep(SwapGate(), strengths=[0.5, 1.0], workload=workload)
-    assert np.isfinite(sweep.costs[0])
-    assert sweep.costs[1] == np.inf
-    assert sweep.best[0] == 0.5
+    sweep = strength_sweep(power_candidates(SwapGate(), [0.5, 1.0]), workload=workload)
+    assert np.isfinite(sweep.scores[0])
+    assert sweep.scores[1] == np.inf
+    assert sweep.best[0] == 0
 
 
 def test_covered_corners_do_not_hide_a_cheaper_face():

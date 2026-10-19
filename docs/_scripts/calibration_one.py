@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from qiskit.circuit.library import RZZGate, iSwapGate
 
-from gulps.analysis.calibration import GRID, strength_sweep
+from gulps.analysis.calibration import GRID, power_candidates, strength_sweep
 
 BASE = iSwapGate()
 ZZ = [RZZGate(angle) for angle in (0.24, 0.44, 0.64) for _ in range(4)]
@@ -26,8 +26,15 @@ ZZ = [RZZGate(angle) for angle in (0.24, 0.44, 0.64) for _ in range(4)]
 def time_and_pulses(workload: list | None) -> tuple[np.ndarray, np.ndarray]:
     """Per-target interaction time k N and pulse count N at each GRID strength."""
     scale = 1 if workload is None else len(workload)
-    time_ = np.array(strength_sweep(BASE, workload=workload).costs) / scale
-    at_one = np.array(strength_sweep(BASE, workload=workload, pulse_overhead=1.0).costs)
+    time_ = (
+        np.array(strength_sweep(power_candidates(BASE), workload=workload).scores)
+        / scale
+    )
+    at_one = np.array(
+        strength_sweep(
+            power_candidates(BASE, pulse_overhead=1.0), workload=workload
+        ).scores
+    )
     return time_, at_one / scale - time_
 
 
@@ -54,7 +61,7 @@ def compute() -> dict:
     data = {"grid": grid.tolist(), "fine": FINE.tolist(), "landscape": {}}
     for r in LANDSCAPE_OVERHEADS:
         data["landscape"][str(r)] = list(
-            strength_sweep(BASE, FINE, pulse_overhead=r).costs
+            strength_sweep(power_candidates(BASE, FINE, pulse_overhead=r)).scores
         )
         print(f"landscape b + ell = {r}", flush=True)
     for name, workload in (("haar", None), ("zz", ZZ)):
@@ -62,13 +69,15 @@ def compute() -> dict:
         scale = 1 if workload is None else len(workload)
         for b, ell in CHECKS:
             sweep = strength_sweep(
-                BASE, local_layer_cost=ell, workload=workload, pulse_overhead=b
+                power_candidates(BASE, pulse_overhead=b),
+                local_layer_cost=ell,
+                workload=workload,
             )
             predicted = (grid + b + ell) * pulses + ell
             np.testing.assert_allclose(
-                np.array(sweep.costs) / scale, predicted, rtol=0, atol=1e-9
+                np.array(sweep.scores) / scale, predicted, rtol=0, atol=1e-9
             )
-            assert sweep.best[0] == grid[selected(time_, pulses, b + ell)], (
+            assert sweep.best[0] == selected(time_, pulses, b + ell), (
                 name,
                 b,
                 ell,

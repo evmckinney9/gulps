@@ -48,6 +48,7 @@ circuits.
    analysis.coverage.empirical_cost
    analysis.calibration.calibrate
    analysis.calibration.strength_sweep
+   analysis.calibration.power_candidates
 
 .. autosummary::
    :toctree: stubs/
