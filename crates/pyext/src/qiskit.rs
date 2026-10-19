@@ -17,10 +17,17 @@ use crate::decomposer::compile_error;
 use crate::transpiler::Edge;
 use crate::{INPUT_ATOL, checked_mat4, is_unitary};
 
-/// How the C API writes one native gate.
+/// How the C API writes one native gate. Its representation is private, so
+/// [`NativeGate::unitary`] and [`NativeGate::from_python`] are its only
+/// constructors, and a standard gate always matches the signature checked
+/// there.
 #[derive(Clone)]
-pub enum NativeGate {
-    /// `qk_dag_apply_gate` with these parameters.
+pub struct NativeGate(Writer);
+
+#[derive(Clone)]
+enum Writer {
+    /// `qk_dag_apply_gate` with these parameters: a two-qubit gate taking
+    /// exactly this many.
     Standard(QkGate, Vec<f64>),
     /// `qk_dag_apply_unitary` with the gate's own matrix, row-major.
     Unitary(Box<[C64; 16]>),
@@ -29,7 +36,9 @@ pub enum NativeGate {
 impl NativeGate {
     /// A gate written as its matrix.
     pub fn unitary(matrix: &Mat4) -> Self {
-        Self::Unitary(Box::new(std::array::from_fn(|i| matrix[(i / 4, i % 4)])))
+        Self(Writer::Unitary(Box::new(std::array::from_fn(|i| {
+            matrix[(i / 4, i % 4)]
+        }))))
     }
 
     /// Qiskit's synthesis convention (as `TwoQubitBasisDecomposer(gate: Gate)`):
@@ -57,7 +66,7 @@ impl NativeGate {
         {
             let params: Vec<f64> = gate.getattr("params")?.extract()?;
             two_qubit_gate(standard.call_method0("__int__")?.extract()?, params.len())
-                .map(|kind| Self::Standard(kind, params))
+                .map(|kind| Self(Writer::Standard(kind, params)))
         } else {
             None
         };
@@ -310,14 +319,16 @@ impl Replacement {
     }
 
     fn native(&self, gate: &NativeGate, qubits: &[u32; 2]) {
-        match gate {
-            // SAFETY: the DAG is owned; the parameters and two qubits match the
-            // gate signature validated when the gate was made.
-            NativeGate::Standard(kind, params) => unsafe {
+        match &gate.0 {
+            // SAFETY: the DAG is owned. `Writer::Standard` is built only in
+            // `from_python`, after `two_qubit_gate` checked that `kind` acts on two
+            // qubits and takes `params.len()` parameters, so the C API reads
+            // exactly the two qubits and the parameters passed here.
+            Writer::Standard(kind, params) => unsafe {
                 qk::qk_dag_apply_gate(self.0, *kind, qubits.as_ptr(), params.as_ptr(), false);
             },
             // SAFETY: the DAG is owned; a 16-entry matrix for two qubits.
-            NativeGate::Unitary(matrix) => unsafe {
+            Writer::Unitary(matrix) => unsafe {
                 qk::qk_dag_apply_unitary(self.0, matrix.as_ptr(), qubits.as_ptr(), 2, false);
             },
         }
