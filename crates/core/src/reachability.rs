@@ -472,11 +472,6 @@ impl Region {
 }
 
 impl Mono {
-    /// Whether the empty sentence reaches this class.
-    pub(crate) fn is_identity(self) -> bool {
-        covers(&BASE_STATE, &project(&self.0))
-    }
-
     /// Spectra that can precede this gate and reach `next`, with fixed lifts.
     pub(crate) fn preimage(self, next: &[f64; 3]) -> Region {
         let [x, y, z] = self.0;

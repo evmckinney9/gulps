@@ -112,9 +112,7 @@ impl Decomposer {
         &self,
         row: usize,
     ) -> Result<(Vec<usize>, f64, Region), CompileError> {
-        let (slots, cost) = (self.walk.coverage_candidate(row))
-            .ok_or(CompileError::DepthLimit(self.max_depth()))?;
-        Ok((slots, cost, self.walk.coverage_region(row)))
+        (self.walk.coverage_candidate(row)).ok_or(CompileError::DepthLimit(self.max_depth()))
     }
 
     /// Realize a class in canonical gates, whose frames are the identity.
