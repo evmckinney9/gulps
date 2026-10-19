@@ -3,6 +3,8 @@
 Qiskit's canonical two-qubit gate, Makhlin invariants, magic basis, closest
 unitary, and utility types, copied from Qiskit revision
 [`c1c01ada`](https://github.com/Qiskit/qiskit/tree/c1c01ada399af13e495c27b9b22b4ff942bbad7e).
+Qiskit 2.6.0 changes these files only in an error string and a module
+declaration, so the copy stays at that revision.
 Qiskit's C API does not expose these routines. When it does, GULPS will call
 them through `qiskit-pyo3-ffi` and this crate will be removed. The KAK
 decomposition itself is in `gulps-core`, which needs the local rotations in the

@@ -113,10 +113,12 @@ impl GulpsDecomposer {
         let (edge, order) =
             Edge::new(&natives, local_layer_cost, max_depth, []).map_err(PyValueError::new_err)?;
         if order.len() < gates.len() {
-            let warning =
-                "Identical computed gate classes were removed; cheapest wins, first on ties.";
-            let warn = py.import("warnings")?.getattr("warn")?;
-            warn.call1((warning, py.get_type::<PyUserWarning>(), 2))?;
+            PyErr::warn(
+                py,
+                &py.get_type::<PyUserWarning>(),
+                c"Identical computed gate classes were removed; cheapest wins, first on ties.",
+                2,
+            )?;
         }
         Ok(Self {
             edge: Arc::new(edge),

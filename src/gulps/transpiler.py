@@ -95,8 +95,8 @@ class GulpsDecompositionPass(TransformationPass):
         Raises:
             TranspilerError: If a block is invalid for the configured gates or
                 cannot be compiled. Its ``__cause__`` is the original error.
-            NotImplementedError: If the DAG has control flow, classical
-                variables, or two-qubit gates without a matrix.
+            NotImplementedError: If the DAG has control flow or two-qubit
+                gates without a matrix.
         """
         try:
             return self._synthesizer.run(dag)

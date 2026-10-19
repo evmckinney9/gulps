@@ -83,14 +83,6 @@ def test_plugin_compiles_onto_a_generic_backend(noise, circuit):
     )
 
 
-def test_variable_bearing_circuit_is_rejected_before_substitution(decomposer):
-    circuit = QuantumCircuit(2)
-    circuit.unitary(random_unitary(4, seed=93), [0, 1])
-    circuit.add_var("flag", False)
-    with pytest.raises(NotImplementedError):
-        PassManager([GulpsDecompositionPass(decomposer)]).run(circuit)
-
-
 @pytest.mark.parametrize(
     "field, cx_properties, iswap_properties, pricing, expected_cost",
     [
