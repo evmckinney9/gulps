@@ -1,12 +1,11 @@
 //! Decompose targets into canonical gates `D(c)`, bind physical gates to a
-//! decomposer's slots through their frames, and dress each sentence with them.
+//! decomposer's slots, and compile targets in the bound gates.
 
 use crate::class::{Mono, exact_bits};
 use crate::kak::{Frame, LocalPair, factor_rotation, kak, relabel};
 use crate::reachability::Region;
 use crate::search::{Selection, Walk};
 use crate::{LOCAL_IDENTITY_TOL, Mat2, Mat4};
-use nalgebra::Matrix4;
 use qiskit_numerics::IndexMap;
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -35,8 +34,8 @@ impl std::fmt::Display for CompileError {
 impl std::error::Error for CompileError {}
 
 /// Decomposes targets into sentences of canonical gates, one class and cost
-/// per slot. Physical gates enter [`compile_all`] only through their frames:
-/// `Q† G Q = after · D(c) · before · exp(i phase)` for gate `G` of class `c`.
+/// per slot. Physical gates enter [`compile_all`] only through a [`Binding`],
+/// as their rotations around their class's canonical gate.
 pub struct Decomposer {
     walk: Walk,
     /// Canonical sentences by exact class, kept across calls.
@@ -72,11 +71,19 @@ impl Decomposer {
         Arc::clone(realized.entry(key).or_default())
     }
 
-    /// A class's canonical sentence, dressed with a binding's frames.
-    fn dressed(&self, class: Mono, frames: &[Frame]) -> Result<RealizedSentence, CompileError> {
+    /// The circuit for a target of `class` with frame `target`, in a binding's gates.
+    fn compile_target(
+        &self,
+        class: Mono,
+        gates: &[Gate],
+        target: Frame,
+    ) -> Result<CompiledTarget, CompileError> {
         let realized = self.realized(class);
         let canonical = realized.get_or_init(|| self.realize(class));
-        canonical.as_ref().map_err(Clone::clone)?.dress(frames)
+        canonical
+            .as_ref()
+            .map_err(Clone::clone)?
+            .compile_target(gates, target)
     }
 
     /// The canonical gates: class and cost.
@@ -152,7 +159,7 @@ impl Decomposer {
                         CompileError::Synthesis(format!("segment {}: {decline}", i + 1))
                     })?;
                     // With P = L D(p) R, inserting O Lᵀ gives D(c) (O Lᵀ) P = [D(c) O D(p)] R.
-                    layers.push(middle * frame.after.transpose());
+                    layers.push(factor_rotation(&(middle * frame.after.transpose()))?);
                     frame = Frame {
                         after,
                         before: before * frame.before,
@@ -171,28 +178,37 @@ impl Decomposer {
     }
 }
 
-/// A physical two-qubit gate: its class and its frame around that class's
-/// canonical gate.
-#[derive(Clone)]
+/// A physical two-qubit gate `G`, with `Q† G Q = A D(c) B exp(i phase)` in the
+/// magic basis `Q`: its class `c`, its phase, and the inverses of its rotations
+/// `A` and `B`, which the local layers on either side of it absorb.
+#[derive(Clone, Copy)]
 pub struct Gate {
     class: Mono,
-    /// The gate's rotations around its class's canonical gate.
-    frame: Frame,
+    phase: f64,
+    /// `Aᵀ` as single-qubit gates.
+    after_inverse: LocalPair,
+    /// `Bᵀ` as single-qubit gates.
+    before_inverse: LocalPair,
 }
 
 impl Gate {
-    /// A gate's class and frame; fails if the KAK does.
+    /// A gate's class, phase, and rotations; fails if the KAK or a factoring does.
     pub fn new(matrix: &Mat4) -> Result<Self, CompileError> {
         let (class, frame) = kak(matrix)?;
-        Ok(Self { class, frame })
+        Ok(Self {
+            class,
+            phase: frame.phase,
+            after_inverse: factor_rotation(&frame.after.transpose())?,
+            before_inverse: factor_rotation(&frame.before.transpose())?,
+        })
     }
 }
 
-/// Physical gates bound to a decomposer's slots: the decomposer and each
-/// gate's frame relative to its slot's class.
+/// Physical gates bound to a decomposer's slots: the decomposer and the gate
+/// filling each slot.
 pub struct Binding {
     decomposer: Arc<Decomposer>,
-    frames: Vec<Frame>,
+    gates: Vec<Gate>,
 }
 
 impl Binding {
@@ -260,8 +276,8 @@ impl Binding {
                 (Arc::new(decomposer), kept)
             }
         };
-        let frames = order.iter().map(|&g| gates[g].0.frame).collect();
-        Ok((Self { decomposer, frames }, order))
+        let gates = order.iter().map(|&g| *gates[g].0).collect();
+        Ok((Self { decomposer, gates }, order))
     }
 
     /// The canonical decomposer the gates are bound to.
@@ -274,43 +290,45 @@ impl Binding {
 /// and its endpoint frame.
 struct Canonical {
     slots: Vec<usize>,
-    layers: Vec<Matrix4<f64>>,
+    layers: Vec<LocalPair>,
     frame: Frame,
 }
 
 impl Canonical {
-    /// Substitute the bound physical gates `G_k = A_k D(c_k) B_k`: the layer
-    /// between gates k and k+1 becomes `B_{k+1}ᵀ C_k A_kᵀ`, the first `B` and
-    /// last `A` join the endpoint frame, and the gate phases add.
-    fn dress(&self, frames: &[Frame]) -> Result<RealizedSentence, CompileError> {
-        let between = (self.slots.windows(2).zip(&self.layers))
-            .map(|(pair, layer)| {
-                let (left, right) = (&frames[pair[0]], &frames[pair[1]]);
-                factor_rotation(&(right.before.transpose() * layer * left.after.transpose()))
-            })
-            .collect::<Result<_, _>>()?;
-        let mut frame = self.frame;
-        if let (Some(&first), Some(&last)) = (self.slots.first(), self.slots.last()) {
-            frame.after = frames[last].after * frame.after;
-            frame.before *= frames[first].before;
-            frame.phase += self.slots.iter().map(|&s| frames[s].phase).sum::<f64>();
+    /// The circuit for a target of this sentence's class with frame `target`,
+    /// with the bound physical gates `G_k = A_k D(c_k) B_k` in place of the
+    /// canonical ones: the layer between gates k and k+1 becomes
+    /// `B_{k+1}ᵀ C_k A_kᵀ`, the first `B`ᵀ and the last `A`ᵀ join the outer
+    /// layers, and the gate phases add.
+    fn compile_target(
+        &self,
+        gates: &[Gate],
+        target: Frame,
+    ) -> Result<CompiledTarget, CompileError> {
+        // The target's rotations around this sentence's endpoint.
+        let before = self.frame.before.transpose() * target.before;
+        let after = target.after * self.frame.after.transpose();
+        let phase = target.phase
+            - self.frame.phase
+            - self.slots.iter().map(|&s| gates[s].phase).sum::<f64>();
+        // n gates, at most two locals before the first, between each pair, and after the last.
+        let mut ops = Vec::with_capacity(3 * self.slots.len() + 2);
+        let (Some(&first), Some(&last)) = (self.slots.first(), self.slots.last()) else {
+            ops.extend(locals(factor_rotation(&(after * before))?));
+            return Ok(CompiledTarget { ops, phase });
+        };
+        ops.extend(locals(
+            gates[first].before_inverse * factor_rotation(&before)?,
+        ));
+        ops.push(Op::Gate(first));
+        for (pair, &layer) in self.slots.windows(2).zip(&self.layers) {
+            let (left, right) = (&gates[pair[0]], &gates[pair[1]]);
+            ops.extend(locals(right.before_inverse * layer * left.after_inverse));
+            ops.push(Op::Gate(pair[1]));
         }
-        Ok(RealizedSentence {
-            gates: self.slots.clone(),
-            between,
-            frame,
-        })
+        ops.extend(locals(factor_rotation(&after)? * gates[last].after_inverse));
+        Ok(CompiledTarget { ops, phase })
     }
-}
-
-/// One class circuit for one binding: its slots, the physical local layers
-/// between them, and its endpoint frame.
-struct RealizedSentence {
-    /// Slot indices in circuit order; empty for a local circuit.
-    gates: Vec<usize>,
-    /// The local layer before each gate after the first.
-    between: Vec<LocalPair>,
-    frame: Frame,
 }
 
 /// One operation of a compiled circuit, on block qubits 0 and 1.
@@ -345,71 +363,36 @@ impl CompiledTarget {
 }
 
 /// The single-qubit gates of a layer, omitting those within
-/// `LOCAL_IDENTITY_TOL` of the identity.
-fn locals(pair: LocalPair) -> impl Iterator<Item = Op> {
+/// `LOCAL_IDENTITY_TOL` of the identity. A product of factored layers fixes
+/// its two factors only up to a shared sign, so a factor at `-I` negates both,
+/// which leaves the layer unchanged and lets that factor be omitted.
+fn locals(mut pair: LocalPair) -> impl Iterator<Item = Op> {
+    let minus_identity = |m: &Mat2| (m + Mat2::identity()).norm() <= LOCAL_IDENTITY_TOL;
+    if minus_identity(&pair.q0) || minus_identity(&pair.q1) {
+        pair = LocalPair {
+            q0: -pair.q0,
+            q1: -pair.q1,
+        };
+    }
     [(0, pair.q0), (1, pair.q1)]
         .into_iter()
         .filter(|(_, matrix)| (matrix - Mat2::identity()).norm() > LOCAL_IDENTITY_TOL)
         .map(|(qubit, matrix)| Op::Local { qubit, matrix })
 }
 
-impl RealizedSentence {
-    /// The circuit for a target of this sentence's class with frame `target`.
-    fn attach(&self, mut target: Frame) -> Result<CompiledTarget, CompileError> {
-        target.before = self.frame.before.transpose() * target.before;
-        target.after *= self.frame.after.transpose();
-        let mut ops = Vec::new();
-        if self.gates.is_empty() {
-            ops.extend(locals(factor_rotation(&(target.after * target.before))?));
-        } else {
-            ops.extend(locals(factor_rotation(&target.before)?));
-            ops.push(Op::Gate(self.gates[0]));
-            for (&slot, &pair) in self.gates[1..].iter().zip(&self.between) {
-                ops.extend(locals(pair));
-                ops.push(Op::Gate(slot));
-            }
-            ops.extend(locals(factor_rotation(&target.after)?));
-        }
-        Ok(CompiledTarget {
-            ops,
-            phase: target.phase - self.frame.phase,
-        })
-    }
-}
-
 /// Compile `(binding, target)` jobs; results keep job order,
-/// and an error carries the index of a failing job. Targets are factored in one
-/// parallel map. Jobs of exactly the same class on the same binding share one
-/// dressed sentence, so they are grouped and the groups compile in a second
-/// parallel map; keeping the two numerical kernels apart avoids a 5%
-/// single-thread cost.
+/// and an error carries the index of a failing job.
 pub fn compile_all(
     jobs: &[(&Binding, &Mat4)],
 ) -> Result<Vec<CompiledTarget>, (usize, CompileError)> {
     let indexed: Vec<_> = jobs.iter().enumerate().collect();
-    let factored = crate::map_batch(&indexed, |&(job, &(_, target))| {
-        kak(target).map_err(|err| (job, err))
-    })?;
-    // The bindings outlive this call, so their addresses identify them.
-    let mut groups = IndexMap::<_, Vec<usize>>::default();
-    for (job, ((binding, _), (class, _))) in jobs.iter().zip(&factored).enumerate() {
-        let key = (std::ptr::from_ref(*binding).addr(), class.key());
-        groups.entry(key).or_default().push(job);
-    }
-    let groups: Vec<_> = groups.into_values().collect();
-    let compiled = crate::map_batch(&groups, |group| {
-        let (binding, _) = jobs[group[0]];
-        let class = factored[group[0]].0;
-        let sentence =
-            (binding.decomposer.dressed(class, &binding.frames)).map_err(|err| (group[0], err))?;
-        (group.iter())
-            .map(|&job| {
-                let target = sentence.attach(factored[job].1).map_err(|err| (job, err))?;
-                Ok((job, target))
+    crate::map_batch(&indexed, |&(job, &(binding, target))| {
+        kak(target)
+            .and_then(|(class, frame)| {
+                binding
+                    .decomposer
+                    .compile_target(class, &binding.gates, frame)
             })
-            .collect::<Result<Vec<_>, _>>()
-    })?;
-    let mut compiled: Vec<_> = compiled.into_iter().flatten().collect();
-    compiled.sort_unstable_by_key(|&(job, _)| job);
-    Ok(compiled.into_iter().map(|(_, target)| target).collect())
+            .map_err(|err| (job, err))
+    })
 }

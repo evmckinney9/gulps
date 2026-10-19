@@ -18,6 +18,20 @@ pub struct LocalPair {
     pub q1: Mat2,
 }
 
+/// The product of two local gates, qubit by qubit, as the product of their
+/// rotations in the magic basis. The factors keep the sign of their inputs,
+/// not the convention of [`factor_rotation`]: a product equal to the identity
+/// rotation can be `(-I, -I)`.
+impl std::ops::Mul for LocalPair {
+    type Output = Self;
+    fn mul(self, rhs: Self) -> Self {
+        Self {
+            q0: self.q0 * rhs.q0,
+            q1: self.q1 * rhs.q1,
+        }
+    }
+}
+
 /// The magic basis `Q`. Its columns order the canonical gate's phases as
 /// `(m1, m0, -m0-m1-m2, m2)`, and local gates are real rotations in it.
 pub fn magic() -> Mat4 {

@@ -62,7 +62,8 @@ pub const MEMBERSHIP_TOL: f64 = can_sandwich::SPECTRAL_TOLERANCE / std::f64::con
 /// is needed.
 pub(crate) const RECONSTRUCT_TOL: f64 = 1e-13;
 /// Frobenius distance from the identity below which a compiled circuit omits
-/// a single-qubit gate. Recovered local gates are accurate to about 1e-15.
+/// a single-qubit gate. An emitted local gate is the product of at most three
+/// recovered factors, each accurate to about 1e-15.
 pub(crate) const LOCAL_IDENTITY_TOL: f64 = 1e-14;
 /// Fewest items in one parallel task. Waking a worker costs about as much as
 /// a few dozen KAKs, so smaller tasks lose time; measured on 6 cores / 12

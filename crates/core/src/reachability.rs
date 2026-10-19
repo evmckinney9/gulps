@@ -518,9 +518,10 @@ pub fn covers(region: &Region, point: &Region) -> bool {
 /// The classes reached after the second through the next-to-last gate of a
 /// sentence that the search found to reach `endpoint`, recovered backward:
 /// each is the [`feasible_point`] of its prefix region intersected with the
-/// next gate's preimage of the class after it. Empty for two gates; `gates`
-/// must not be empty.
+/// next gate's preimage of the class after it. Empty for two gates. `realize`
+/// calls it only for sentences of two or more gates.
 pub fn trajectory(gates: &[Mono], endpoint: Mono) -> Option<Vec<Mono>> {
+    debug_assert!(gates.len() >= 2, "a trajectory needs at least two gates");
     let n = gates.len();
     let mut prefix = BASE_STATE;
     let mut prefixes = vec![prefix];
