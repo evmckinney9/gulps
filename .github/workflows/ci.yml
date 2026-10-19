@@ -47,7 +47,8 @@ jobs:
           workspaces: crates
 
       # monodromy is archived and works with lrsgmp 7.1. lrslib 7.3 changes the
-      # banner it parses, and the hybrid `lrs` restarts on piped input.
+      # banner it parses, and the hybrid `lrs` restarts on piped input. lrslib
+      # 7.1 is pre-C23 code, so build it as C17.
       - name: Build lrsgmp 7.1 for the monodromy oracle tests
         run: |
           sudo apt-get install -y libgmp-dev
@@ -55,7 +56,7 @@ jobs:
           curl -sfL https://cgm.cs.mcgill.ca/~avis/C/lrslib/archive/lrslib-071b.tar.gz -o lrslib.tar.gz
           echo "df22682cd742315fe04f866cfe4804d5950f7dc7f514d5b5f36f5b7f5aff9188  lrslib.tar.gz" | sha256sum -c
           tar xzf lrslib.tar.gz
-          make -C lrslib-071b lrsgmp
+          make -C lrslib-071b lrsgmp CFLAGS="-O3 -std=gnu17"
           echo "LRS_PATH=$RUNNER_TEMP/lrslib-071b/lrsgmp" >> "$GITHUB_ENV"
 
       - name: Install

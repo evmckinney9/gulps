@@ -29,7 +29,7 @@ installed. To run them, build `lrsgmp` (needs GMP) as CI does:
 ```sh
 .venv/bin/python -m pip install "monodromy @ git+https://github.com/qiskit-community/monodromy"
 curl -sfL https://cgm.cs.mcgill.ca/~avis/C/lrslib/archive/lrslib-071b.tar.gz | tar xz
-make -C lrslib-071b lrsgmp
+make -C lrslib-071b lrsgmp CFLAGS="-O3 -std=gnu17"
 LRS_PATH=$PWD/lrslib-071b/lrsgmp make test
 ```
 
