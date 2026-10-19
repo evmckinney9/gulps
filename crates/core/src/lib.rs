@@ -9,11 +9,11 @@
 //! The constants below are the crate's tolerances. `INPUT_ATOL`, the
 //! unitarity tolerance at the Python input boundary, is in gulps-pyext.
 //!
-//! Computational reuse requires exact coordinate keys, with signed zero
-//! normalized. Two classes in the same public equality cell can lie on
-//! opposite sides of a reachability boundary and require different gate
-//! sequences. Do not use the public equality key for cost aggregation,
-//! synthesis reuse, or native-gate pruning.
+//! Computational reuse keys a class by its exact coordinates, with signed zero
+//! normalized (`Mono::key`). The Python class's equality uses `CLASS_TOL`
+//! cells instead, and two classes in one cell can lie on opposite sides of a
+//! reachability boundary and require different gate sequences. Do not key
+//! cost aggregation, synthesis reuse, or native-gate pruning by those cells.
 //!
 //! Do not add a tolerance elsewhere. Derive it from one of these constants.
 //! Never round a coordinate to a grid. Rounding each coordinate separately

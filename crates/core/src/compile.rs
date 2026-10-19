@@ -61,7 +61,7 @@ impl Decomposer {
 
     /// The cache cell for a class's canonical sentence.
     fn realized(&self, class: Mono) -> Arc<Realized> {
-        let key = class.exact_key();
+        let key = class.key();
         let mut realized = self.realized.lock().expect("a cache update panicked");
         if let Some(cell) = realized.get(&key) {
             return Arc::clone(cell);
@@ -226,7 +226,7 @@ impl Binding {
         }
         let mut cheapest = IndexMap::<[u64; 3], usize>::default();
         for (i, (gate, cost)) in gates.iter().enumerate() {
-            let entry = cheapest.entry(gate.class.exact_key()).or_insert(i);
+            let entry = cheapest.entry(gate.class.key()).or_insert(i);
             if *cost < gates[*entry].1 {
                 *entry = i;
             }
@@ -245,7 +245,7 @@ impl Binding {
                 .map(|&(class, cost)| {
                     let i = unused.iter().position(|&g| {
                         exact_bits(gates[g].1) == exact_bits(cost)
-                            && gates[g].0.class.exact_key() == class.exact_key()
+                            && gates[g].0.class.key() == class.key()
                     })?;
                     Some(unused.swap_remove(i))
                 })
@@ -395,7 +395,7 @@ pub fn compile_all(
     // The bindings outlive this call, so their addresses identify them.
     let mut groups = IndexMap::<_, Vec<usize>>::default();
     for (job, ((binding, _), (class, _))) in jobs.iter().zip(&factored).enumerate() {
-        let key = (std::ptr::from_ref(*binding).addr(), class.exact_key());
+        let key = (std::ptr::from_ref(*binding).addr(), class.key());
         groups.entry(key).or_default().push(job);
     }
     let groups: Vec<_> = groups.into_values().collect();

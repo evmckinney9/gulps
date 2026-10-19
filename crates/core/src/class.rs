@@ -51,16 +51,9 @@ impl Mono {
             .expect("local_equivalence has no error path")
     }
 
-    /// Class key: the `CLASS_TOL` cell of each coordinate, for public equality
-    /// and hashing only.
-    #[allow(clippy::cast_possible_truncation)] // |c| <= 2, so the scaled key is far inside i64
-    pub fn key(self) -> [i64; 3] {
-        self.0.map(|c| (c / CLASS_TOL).round_ties_even() as i64)
-    }
-
     /// Exact coordinate key for computational reuse. Approximate class equality
     /// can straddle a reachability boundary, so it cannot identify computations.
-    pub(crate) fn exact_key(self) -> [u64; 3] {
+    pub(crate) fn key(self) -> [u64; 3] {
         self.0.map(exact_bits)
     }
 

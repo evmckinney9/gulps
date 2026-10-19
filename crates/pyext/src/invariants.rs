@@ -39,17 +39,25 @@ pub struct LocalEquivalenceClass {
 
 impl PartialEq for LocalEquivalenceClass {
     fn eq(&self, other: &Self) -> bool {
-        self.mono.key() == other.mono.key()
+        self.cell() == other.cell()
     }
 }
 
 impl Hash for LocalEquivalenceClass {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.mono.key().hash(state);
+        self.cell().hash(state);
     }
 }
 
 impl LocalEquivalenceClass {
+    /// The `CLASS_TOL` cell of each coordinate, for equality and hashing only.
+    #[allow(clippy::cast_possible_truncation)] // |c| <= 2, so the scaled cell is far inside i64
+    fn cell(&self) -> [i64; 3] {
+        self.mono
+            .0
+            .map(|c| (c / gulps_core::CLASS_TOL).round_ties_even() as i64)
+    }
+
     /// The class of a checked matrix, or `None` if its KAK fails.
     pub fn of(matrix: &Mat4) -> Option<Self> {
         let mono = monodromies(&[*matrix]).ok()?[0];
