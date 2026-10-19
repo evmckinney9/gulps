@@ -70,16 +70,19 @@ pub(crate) const LOCAL_IDENTITY_TOL: f64 = 1e-14;
 /// overhead of Rayon's default split.
 const PAR_TASK: usize = 32;
 
-/// Map a batch in input order, stopping at an error. A batch that fills at
-/// least two tasks of `PAR_TASK` items uses Rayon, unless Qiskit has disabled
-/// threads inside its parallel workers.
+/// Map a batch in input order, returning the first error in input order. A
+/// batch that fills at least two tasks of `PAR_TASK` items uses Rayon, unless
+/// Qiskit has disabled threads inside its parallel workers; it maps every item
+/// before looking for an error, so the error reported does not depend on
+/// thread timing.
 pub fn map_batch<T: Sync, U: Send, E: Send>(
     items: &[T],
     f: impl Fn(&T) -> Result<U, E> + Send + Sync,
 ) -> Result<Vec<U>, E> {
     if items.len() >= 2 * PAR_TASK && qiskit_numerics::getenv_use_multiple_threads() {
         use rayon::prelude::*;
-        items.par_iter().with_min_len(PAR_TASK).map(f).collect()
+        let results: Vec<Result<U, E>> = items.par_iter().with_min_len(PAR_TASK).map(f).collect();
+        results.into_iter().collect()
     } else {
         items.iter().map(f).collect()
     }
