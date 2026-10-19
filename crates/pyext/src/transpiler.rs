@@ -145,16 +145,22 @@ fn edge_error(edge: Option<(u32, u32)>, message: &str) -> PyErr {
 impl BlockSynthesizer {
     /// One edge per Target edge (its gates and the gates offered on every
     /// pair), also used in reverse where the reverse pair has none, and a
-    /// default for the gates offered on every pair. Local layers cost nothing: see
-    /// <https://github.com/evmckinney9/gulps/issues/21>.
+    /// default for the gates offered on every pair. Every edge's local layers
+    /// cost `local_layer_cost`: a Target cannot give it, since a general
+    /// single-qubit gate's cost depends on the basis that later passes use
+    /// (<https://github.com/evmckinney9/gulps/issues/21>).
     #[staticmethod]
-    fn from_target(target: &Bound<'_, PyAny>, cost: &str, max_depth: usize) -> PyResult<Self> {
+    fn from_target(
+        target: &Bound<'_, PyAny>,
+        cost: &str,
+        local_layer_cost: f64,
+        max_depth: usize,
+    ) -> PyResult<Self> {
         if cost != "duration" && cost != "error" {
             return Err(PyValueError::new_err(format!(
                 "cost must be 'duration' or 'error', got {cost:?}"
             )));
         }
-        let local_layer_cost = 0.0;
         let TargetGates {
             natives,
             global,

@@ -57,6 +57,11 @@ class GulpsDecompositionPass(TransformationPass):
             decomposer per distinct instruction set and cost model.
         cost (str): The Target property to minimize: ``"duration"`` or
             ``"error"``.
+        local_layer_cost (float): Cost of each layer of single-qubit gates
+            before, between, and after the two-qubit gates, in the units of
+            ``cost``. A Target does not determine it: a general single-qubit
+            gate costs one ``u`` or two ``sx``, for example, depending on the
+            basis that later passes use.
         max_depth (int): Maximum number of two-qubit gates in a sequence.
     """
 
@@ -65,18 +70,21 @@ class GulpsDecompositionPass(TransformationPass):
         decomposer: GulpsDecomposer | Target,
         *,
         cost: str = "duration",
+        local_layer_cost: float = 0.0,
         max_depth: int = MAX_DEPTH,
     ) -> None:
-        """Use ``cost`` and ``max_depth`` only when configuring a Target."""
+        """The Target options are ignored for a ``GulpsDecomposer``."""
         super().__init__()
         self.requires = [ConsolidateBlocks(force_consolidate=True)]
-        self._config = (decomposer, cost, max_depth)
+        self._config = (decomposer, cost, local_layer_cost, max_depth)
         self._synthesizer = self._build()
 
     def _build(self) -> BlockSynthesizer:
-        source, cost, max_depth = self._config
+        source, cost, local_layer_cost, max_depth = self._config
         if isinstance(source, Target):
-            return BlockSynthesizer.from_target(source, cost, max_depth)
+            return BlockSynthesizer.from_target(
+                source, cost, local_layer_cost, max_depth
+            )
         return BlockSynthesizer.from_decomposer(source)
 
     def __getstate__(self) -> dict:

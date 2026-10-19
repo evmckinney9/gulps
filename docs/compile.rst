@@ -176,6 +176,25 @@ minimizing error uses only :math:`\sqrt{\mathrm{CX}}`:
    ])
    print(dict(pipeline.run(circuit).count_ops()))
 
+``transpile`` cannot pass options to a translation plugin, so
+``translation_method="gulps"`` uses the default ``cost`` and a
+``local_layer_cost`` of zero. To choose them, replace the translation stage
+of a preset pass manager with the plugin's passes:
+
+.. jupyter-execute::
+
+   from qiskit.circuit.equivalence_library import SessionEquivalenceLibrary
+   from qiskit.transpiler import generate_preset_pass_manager
+   from qiskit.transpiler.passes import BasisTranslator
+
+   pm = generate_preset_pass_manager(1, target=target)
+   pm.translation = PassManager([
+       GulpsDecompositionPass(target, cost="error", local_layer_cost=1e-4),
+       Optimize1qGatesDecomposition(target=target),
+       BasisTranslator(SessionEquivalenceLibrary, None, target=target),
+   ])
+   print(dict(pm.run(circuit).count_ops()))
+
 .. _routing-costs:
 
 Synthesis costs in other passes
