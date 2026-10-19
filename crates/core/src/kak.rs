@@ -66,6 +66,13 @@ const MIXES: [(f64, f64); 4] = [
 /// has an entry of at least `RECONSTRUCT_TOL`. Every class GULPS computes from
 /// a matrix comes from here, so projection and synthesis agree.
 fn kak_unchecked(matrix: &Mat4) -> Result<(Mono, Frame, f64), CompileError> {
+    // `max_error` folds with `f64::max`, which skips NaN, and the eigensolve
+    // below iterates until convergence, so a non-finite entry must stop here.
+    if !matrix.iter().all(|z| z.re.is_finite() && z.im.is_finite()) {
+        return Err(CompileError::Synthesis(
+            "matrix has a non-finite entry".into(),
+        ));
+    }
     let mut source = *matrix;
     if max_error(&(source.adjoint() * source - Mat4::identity())) >= RECONSTRUCT_TOL {
         let repaired = closest_unitary_faer(ndarray_to_faer(matrix_view(&source)))
