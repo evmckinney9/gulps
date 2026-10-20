@@ -10,7 +10,7 @@ use crate::decomposer::compile_error;
 use crate::{mat4_to_numpy, unitary};
 
 use gulps_core::class::{self, Mono};
-use gulps_core::{Mat4, Unitary, canonical_matrix, map_batch};
+use gulps_core::{Unitary, canonical_matrix, map_batch};
 
 /// The local-equivalence class of a two-qubit gate.
 ///
@@ -55,12 +55,6 @@ impl LocalEquivalenceClass {
         self.mono
             .0
             .map(|c| (c / gulps_core::CLASS_TOL).round_ties_even() as i64)
-    }
-
-    /// The canonical gate of this class.
-    pub fn mat4(&self) -> Mat4 {
-        let [c1, c2, c3] = class::weyl_from_monodromy(&self.mono.0);
-        canonical_matrix(c1, c2, c3)
     }
 }
 
@@ -140,7 +134,7 @@ impl LocalEquivalenceClass {
     /// this class.
     #[getter]
     fn matrix<'py>(&self, py: Python<'py>) -> Bound<'py, PyAny> {
-        mat4_to_numpy(py, &self.mat4())
+        mat4_to_numpy(py, &canonical_matrix(self.mono))
     }
 
     fn __repr__(&self) -> String {
