@@ -5,17 +5,17 @@
 use std::convert::Infallible;
 
 use indexmap::map::Entry;
-use pyo3::exceptions::{PyNotImplementedError, PyRuntimeError, PyTypeError, PyValueError};
+use pyo3::exceptions::{PyNotImplementedError, PyRuntimeError, PyTypeError};
 use pyo3::prelude::*;
 use qiskit_numerics::IndexMap;
 use qiskit_pyo3_ffi as qk;
 use qk::{QkDag, QkExitCode, QkGate, QkOperationKind};
 
-use gulps_core::{C64, CompiledTarget, Gate, Mat4, Op};
+use gulps_core::{C64, CompiledTarget, Gate, Mat4, Op, Unitary};
 
 use crate::decomposer::compile_error;
+use crate::matrix;
 use crate::transpiler::Edge;
-use crate::{INPUT_ATOL, checked_mat4, is_unitary};
 
 /// How the C API writes one native gate. Its representation is private, so
 /// [`NativeGate::unitary`] and [`NativeGate::from_python`] are its only
@@ -80,9 +80,10 @@ impl NativeGate {
                  see https://github.com/evmckinney9/gulps/issues/18"
             )));
         }
-        let matrix = checked_mat4(gate)?;
+        let matrix = matrix(gate)?;
         let native = standard_gate.unwrap_or_else(|| Self::unitary(&matrix));
-        let gate = Gate::new(&matrix).map_err(|err| compile_error(py, err, None))?;
+        let gate =
+            Gate::new(&Unitary::Matrix(matrix)).map_err(|err| compile_error(py, err, None))?;
         Ok((gate, native))
     }
 }
@@ -106,8 +107,8 @@ fn two_qubit_gate(kind: i32, num_params: usize) -> Option<QkGate> {
 /// qubits, that it replaces.
 pub struct Job<'a> {
     pub edge: &'a Edge,
-    /// In the edge's qubit order.
-    pub matrix: Mat4,
+    /// The nodes' matrix, in the edge's qubit order.
+    pub unitary: Unitary,
     /// Whether the nodes' operands are in the opposite order to the edge's.
     flip: bool,
     nodes: Vec<u32>,
@@ -241,14 +242,9 @@ unsafe fn read<'a>(
                 // Swapping the qubits exchanges basis states 1 and 2.
                 let swap = |i: usize| if flip { [0, 2, 1, 3][i] } else { i };
                 let matrix = Mat4::from_fn(|r, c| entries[4 * swap(r) + swap(c)]);
-                if !is_unitary(&matrix) {
-                    return Err(PyValueError::new_err(format!(
-                        "DAG node {node} is not unitary within atol={INPUT_ATOL:e}"
-                    )));
-                }
                 entry.insert(Job {
                     edge,
-                    matrix,
+                    unitary: Unitary::Matrix(matrix),
                     flip,
                     nodes: vec![node],
                 });
