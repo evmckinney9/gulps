@@ -1,6 +1,4 @@
-//! The Rust entry points `gulps.analysis` uses: reachable-region bounds and
-//! membership, the bounds' subset-sum forms, the monodromy-to-Weyl chart, and
-//! coverage candidates of a decomposer. A region crosses as its 14 bounds.
+//! Entry points for `gulps.analysis`. A region crosses as its 14 bounds.
 
 use numpy::ndarray::{Array2, ArrayView2};
 use numpy::{IntoPyArray, PyArray1, PyArray2, PyReadonlyArray2};
@@ -69,7 +67,7 @@ fn coverage_candidate<'py>(
     decomposer: &GulpsDecomposer,
     row: usize,
 ) -> PyResult<(f64, Bound<'py, PyTuple>, [f64; 14])> {
-    // Reaching a late row can grow the search for a long time; release the GIL as `select` does.
+    // Release the GIL: reaching a late row can grow the search for a long time.
     let walk = decomposer.edge.binding.decomposer();
     let (slots, cost, region) = py
         .detach(|| walk.coverage_candidate(row))

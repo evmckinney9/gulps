@@ -9,14 +9,12 @@ use crate::{INPUT_ATOL, LOCAL_IDENTITY_TOL, Mat2};
 use qiskit_numerics::IndexMap;
 use std::sync::{Arc, Mutex, OnceLock};
 
-/// Selection and synthesis failures, independent of the Python interface.
+/// Selection and synthesis failures.
 #[derive(Clone, Debug)]
 pub enum CompileError {
     /// No sequence was found within the configured depth.
     DepthLimit(usize),
-    /// A numerical step failed: the KAK of an input or target did not
-    /// diagonalize or reconstruct, no trajectory was found, the solver
-    /// declined a segment, or a rotation did not split into local gates.
+    /// A numerical step failed; the message names it.
     Synthesis(String),
     /// An input matrix is not finite, or `U†U − I` has an entry above
     /// `INPUT_ATOL`: the largest entry, or NaN.
@@ -220,10 +218,11 @@ pub struct Binding {
 
 impl Binding {
     /// Bind gates, each with its cost. Of gates with exactly the same class,
-    /// the cheapest is kept, first on ties. The first of `existing` whose slots
-    /// the kept gates fill one to one, at exactly equal class and cost, is
-    /// reused; otherwise a new decomposer is made. Returns the binding and, for
-    /// each slot, the input position of the gate filling it.
+    /// the cheapest is kept, first on ties. The first of `existing` with equal
+    /// `local_layer_cost` and `max_depth` whose slots the kept gates fill one to
+    /// one, at exactly equal class and cost, is reused; otherwise a new
+    /// decomposer is made. Returns the binding and, for each slot, the input
+    /// position of the gate filling it.
     ///
     /// Reuse scans `existing`, so binding every edge of a Target is quadratic
     /// in its number of distinct edges, and it requires equal costs, so

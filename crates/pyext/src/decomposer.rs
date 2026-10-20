@@ -238,7 +238,6 @@ impl GulpsDecomposer {
 
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let py = m.py();
-    // Without a known target class, `target` reads as None.
     py.get_type::<DecompositionError>()
         .setattr("target", py.None())?;
     m.add("DecompositionError", py.get_type::<DecompositionError>())?;

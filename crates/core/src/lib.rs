@@ -6,8 +6,6 @@
 //!
 //! # Tolerances
 //!
-//! The constants below are the crate's tolerances.
-//!
 //! Computational reuse keys a class by its exact coordinates, with signed zero
 //! normalized (`Mono::key`). The Python class's equality uses `CLASS_TOL`
 //! cells instead, and two classes in one cell can lie on opposite sides of a
@@ -45,9 +43,7 @@ pub type Mat2 = Matrix2<C64>;
 pub type Mat4 = Matrix4<C64>;
 
 /// Coordinate-cell width for public class equality and hashing, also used for
-/// chart folding and chamber validation. Computational reuse requires exact
-/// coordinates: nearby classes can lie on opposite reachability boundaries.
-/// It never rounds a stored coordinate.
+/// chart folding and chamber validation.
 pub const CLASS_TOL: f64 = 1e-12;
 /// Reachability slack in phase turns: the solver's root-error ceiling
 /// `can_sandwich::SPECTRAL_TOLERANCE` divided by 2π.
@@ -55,8 +51,7 @@ pub const CLASS_TOL: f64 = 1e-12;
 /// Subset sums and repeated products accumulate errors, so this scale is a
 /// numerical policy, not a proof of infeasibility beyond every facet's slack.
 pub const MEMBERSHIP_TOL: f64 = can_sandwich::SPECTRAL_TOLERANCE / std::f64::consts::TAU;
-/// Entrywise error accepted in `U†U − I` for an input matrix. Decomposition
-/// uses the closest unitary when an entry is at least `RECONSTRUCT_TOL`.
+/// Entrywise error accepted in `U†U − I` for an input matrix.
 pub const INPUT_ATOL: f64 = 1e-8;
 /// Working-precision error accepted when a factorization is recomposed: a KAK
 /// frame and a local rotation split into single-qubit gates (both Frobenius),
@@ -68,16 +63,13 @@ pub(crate) const RECONSTRUCT_TOL: f64 = 1e-13;
 /// recovered factors, each accurate to about 1e-15.
 pub(crate) const LOCAL_IDENTITY_TOL: f64 = 1e-14;
 /// Fewest items in one parallel task. Waking a worker costs about as much as
-/// a few dozen KAKs, so smaller tasks lose time; measured on 6 cores / 12
-/// threads under WSL, splitting 128 KAKs into tasks this size halves the
-/// overhead of Rayon's default split.
+/// a few dozen KAKs; measured on 6 cores / 12 threads under WSL, splitting 128
+/// KAKs into tasks this size halves the overhead of Rayon's default split.
 const PAR_TASK: usize = 32;
 
 /// Map a batch in input order, returning the first error in input order with
-/// the index of its item. A batch that fills at least two tasks of `PAR_TASK`
-/// items uses Rayon, unless Qiskit has disabled threads inside its parallel
-/// workers; it maps every item before looking for an error, so the error
-/// reported does not depend on thread timing.
+/// the index of its item. Runs in parallel unless the batch is small or Qiskit
+/// has disabled threads.
 pub fn map_batch<T: Sync, U: Send, E: Send>(
     items: &[T],
     f: impl Fn(&T) -> Result<U, E> + Send + Sync,

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Summary report visualizations comparing synthesis results."""
+"""Summary report visualizations."""
 
 from __future__ import annotations
 
@@ -87,7 +87,7 @@ def plot_calibration(calibration: Calibration, ax: Axes | None = None) -> Axes:
 
 
 def plot_strength_sweep(sweep: StrengthSweep, ax: Axes | None = None) -> Axes:
-    """Plot score against candidate cost, marking the optimum."""
+    """Plot score against candidate index, marking the optimum."""
     if ax is None:
         _fig, ax = plt.subplots(figsize=_FIGSIZE)
     ax.plot(sweep.scores, "-o", markersize=3)

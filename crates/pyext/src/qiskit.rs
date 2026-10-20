@@ -17,10 +17,7 @@ use crate::decomposer::compile_error;
 use crate::matrix;
 use crate::transpiler::Edge;
 
-/// How the C API writes one native gate. Its representation is private, so
-/// [`NativeGate::unitary`] and [`NativeGate::from_python`] are its only
-/// constructors, and a standard gate always matches the signature checked
-/// there.
+/// How the C API writes one native gate.
 #[derive(Clone)]
 pub struct NativeGate(Writer);
 

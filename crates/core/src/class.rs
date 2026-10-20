@@ -22,8 +22,7 @@ pub fn monodromy_from_weyl(c1: f64, c2: f64, c3: f64) -> [f64; 3] {
 /// Choose between the two chart representatives, retaining the frame reflection.
 pub fn fold_weyl([c1, c2, c3]: [f64; 3]) -> ([f64; 3], bool) {
     // On c3=0, (c1,c2,0) and (1-c1,c2,0) are the same class, so the fold
-    // decides by c1 within the class tolerance of that face. Coordinates are
-    // never rounded: see `Mono`.
+    // decides by c1 within the class tolerance of that face.
     let boundary = c3.abs() <= CLASS_TOL;
     let reflected = if boundary { c1 > 0.5 } else { c3 < 0.0 };
     let (c1, c3) = if reflected { (1.0 - c1, -c3) } else { (c1, c3) };
@@ -59,11 +58,10 @@ pub(crate) fn exact_bits(value: f64) -> u64 {
     if value == 0.0 { 0 } else { value.to_bits() }
 }
 
-/// Monodromy coordinates: the eigenphase triple of `U·Ũ`, used by selection,
-/// membership, and trajectories. Values are kept unrounded: rounding each
-/// coordinate separately breaks the linear relations between gates, and their
-/// products then miss the strata the realization solver needs within
-/// `can_sandwich::SPECTRAL_TOLERANCE`.
+/// Monodromy coordinates: the eigenphase triple of `U·Ũ`. Values are kept
+/// unrounded: rounding each coordinate separately breaks the linear relations
+/// between gates, and their products then miss the strata the realization
+/// solver needs within `can_sandwich::SPECTRAL_TOLERANCE`.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Mono(pub [f64; 3]);
 
