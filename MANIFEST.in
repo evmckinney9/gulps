@@ -1,4 +1,5 @@
 recursive-include tests *.py
+recursive-include tests/fixtures/qasm *
 include crates/Cargo.toml crates/Cargo.lock crates/README.md
 include crates/*/Cargo.toml
 recursive-include crates/core/src *.rs
