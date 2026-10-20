@@ -75,7 +75,7 @@ fn coverage_candidate<'py>(
     let (slots, cost, region) = py
         .detach(|| walk.coverage_candidate(row))
         .map_err(|err| compile_error(py, err, None))?;
-    Ok((cost, gate_tuple(py, decomposer, &slots)?, region.0))
+    Ok((cost, decomposer.gate_tuple(py, &slots)?, region.0))
 }
 
 /// The candidates the search discards as dominated before its `row`-th
@@ -92,23 +92,8 @@ fn dominated_candidates<'py>(
         .map_err(|err| compile_error(py, err, None))?;
     dominated
         .into_iter()
-        .map(|(slots, cost, region)| Ok((cost, gate_tuple(py, decomposer, &slots)?, region.0)))
+        .map(|(slots, cost, region)| Ok((cost, decomposer.gate_tuple(py, &slots)?, region.0)))
         .collect()
-}
-
-/// The decomposer's gates in these slots.
-fn gate_tuple<'py>(
-    py: Python<'py>,
-    decomposer: &GulpsDecomposer,
-    slots: &[usize],
-) -> PyResult<Bound<'py, PyTuple>> {
-    let gates = decomposer.gates.bind(py);
-    PyTuple::new(
-        py,
-        slots
-            .iter()
-            .map(|&slot| gates.get_borrowed_item(slot).expect("each slot has a gate")),
-    )
 }
 
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {

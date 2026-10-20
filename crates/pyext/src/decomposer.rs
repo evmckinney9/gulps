@@ -74,9 +74,26 @@ pub fn compile_error(py: Python<'_>, err: CompileError, target: Option<Mono>) ->
 pub struct GulpsDecomposer {
     pub edge: Arc<Edge>,
     /// The kept Qiskit gate objects, one per slot.
-    pub gates: Py<PyTuple>,
+    gates: Py<PyTuple>,
     /// The constructor's inputs for the kept gates, which pickling passes back.
     inputs: Py<PyTuple>,
+}
+
+impl GulpsDecomposer {
+    /// The gates in these slots.
+    pub fn gate_tuple<'py>(
+        &self,
+        py: Python<'py>,
+        slots: &[usize],
+    ) -> PyResult<Bound<'py, PyTuple>> {
+        let gates = self.gates.bind(py);
+        PyTuple::new(
+            py,
+            slots
+                .iter()
+                .map(|&slot| gates.get_borrowed_item(slot).expect("each slot has a gate")),
+        )
+    }
 }
 
 #[pymethods]
@@ -187,16 +204,9 @@ impl GulpsDecomposer {
         let hits = py
             .detach(|| self.edge.binding.decomposer().select(&monos))
             .map_err(|err| compile_error(py, err, (!batch).then(|| classes[0].mono)))?;
-        let gates = self.gates.bind(py);
         let mut selected = hits
             .into_iter()
-            .map(|hit| {
-                let slots = hit
-                    .gates
-                    .iter()
-                    .map(|&slot| gates.get_borrowed_item(slot).expect("each slot has a gate"));
-                (hit.cost, PyTuple::new(py, slots)?).into_pyobject(py)
-            })
+            .map(|hit| (hit.cost, self.gate_tuple(py, &hit.gates)?).into_pyobject(py))
             .collect::<PyResult<Vec<_>>>()?;
         if batch {
             Ok(PyList::new(py, selected)?.into_any().unbind())
