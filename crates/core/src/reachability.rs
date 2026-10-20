@@ -438,7 +438,10 @@ impl Region {
     #[must_use]
     pub fn tighten(&self) -> Self {
         let rhs = self.constraint_rhs();
-        Self(std::array::from_fn(|k| self.tight(&rhs, k)))
+        Self(std::array::from_fn(|k| {
+            let certificates = &CERTIFICATES[k];
+            self.0[k].max(strongest(&certificates.list[..certificates.len], &rhs) - FORMS[k].1)
+        }))
     }
 
     /// The right-hand sides `r` of the constraints `n . q >= r`, in the order
@@ -453,17 +456,6 @@ impl Region {
                 0.0
             }
         })
-    }
-
-    /// Coefficient `k` raised to the minimum of its shifted sum; see
-    /// [`Region::tighten`].
-    fn tight(&self, rhs: &[f64; PINNED], k: usize) -> f64 {
-        let certificates = &CERTIFICATES[k];
-        let bound = certificates.list[..certificates.len]
-            .iter()
-            .map(|certificate| lower_bound(certificate, rhs))
-            .fold(f64::NEG_INFINITY, f64::max);
-        self.0[k].max(bound - FORMS[k].1)
     }
 }
 
