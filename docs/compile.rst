@@ -199,6 +199,11 @@ of a preset pass manager with the plugin's passes:
    pm.translation = PassManager([
        GulpsDecompositionPass(target, cost="error", local_layer_cost=1e-4),
        Optimize1qGatesDecomposition(target=target),
+       HighLevelSynthesis(
+           target=target,
+           use_qubit_indices=True,
+           equivalence_library=SessionEquivalenceLibrary,
+       ),
        BasisTranslator(SessionEquivalenceLibrary, None, target=target),
    ])
    print(dict(pm.run(circuit).count_ops()))
