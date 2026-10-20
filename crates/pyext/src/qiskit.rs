@@ -217,7 +217,7 @@ unsafe fn read<'a>(
                 if pair.is_some() =>
             {
                 return Err(PyNotImplementedError::new_err(format!(
-                    "DAG node {node} is a two-qubit gate, not a unitary: GULPS compiles the \
+                    "DAG node {node} is a two-qubit gate without a matrix: GULPS compiles the \
                      unitaries ConsolidateBlocks makes (the pass requires it), and a gate with \
                      unbound parameters has none; see https://github.com/evmckinney9/gulps/issues/2"
                 )));

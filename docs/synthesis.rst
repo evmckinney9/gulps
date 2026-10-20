@@ -254,8 +254,8 @@ The upper bound on :math:`s` comes from ``AA``, and the backward region
 gives the lower bounds on :math:`s`, :math:`t`, and :math:`s-t`. The
 selection rule takes the smallest :math:`s=23/96`, then the largest
 :math:`t=3/32`, which gives Weyl coordinates
-:math:`C_2=(s+t,s-t,0)=(1/3,7/48,0)`. This is a chosen class, not an
-extra native instruction. It splits the construction into two steps:
+:math:`C_2=(s+t,s-t,0)=(1/3,7/48,0)`. This intermediate class is
+chosen by the selection rule. It splits the construction into two steps:
 
 .. math::
 

@@ -5,7 +5,7 @@
 //! `Region::product` extends a reachable region by one gate. `trajectory`
 //! walks backward through those regions to choose the intermediate classes.
 //!
-//! A region stores inequality right-hand sides, not an attainable spectrum.
+//! A region stores inequality right-hand sides.
 //! Before the codimension shift, every allowed QLR row (I,J -> K,d) proposes
 //! `next[K] = max(next[K], prefix[I] + gate[J] - d)`.
 //! The fixed-size kernels below evaluate that rule table without a table loop.
@@ -371,8 +371,7 @@ fn lower_bound(&[(i, a), (j, b), (l, c)]: &Certificate, rhs: &[f64]) -> f64 {
 }
 
 /// The strongest lower bound that `certificates` give from the right-hand
-/// sides `rhs`. Several running maxima, rather than one, let the evaluations
-/// overlap. Inlined, a list of known length unrolls, with its indices and
+/// sides `rhs`. Several running maxima let the evaluations overlap. Inlined, a list of known length unrolls, with its indices and
 /// weights folded in.
 #[inline(always)]
 fn strongest(certificates: &[Certificate], rhs: &[f64]) -> f64 {
@@ -542,7 +541,7 @@ pub fn trajectory(gates: &[Mono], endpoint: Mono) -> Option<Vec<Mono>> {
 /// the gate preimage tight. When they are, the next depth-two problem has its
 /// target on a boundary of the region its two inputs reach. The ends were
 /// chosen from the eight combinations by median solver time on quantum-volume
-/// and Haar workloads, not derived. `None` when the point fails the region's
+/// and Haar workloads. `None` when the point fails the region's
 /// bounds or the alcove in floating point, as it does when the region is
 /// empty.
 fn feasible_point(region: &Region) -> Option<[f64; 3]> {

@@ -37,7 +37,7 @@ extensions = [
 ]
 
 autosummary_generate = True
-# Render defaults as written, e.g. ``GRID``, not their expanded values.
+# Render defaults as written, e.g. ``GRID``.
 autodoc_preserve_defaults = True
 autodoc_typehints = "description"
 autoclass_content = "both"
@@ -91,7 +91,7 @@ _RUST_SOURCES = {
 
 def linkcode_resolve(domain: str, info: dict[str, str]) -> str | None:
     """Link API objects to their Python source or Rust binding implementation."""
-    # One link per page: the documented class or function, not its members.
+    # One link per page, to the documented class or function.
     if domain != "py" or "." in info["fullname"]:
         return None
     obj = getattr(import_module(info["module"]), info["fullname"], None)
