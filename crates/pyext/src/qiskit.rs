@@ -211,23 +211,15 @@ unsafe fn read<'a>(
                      https://github.com/evmckinney9/gulps/issues/23",
                 ));
             }
-            QkOperationKind::Unitary
-            | QkOperationKind::Gate
-            | QkOperationKind::Unknown
-            | QkOperationKind::PauliProductRotation => {}
+            QkOperationKind::Unitary => {}
+            // ConsolidateBlocks has made every two-qubit block with a matrix a
+            // unitary; the rest are left to later passes, as UnitarySynthesis does.
             _ => continue,
         }
         // SAFETY: as above.
         let Some(pair) = (unsafe { operand_pair(dag, node) }) else {
             continue;
         };
-        if kind != QkOperationKind::Unitary {
-            return Err(PyNotImplementedError::new_err(format!(
-                "DAG node {node} is a two-qubit gate without a matrix: GULPS compiles the \
-                 unitaries ConsolidateBlocks makes (the pass requires it), and a gate with \
-                 unbound parameters has none; see https://github.com/evmckinney9/gulps/issues/2"
-            )));
-        }
         let (edge, flip) = edge(pair)?;
         let mut entries = [C64::new(0.0, 0.0); 16];
         // SAFETY: a two-qubit unitary node of this DAG; the buffer has 16 entries.
