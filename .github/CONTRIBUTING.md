@@ -72,5 +72,7 @@ and any lockfile changes in GULPS.
 
 Push a stable `vX.Y.Z` tag matching the version in `pyproject.toml`.
 The [release workflow](../.github/workflows/release.yml) builds and tests distributions.
+Run `tools/bench-release.sh` to time the release against the previous one, and add
+`build/bench-release.txt` to the draft GitHub release.
 Review the draft GitHub release and its distributions before publishing;
 publication triggers the [PyPI upload](../.github/workflows/publish.yml).
