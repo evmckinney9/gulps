@@ -130,7 +130,7 @@ impl LocalEquivalenceClass {
             .collect::<PyResult<Vec<_>>>()?;
         let mut monos = py
             .detach(|| monodromies(&coerced))
-            .map_err(|err| compile_error(py, err, None))?
+            .map_err(|(_, err)| compile_error(py, err, None))?
             .into_iter();
         Ok(matrices
             .into_iter()

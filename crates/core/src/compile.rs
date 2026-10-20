@@ -385,14 +385,10 @@ fn locals(mut pair: LocalPair) -> impl Iterator<Item = Op> {
 pub fn compile_all(
     jobs: &[(&Binding, &Mat4)],
 ) -> Result<Vec<CompiledTarget>, (usize, CompileError)> {
-    let indexed: Vec<_> = jobs.iter().enumerate().collect();
-    crate::map_batch(&indexed, |&(job, &(binding, target))| {
-        kak(target)
-            .and_then(|(class, frame)| {
-                binding
-                    .decomposer
-                    .compile_target(class, &binding.gates, frame)
-            })
-            .map_err(|err| (job, err))
+    crate::map_batch(jobs, |&(binding, target)| {
+        let (class, frame) = kak(target)?;
+        binding
+            .decomposer
+            .compile_target(class, &binding.gates, frame)
     })
 }

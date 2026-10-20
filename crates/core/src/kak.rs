@@ -136,8 +136,9 @@ impl Mono {
     }
 }
 
-/// Project a matrix batch to monodromy, preserving input order.
-pub fn monodromies(unitaries: &[Mat4]) -> Result<Vec<Mono>, CompileError> {
+/// Project a matrix batch to monodromy, preserving input order; an error
+/// carries the index of its matrix.
+pub fn monodromies(unitaries: &[Mat4]) -> Result<Vec<Mono>, (usize, CompileError)> {
     crate::map_batch(unitaries, Mono::of)
 }
 
