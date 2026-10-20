@@ -371,8 +371,8 @@ fn lower_bound(&[(i, a), (j, b), (l, c)]: &Certificate, rhs: &[f64]) -> f64 {
 }
 
 /// The strongest lower bound that `certificates` give from the right-hand
-/// sides `rhs`. Several running maxima let the evaluations overlap. Inlined, a list of known length unrolls, with its indices and
-/// weights folded in.
+/// sides `rhs`. Several running maxima let the evaluations overlap. Inlined
+/// with a constant list, it unrolls with its indices and weights folded in.
 #[inline(always)]
 fn strongest(certificates: &[Certificate], rhs: &[f64]) -> f64 {
     let mut lanes = [f64::NEG_INFINITY; 4];

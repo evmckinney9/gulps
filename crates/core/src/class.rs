@@ -11,22 +11,12 @@ pub fn weyl_from_monodromy(m: &[f64; 3]) -> [f64; 3] {
 }
 
 /// Weyl to monodromy coordinates.
-pub fn monodromy_from_weyl(c1: f64, c2: f64, c3: f64) -> [f64; 3] {
+pub fn monodromy_from_weyl(&[c1, c2, c3]: &[f64; 3]) -> [f64; 3] {
     [
         0.5 * (c1 + c2 - c3),
         0.5 * (c1 - c2 + c3),
         0.5 * (-c1 + c2 + c3),
     ]
-}
-
-/// Choose between the two chart representatives, retaining the frame reflection.
-pub fn fold_weyl([c1, c2, c3]: [f64; 3]) -> ([f64; 3], bool) {
-    // On c3=0, (c1,c2,0) and (1-c1,c2,0) are the same class, so the fold
-    // decides by c1 within the class tolerance of that face.
-    let boundary = c3.abs() <= CLASS_TOL;
-    let reflected = if boundary { c1 > 0.5 } else { c3 < 0.0 };
-    let (c1, c3) = if reflected { (1.0 - c1, -c3) } else { (c1, c3) };
-    ([c1, c2, c3], reflected)
 }
 
 /// The monodromy coordinates of eigenphases (in turns) of a determinant-one
@@ -79,17 +69,30 @@ impl Mono {
         self.0.map(exact_bits)
     }
 
-    /// The class of sorted monodromy coordinates, folded into the chamber, and
-    /// whether the fold reflected them.
+    /// The class of sorted monodromy coordinates, folded into the chamber by
+    /// choosing between the two chart representatives, and whether the fold
+    /// reflected them.
     pub(crate) fn folded(m: &[f64; 3]) -> (Self, bool) {
-        let ([c1, c2, c3], reflected) = fold_weyl(weyl_from_monodromy(m));
-        (Self(monodromy_from_weyl(c1, c2, c3)), reflected)
+        let [c1, c2, c3] = weyl_from_monodromy(m);
+        // On c3=0, (c1,c2,0) and (1-c1,c2,0) are the same class, so the fold
+        // decides by c1 within the class tolerance of that face.
+        let reflected = if c3.abs() <= CLASS_TOL {
+            c1 > 0.5
+        } else {
+            c3 < 0.0
+        };
+        let weyl = if reflected {
+            [1.0 - c1, c2, -c3]
+        } else {
+            [c1, c2, c3]
+        };
+        (Self(monodromy_from_weyl(&weyl)), reflected)
     }
 
     /// The class of Weyl coordinates of either chart representative, sorted
     /// and folded as the KAK sorts and folds a matrix's class.
-    pub fn from_weyl([c1, c2, c3]: [f64; 3]) -> Self {
-        let [a, b, c] = monodromy_from_weyl(c1, c2, c3);
+    pub fn from_weyl(weyl: [f64; 3]) -> Self {
+        let [a, b, c] = monodromy_from_weyl(&weyl);
         let (m, _) = monodromy(&[a, b, c, -a - b - c]);
         Self::folded(&m).0
     }

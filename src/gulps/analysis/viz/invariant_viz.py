@@ -52,8 +52,7 @@ def scatter_plot(
         ax.set_proj_type("persp")
         draw_chamber(ax)
 
-    # |c3| draws each class in the c3 >= 0 half, where the chamber is drawn.
-    points = np.array([abs(g.weyl) for g in invariant_list]).reshape(-1, 3)
+    points = np.array([g.weyl for g in invariant_list]).reshape(-1, 3)
     # Project each point onto z=0 to show its depth.
     ax.scatter(
         points[:, 0],

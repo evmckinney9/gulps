@@ -110,12 +110,12 @@ fn read_target<'py>(target: &Bound<'py, PyAny>) -> PyResult<TargetGates<'py>> {
 /// every gate (so the search minimizes depth) when no gate has it. One binding
 /// cannot mix cost models, so only some gates having it is an error.
 fn edge_costs(
-    props: &[&Bound<'_, PyAny>],
+    props: &BTreeMap<String, Bound<'_, PyAny>>,
     field: &str,
     edge: Option<(u32, u32)>,
 ) -> PyResult<Vec<f64>> {
     let values = props
-        .iter()
+        .values()
         .map(|p| {
             if p.is_none() {
                 Ok(None)
@@ -166,7 +166,7 @@ impl BlockSynthesizer {
             explicit,
         } = read_target(target)?;
         let gates_on = |props: &BTreeMap<String, Bound<'_, PyAny>>, edge| -> PyResult<_> {
-            let costs = edge_costs(&props.values().collect::<Vec<_>>(), cost, edge)?;
+            let costs = edge_costs(props, cost, edge)?;
             Ok((props.keys().map(|name| &natives[name]))
                 .zip(costs)
                 .collect::<Vec<_>>())
