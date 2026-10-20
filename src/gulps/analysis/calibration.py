@@ -168,8 +168,8 @@ def strength_sweep(
             :func:`power_candidates`.
         local_layer_cost: The cost of one simultaneous local-gate layer. A
             sentence of n pulses has n + 1 such layers.
-        workload: A circuit or a list of targets to score instead of the Haar
-            average.
+        workload: A circuit or a list of targets to score. Defaults to the
+            Haar average.
         max_depth: Maximum two-qubit sentence depth. Candidates that exceed it
             score infinity; an all-infinite search raises ``SearchDepthError``.
     """
@@ -199,8 +199,8 @@ def calibrate(
         budget: The maximum number of candidates.
         local_layer_cost: The cost of one simultaneous local-gate layer. A
             sentence of n pulses has n + 1 such layers.
-        workload: A circuit or a list of targets to score instead of the Haar
-            average.
+        workload: A circuit or a list of targets to score. Defaults to the
+            Haar average.
         max_depth: Maximum two-qubit sentence depth. Candidates that exceed it
             score infinity; an all-infinite search raises ``SearchDepthError``.
     """

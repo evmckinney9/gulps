@@ -67,8 +67,8 @@ def draw_chamber(ax: Axes3D) -> None:
     for pane in (ax.xaxis, ax.yaxis, ax.zaxis):
         pane.set_pane_color((1.0, 1.0, 1.0, 0.0))
 
-    # Permute from matplotlib's default, not the current value: a reused
-    # axes would otherwise flip the c3 axis on every call.
+    # Permute matplotlib's default planes: permuting the current ones would
+    # flip the c3 axis of a reused axes on every call.
     d = type(ax.zaxis)._PLANES
     ax.zaxis._PLANES = (d[2], d[3], d[0], d[1], d[4], d[5])
     ax.zaxis.set_rotate_label(False)

@@ -198,7 +198,7 @@ impl Frame {
         }
     }
 
-    /// The same product around `D(rho(m))` instead of `D(m)`.
+    /// The same product around `D(rho(m))`.
     /// `D(rho(m)) = i S P D(m) Pᵀ` with `P = (0 2)(1 3)` and
     /// `S = diag(1, 1, -1, -1)`, so `D(m) = i (S P) D(rho(m)) P`; both frame
     /// changes are in SO(4).

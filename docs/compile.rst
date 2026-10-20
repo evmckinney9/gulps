@@ -240,8 +240,8 @@ Local equivalence
 Two gates are *locally equivalent* when single-qubit gates before and
 after one of them give the other, up to global phase. For example, Hadamard
 gates on the target qubit before and after CZ give CX. GULPS searches over
-these equivalence classes, not over matrices, because the local layers of a
-sentence can absorb any difference within a class.
+these equivalence classes, because the local layers of a sentence can absorb
+any difference within a class.
 
 .. jupyter-execute::
 

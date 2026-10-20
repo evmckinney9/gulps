@@ -30,7 +30,7 @@ def rounded_vertices(array):
 def oracle():
     """The monodromy oracle; required in CI, optional elsewhere."""
     if os.environ.get("CI"):
-        import monodromy  # noqa: F401  a missing oracle in CI is a failure, not a skip
+        import monodromy  # noqa: F401  in CI a missing oracle fails
     pytest.importorskip("monodromy")
     from .fixtures import monodromy_oracle
 

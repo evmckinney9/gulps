@@ -62,8 +62,8 @@ real orthogonal matrices. Fix :math:`\det U=1`
        =O_L D O_R O_R^T D O_L^T
        =O_L D^2 O_L^T.
 
-The superscript :math:`T` is a plain transpose, not a conjugate
-transpose, so :math:`O_R O_R^T=I` removes the right local factor. The
+The superscript :math:`T` is the transpose without complex
+conjugation, so :math:`O_R O_R^T=I` removes the right local factor. The
 left factor only conjugates :math:`D^2` and leaves its eigenvalues
 unchanged. The spectrum of :math:`M(U)` therefore depends only on the class of the representative.
 
@@ -688,8 +688,8 @@ rules from Peterson, Crooks, and Smith's Figure 14.
 
 .. details:: Math detail: partition labels in Theorem 23
 
-   Theorem 23 writes these rules with *partitions* rather than
-   phase-subset labels. For a sum of :math:`r` phases, put :math:`k=4-r`.
+   Theorem 23 labels these rules with *partitions*. For a sum of :math:`r`
+   phases, put :math:`k=4-r`.
    A partition :math:`\lambda=(\lambda_1,\ldots,\lambda_r)`, with
    :math:`k\ge\lambda_1\ge\cdots\ge\lambda_r\ge0`, selects
 
@@ -735,7 +735,7 @@ rules from Peterson, Crooks, and Smith's Figure 14.
 Longer sentences: the max-plus recurrence
 -----------------------------------------
 
-A two-gate sentence reaches a region, not a single spectrum, so
+A two-gate sentence reaches a region of spectra, so
 appending a third gate means combining a whole region with the new gate.
 One natural shortcut is to apply the two-gate rules with each phase sum
 of the prefix replaced by its lower bound :math:`\beta_I`. That shortcut
