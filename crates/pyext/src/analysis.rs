@@ -60,23 +60,55 @@ fn weyl_from_monodromy<'py>(
     Ok(array.into_pyarray(py))
 }
 
+/// A sentence's cost, gates, and region bounds.
+type Sentence<'py> = (f64, Bound<'py, PyTuple>, [f64; 14]);
+
 /// The search's `row`-th candidate sentence: its cost, gates, and region bounds.
 #[pyfunction]
 fn coverage_candidate<'py>(
     py: Python<'py>,
     decomposer: &GulpsDecomposer,
     row: usize,
-) -> PyResult<(f64, Bound<'py, PyTuple>, [f64; 14])> {
+) -> PyResult<Sentence<'py>> {
     // Release the GIL: reaching a late row can grow the search for a long time.
     let walk = decomposer.edge.binding.decomposer();
     let (slots, cost, region) = py
         .detach(|| walk.coverage_candidate(row))
         .map_err(|err| compile_error(py, err, None))?;
+    Ok((cost, gate_tuple(py, decomposer, &slots)?, region.0))
+}
+
+/// The candidates the search discards as dominated before its `row`-th
+/// candidate: each one's cost, gates, and region bounds.
+#[pyfunction]
+fn dominated_candidates<'py>(
+    py: Python<'py>,
+    decomposer: &GulpsDecomposer,
+    row: usize,
+) -> PyResult<Vec<Sentence<'py>>> {
+    let walk = decomposer.edge.binding.decomposer();
+    let dominated = py
+        .detach(|| walk.dominated(row))
+        .map_err(|err| compile_error(py, err, None))?;
+    dominated
+        .into_iter()
+        .map(|(slots, cost, region)| Ok((cost, gate_tuple(py, decomposer, &slots)?, region.0)))
+        .collect()
+}
+
+/// The decomposer's gates in these slots.
+fn gate_tuple<'py>(
+    py: Python<'py>,
+    decomposer: &GulpsDecomposer,
+    slots: &[usize],
+) -> PyResult<Bound<'py, PyTuple>> {
     let gates = decomposer.gates.bind(py);
-    let gates = slots
-        .iter()
-        .map(|&slot| gates.get_borrowed_item(slot).expect("each slot has a gate"));
-    Ok((cost, PyTuple::new(py, gates)?, region.0))
+    PyTuple::new(
+        py,
+        slots
+            .iter()
+            .map(|&slot| gates.get_borrowed_item(slot).expect("each slot has a gate")),
+    )
 }
 
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -86,5 +118,6 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(sentence_bounds, m)?)?;
     m.add_function(wrap_pyfunction!(region_contains, m)?)?;
     m.add_function(wrap_pyfunction!(weyl_from_monodromy, m)?)?;
-    m.add_function(wrap_pyfunction!(coverage_candidate, m)?)
+    m.add_function(wrap_pyfunction!(coverage_candidate, m)?)?;
+    m.add_function(wrap_pyfunction!(dominated_candidates, m)?)
 }

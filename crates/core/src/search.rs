@@ -163,16 +163,21 @@ impl Walk {
         self.state.lock().expect("a walk query panicked")
     }
 
-    /// Emit the next cost-ordered sentence as a DP node. False when exhausted.
-    fn grow_one(&self, state: &mut WalkState) -> bool {
-        while let Some(Reverse(Candidate {
-            key: _,
-            cost,
-            depth,
-            gate_rank,
-            parent,
-        })) = state.heap.pop()
-        {
+    /// Emit the next cost-ordered sentence as a DP node, passing each candidate
+    /// discarded as dominated to `on_dominated`. False when exhausted.
+    fn grow_one(
+        &self,
+        state: &mut WalkState,
+        mut on_dominated: impl FnMut(&Candidate, &Region),
+    ) -> bool {
+        while let Some(Reverse(candidate)) = state.heap.pop() {
+            let Candidate {
+                cost,
+                depth,
+                gate_rank,
+                parent,
+                ..
+            } = candidate;
             let (class, _) = self.slots[self.gates[gate_rank]];
             let native = project(&class.0);
             // Rows store tightened states, so the dominance test below is
@@ -198,6 +203,7 @@ impl Walk {
                     row.gate_rank <= gate_rank && row.region.contains_by_bounds(&region)
                 });
             if dominated {
+                on_dominated(&candidate, &region);
                 continue;
             }
 
@@ -235,12 +241,40 @@ impl Walk {
     pub fn coverage_candidate(&self, row: usize) -> Option<(Vec<usize>, f64, Region)> {
         let mut state = self.lock();
         while row >= state.rows.len() {
-            if !self.grow_one(&mut state) {
+            if !self.grow_one(&mut state, |_, _| {}) {
                 return None;
             }
         }
         let emitted = &state.rows[row];
         Some((self.sentence(&state, row), emitted.cost, emitted.region))
+    }
+
+    /// The candidates the walk discards as dominated before it emits row `row`:
+    /// sentence, cost, and region. Replays a fresh walk, so queries on this one
+    /// do not change the result. `None` if the walk ends first.
+    pub fn dominated(&self, row: usize) -> Option<Vec<(Vec<usize>, f64, Region)>> {
+        let replay = Self::new(self.slots.clone(), self.local_layer_cost, self.max_depth);
+        let mut state = replay.lock();
+        let mut found = Vec::new();
+        while row >= state.rows.len() {
+            let grew = replay.grow_one(&mut state, |candidate, region| {
+                found.push((
+                    candidate.parent,
+                    candidate.gate_rank,
+                    candidate.cost,
+                    *region,
+                ));
+            });
+            if !grew {
+                return None;
+            }
+        }
+        let found = found.into_iter().map(|(parent, gate_rank, cost, region)| {
+            let mut sentence = parent.map_or_else(Vec::new, |p| replay.sentence(&state, p));
+            sentence.push(replay.gates[gate_rank]);
+            (sentence, cost, region)
+        });
+        Some(found.collect())
     }
 
     /// Slot indices of the sentence at `row`, reconstructed from its DP parents.
@@ -289,7 +323,7 @@ impl Walk {
                 }
                 row += 1;
             }
-            if !self.grow_one(&mut state) {
+            if !self.grow_one(&mut state, |_, _| {}) {
                 return None;
             }
         }
@@ -355,7 +389,7 @@ mod tests {
                     assert_eq!(selection.map(|s| s.cost), expected, "target {target:?}");
                 }
                 let mut state = walk.lock();
-                while walk.grow_one(&mut state) {}
+                while walk.grow_one(&mut state, |_, _| {}) {}
                 // Three gate types have 34 nonempty multisets through depth 4.
                 saw_pruning |= state.rows.len() < 34;
             }
