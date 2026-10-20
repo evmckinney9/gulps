@@ -184,7 +184,8 @@ fn diagonalize(m: &Mat4) -> Option<(Matrix4<f64>, [C64; 4])> {
         let mixed = m.map(|z| a * z.re + b * z.im);
         let p = SymmetricEigen::new(mixed).eigenvectors;
         let d = p.transpose().cast::<C64>() * m * p.cast::<C64>();
-        let diagonal = (0..4).all(|r| (0..4).all(|c| r == c || d[(r, c)].norm() < RECONSTRUCT_TOL));
+        let tol = RECONSTRUCT_TOL * RECONSTRUCT_TOL;
+        let diagonal = (0..4).all(|r| (0..4).all(|c| r == c || d[(r, c)].norm_sqr() < tol));
         diagonal.then(|| (p, std::array::from_fn(|k| d[(k, k)])))
     })
 }
@@ -245,7 +246,11 @@ fn reconstructed(error: f64) -> Result<(), CompileError> {
 }
 
 fn max_error(matrix: &Mat4) -> f64 {
-    matrix.iter().map(|v| v.norm()).fold(0.0, f64::max)
+    matrix
+        .iter()
+        .map(|v| v.norm_sqr())
+        .fold(0.0, f64::max)
+        .sqrt()
 }
 
 fn matrix_view(matrix: &Mat4) -> ArrayView2<'_, C64> {
