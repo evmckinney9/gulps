@@ -41,7 +41,7 @@ fn region_contains<'py>(
     let region = Region(bounds);
     let points = points.as_array();
     let inside = triples(&points)?
-        .map(|[c1, c2, c3]| covers(&region, &project(&class::monodromy_from_weyl(c1, c2, c3))))
+        .map(|weyl| covers(&region, &project(&class::monodromy_from_weyl(&weyl))))
         .collect::<Vec<_>>();
     Ok(inside.into_pyarray(py))
 }

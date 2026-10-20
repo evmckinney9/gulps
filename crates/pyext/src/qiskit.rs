@@ -201,7 +201,7 @@ unsafe fn read<'a>(
     let mut jobs = IndexMap::<(usize, bool, [u64; 32]), Job<'a>>::default();
     for node in order {
         // SAFETY: `node` came from `qk_dag_topological_op_nodes` of this DAG.
-        let (kind, pair) = unsafe { (qk::qk_dag_op_node_kind(dag, node), operand_pair(dag, node)) };
+        let kind = unsafe { qk::qk_dag_op_node_kind(dag, node) };
         match kind {
             // The C API reads control-flow blocks only from circuits, and cannot
             // replace them, so their bodies are out of reach from a DAG.
@@ -211,21 +211,23 @@ unsafe fn read<'a>(
                      https://github.com/evmckinney9/gulps/issues/23",
                 ));
             }
-            QkOperationKind::Unitary => {}
-            QkOperationKind::Gate
+            QkOperationKind::Unitary
+            | QkOperationKind::Gate
             | QkOperationKind::Unknown
-            | QkOperationKind::PauliProductRotation
-                if pair.is_some() =>
-            {
-                return Err(PyNotImplementedError::new_err(format!(
-                    "DAG node {node} is a two-qubit gate without a matrix: GULPS compiles the \
-                     unitaries ConsolidateBlocks makes (the pass requires it), and a gate with \
-                     unbound parameters has none; see https://github.com/evmckinney9/gulps/issues/2"
-                )));
-            }
+            | QkOperationKind::PauliProductRotation => {}
             _ => continue,
         }
-        let Some(pair) = pair else { continue };
+        // SAFETY: as above.
+        let Some(pair) = (unsafe { operand_pair(dag, node) }) else {
+            continue;
+        };
+        if kind != QkOperationKind::Unitary {
+            return Err(PyNotImplementedError::new_err(format!(
+                "DAG node {node} is a two-qubit gate without a matrix: GULPS compiles the \
+                 unitaries ConsolidateBlocks makes (the pass requires it), and a gate with \
+                 unbound parameters has none; see https://github.com/evmckinney9/gulps/issues/2"
+            )));
+        }
         let (edge, flip) = edge(pair)?;
         let mut entries = [C64::new(0.0, 0.0); 16];
         // SAFETY: a two-qubit unitary node of this DAG; the buffer has 16 entries.
