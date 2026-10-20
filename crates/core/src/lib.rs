@@ -31,7 +31,7 @@ mod kak;
 mod reachability;
 mod search;
 
-pub use compile::{Binding, CompileError, CompiledTarget, Decomposer, Gate, Op, compile_all};
+pub use compile::{Binding, CompileError, CompiledTarget, Decomposer, Gate, Op};
 pub use kak::{Unitary, canonical_matrix};
 pub use reachability::{FORMS, Region, covers, project, sentence_region};
 

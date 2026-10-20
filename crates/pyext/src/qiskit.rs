@@ -2,8 +2,6 @@
 //! written, reading two-qubit unitaries from a DAG, and writing and
 //! substituting their replacements. DAG node ids never leave this module.
 
-use std::convert::Infallible;
-
 use indexmap::map::Entry;
 use pyo3::exceptions::{PyNotImplementedError, PyRuntimeError, PyTypeError};
 use pyo3::prelude::*;
@@ -102,10 +100,10 @@ fn two_qubit_gate(kind: i32, num_params: usize) -> Option<QkGate> {
 
 /// One distinct compilation job: an edge and a matrix, and every node, on any
 /// qubits, that it replaces.
-pub struct Job<'a> {
-    pub edge: &'a Edge,
+struct Job<'a> {
+    edge: &'a Edge,
     /// The nodes' matrix, in the edge's qubit order.
-    pub unitary: Unitary,
+    unitary: Unitary,
     /// Whether the nodes' operands are in the opposite order to the edge's.
     flip: bool,
     nodes: Vec<u32>,
@@ -114,31 +112,34 @@ pub struct Job<'a> {
 /// Replace every two-qubit unitary node of `dag` in place. `edge` gives each
 /// operand pair's edge, and whether the edge's qubit order is the opposite;
 /// nodes with the same edge, order, and a bit-identical matrix form one job.
-/// `compile` returns one target per job, and every replacement is built
-/// before the DAG changes.
+/// Every replacement is built before the DAG changes.
+///
+/// # Safety
 ///
 /// Compilation runs detached from Python, holding a raw handle and node ids
-/// of `dag`. As for Qiskit's own passes, the caller must not let another
-/// thread use `dag` until the call returns; the handle cannot enforce it.
-pub fn replace<'a>(
+/// of `dag`. As for Qiskit's own passes, no other thread may use `dag` until
+/// the call returns.
+pub unsafe fn replace<'a>(
     dag: &Bound<'_, PyAny>,
     edge: impl Fn((u32, u32)) -> PyResult<(&'a Edge, bool)>,
-    compile: impl FnOnce(&[Job<'a>]) -> PyResult<Vec<CompiledTarget>>,
 ) -> PyResult<()> {
+    let py = dag.py();
     let raw = borrow(dag)?;
     // SAFETY: `raw` is borrowed from `dag`, which the caller holds and, per
     // this function's contract, no other thread uses during the call.
     let jobs = unsafe { read(raw, edge) }?;
-    let compiled = compile(&jobs)?;
-    let pairs: Vec<_> = jobs.iter().zip(&compiled).collect();
     // `build` calls the C API only on the replacement it creates. At the pinned
     // revision those calls attach to Python only for control-flow and `store`
     // instructions, which are never written, so they can run detached.
-    let Ok(replacements) = dag.py().detach(|| {
-        gulps_core::map_batch(&pairs, 1_000, |&(job, target)| {
-            Ok::<_, Infallible>(Replacement::build(&job.edge.natives, target, job.flip))
+    // About 4 to 13 µs per job: compiling, then building.
+    let replacements = py
+        .detach(|| {
+            gulps_core::map_batch(&jobs, 6_000, |job| {
+                let target = job.edge.binding.compile(&job.unitary)?;
+                Ok(Replacement::build(&job.edge.natives, &target, job.flip))
+            })
         })
-    });
+        .map_err(|(i, err)| compile_error(py, err, jobs[i].unitary.class().ok()))?;
     for (replacement, job) in replacements.iter().zip(&jobs) {
         // SAFETY: as for `read`; `job.nodes` came from `read` of this DAG.
         unsafe { replacement.substitute(raw, &job.nodes) };
