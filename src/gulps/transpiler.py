@@ -98,13 +98,15 @@ class GulpsDecompositionPass(TransformationPass):
         self._synthesizer = self._build()
 
     def run(self, dag: DAGCircuit) -> DAGCircuit:
-        """Compile every two-qubit block in place.
+        """Compile every two-qubit unitary in place.
+
+        Two-qubit gates without a matrix, such as gates with unbound
+        parameters, are left unchanged.
 
         Raises:
             TranspilerError: If a block is invalid for the configured gates or
                 cannot be compiled. Its ``__cause__`` is the original error.
-            NotImplementedError: If the DAG has control flow or two-qubit
-                gates without a matrix.
+            NotImplementedError: If the DAG has control flow.
         """
         try:
             return self._synthesizer.run(dag)
@@ -117,6 +119,10 @@ class GulpsTranslationPlugin(PassManagerStagePlugin):
 
     The plugin runs GULPS synthesis for the backend's Target, then Qiskit's
     single-qubit optimization and basis translation.
+
+    GULPS synthesizes only two-qubit gates with a matrix. Gates with unbound
+    parameters reach Qiskit's passes unchanged, which translate them without
+    minimizing the Target's cost.
     """
 
     def pass_manager(
