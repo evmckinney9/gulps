@@ -1,7 +1,7 @@
 //! The KAK decomposition in the magic basis: a class, and the local rotations
 //! around its canonical gate.
 
-use crate::class::{Mono, fold_weyl, monodromy_from_weyl, weyl_from_monodromy};
+use crate::class::{Mono, monodromy, weyl_from_monodromy};
 use crate::compile::CompileError;
 use crate::{C64, Mat2, Mat4, RECONSTRUCT_TOL};
 use nalgebra::{Matrix4, SymmetricEigen, Vector4};
@@ -122,8 +122,7 @@ fn kak_unchecked(matrix: &Mat4) -> Result<(Mono, Frame, f64), CompileError> {
         before: p.transpose(),
         phase,
     };
-    let ([c1, c2, c3], reflected) = fold_weyl(weyl_from_monodromy(&m));
-    let class = Mono(monodromy_from_weyl(c1, c2, c3));
+    let (class, reflected) = Mono::folded(&m);
     let frame = if reflected { frame.reflected() } else { frame };
     Ok((class, frame, error))
 }
@@ -153,30 +152,6 @@ fn diagonalize(m: &Mat4) -> Option<(Matrix4<f64>, [C64; 4])> {
         let diagonal = (0..4).all(|r| (0..4).all(|c| r == c || d[(r, c)].norm() < RECONSTRUCT_TOL));
         diagonal.then(|| (p, std::array::from_fn(|k| d[(k, k)])))
     })
-}
-
-/// The monodromy coordinates of eigenphases (in turns) of a determinant-one
-/// matrix, and the eigen indices of `y`, `x`, `w`, `z`, the magic-basis order.
-/// Each phase is lifted by a whole turn so the lifts sum to zero and span at
-/// most one turn; sorted, they are `x >= y >= z >= w = -x - y - z`.
-fn monodromy(turns: &[f64; 4]) -> ([f64; 3], [usize; 4]) {
-    let mut lifted: [(f64, usize); 4] = std::array::from_fn(|k| (turns[k], k));
-    let sort = |l: &mut [(f64, usize); 4]| l.sort_by(|a, b| b.0.total_cmp(&a.0));
-    sort(&mut lifted);
-    // The phases multiply to one, so their sum is a whole number of turns.
-    let mut excess = lifted.iter().map(|&(t, _)| t).sum::<f64>().round();
-    while excess > 0.0 {
-        lifted[0].0 -= 1.0;
-        excess -= 1.0;
-        sort(&mut lifted);
-    }
-    while excess < 0.0 {
-        lifted[3].0 += 1.0;
-        excess += 1.0;
-        sort(&mut lifted);
-    }
-    let [(x, xi), (y, yi), (z, zi), (_, wi)] = lifted;
-    ([x, y, z], [yi, xi, wi, zi])
 }
 
 impl Frame {
@@ -342,6 +317,7 @@ pub fn factor_rotation(o: &Matrix4<f64>) -> Result<LocalPair, CompileError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::class::monodromy_from_weyl;
 
     #[test]
     fn rotation_factors_reconstruct_and_reject_reflections() {
