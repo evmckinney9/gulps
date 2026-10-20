@@ -83,6 +83,3 @@ pub fn map_batch<T: Sync, U: Send, E: Send>(
         items.iter().enumerate().map(indexed).collect()
     }
 }
-
-#[cfg(test)]
-pub(crate) const C0: C64 = C64::new(0.0, 0.0);

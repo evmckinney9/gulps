@@ -8,7 +8,7 @@ use pyo3::prelude::*;
 use pyo3::types::{PyList, PyTuple};
 
 use gulps_core::class::Mono;
-use gulps_core::{CompileError, Gate, Unitary};
+use gulps_core::{CompileError, Gate, Unitary, canonical_matrix};
 
 use crate::invariants::LocalEquivalenceClass;
 use crate::mat4_to_numpy;
@@ -102,7 +102,7 @@ impl GulpsDecomposer {
         let mut natives = Vec::with_capacity(gates.len());
         for gate in &gates {
             if let Ok(class) = gate.cast::<LocalEquivalenceClass>() {
-                let matrix = class.get().mat4();
+                let matrix = canonical_matrix(class.get().mono);
                 objects.push(unitary_gate.call1((mat4_to_numpy(py, &matrix),))?);
                 let core = Gate::new(&Unitary::Canonical(class.get().mono))
                     .map_err(|err| compile_error(py, err, None))?;

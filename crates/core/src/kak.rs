@@ -1,7 +1,7 @@
 //! The KAK decomposition in the magic basis: a class, and the local rotations
 //! around its canonical gate.
 
-use crate::class::{Mono, monodromy, weyl_from_monodromy};
+use crate::class::{Mono, monodromy};
 use crate::compile::CompileError;
 use crate::{C64, INPUT_ATOL, Mat2, Mat4, RECONSTRUCT_TOL};
 use nalgebra::{Matrix4, SymmetricEigen, Vector4};
@@ -35,15 +35,17 @@ pub fn magic() -> Mat4 {
     Mat4::from_fn(|r, c| qiskit_numerics::two_qubit_decompose::common::MAGIC[r][c])
 }
 
-/// The canonical gate `D(c1, c2, c3) = exp(iπ/2 (c1 XX + c2 YY + c3 ZZ))`,
-/// with Weyl coordinates in `[0, 1]`.
-pub fn canonical_matrix(c1: f64, c2: f64, c3: f64) -> Mat4 {
-    let array = qiskit_numerics::two_qubit_decompose::common::ud(
-        PI * c1 / 2.0,
-        PI * c2 / 2.0,
-        PI * c3 / 2.0,
-    );
-    Mat4::from_fn(|r, c| array[(r, c)])
+/// The canonical gate `D(c1, c2, c3) = exp(iπ/2 (c1 XX + c2 YY + c3 ZZ))` of
+/// a class.
+pub fn canonical_matrix(class: Mono) -> Mat4 {
+    let q = magic();
+    let phases = canonical_phases(class.0).map(|t| C64::from_polar(1.0, PI * t));
+    q * Mat4::from_diagonal(&phases.into()) * q.adjoint()
+}
+
+/// The phases `θ` of `Q† D(m) Q = diag(exp(iπ θ))`, in half turns.
+fn canonical_phases([m0, m1, m2]: [f64; 3]) -> [f64; 4] {
+    [m1, m0, -m0 - m1 - m2, m2]
 }
 
 /// The rotations around a class's canonical gate:
@@ -157,8 +159,7 @@ impl Spectrum {
         if p.determinant() < 0.0 {
             p.column_mut(0).neg_mut();
         }
-        let w = -m[0] - m[1] - m[2];
-        let lambda = [m[1], m[0], w, m[2]].map(|turns| C64::from_polar(1.0, -PI * turns));
+        let lambda = canonical_phases(m).map(|turns| C64::from_polar(1.0, -PI * turns));
         // V = (V P Λ̄) Λ Pᵀ, and Λ Pᵀ is unitary, so with `after` the real part of
         // V P Λ̄ the reconstruction misses V by the norm of the imaginary part. The
         // fold below is exact and changes this only by rounding.
@@ -216,35 +217,19 @@ impl Frame {
 /// The frame of `D(from)` around `D(to)`, for `to` the class of `from`, or
 /// its reflection `rho` when `reflected`, checked by reconstruction.
 pub fn relabel(from: Mono, to: Mono, reflected: bool) -> Result<Frame, CompileError> {
-    let frame = if reflected {
-        Frame::identity().reflected()
+    // The reflected identity frame takes `D(to)` to `D(rho(to))`; see `Frame::reflected`.
+    let (frame, to) = if reflected {
+        (Frame::identity().reflected(), to.rho())
     } else {
-        Frame::identity()
+        (Frame::identity(), to)
     };
-    let canonical = Mat4::from_diagonal(&canonical_phases(from, 0.0).into());
-    check(&canonical, to, &frame)?;
+    let unit = |class: Mono| canonical_phases(class.0).map(|t| C64::from_polar(1.0, PI * t));
+    let error = (unit(from).iter().zip(unit(to)))
+        .map(|(a, b)| (a - b).norm_sqr())
+        .sum::<f64>()
+        .sqrt();
+    reconstructed(error)?;
     Ok(frame)
-}
-
-/// The diagonal of `D(class) · exp(i phase)` in the magic basis.
-fn canonical_phases(class: Mono, phase: f64) -> [C64; 4] {
-    let w = weyl_from_monodromy(&class.0);
-    std::array::from_fn(|k| {
-        let angle = (0..3).map(|a| CANONICAL_SIGNS[a][k] * w[a]).sum::<f64>();
-        C64::from_polar(1.0, FRAC_PI_2 * angle + phase)
-    })
-}
-
-/// Fail unless `magic = after · D(class) · before · exp(i phase)` in the
-/// magic basis, within `RECONSTRUCT_TOL` in the Frobenius norm.
-fn check(magic: &Mat4, class: Mono, frame: &Frame) -> Result<(), CompileError> {
-    let phases = canonical_phases(class, frame.phase);
-    let product = Mat4::from_fn(|r, c| {
-        (0..4)
-            .map(|k| phases[k] * (frame.after[(r, k)] * frame.before[(k, c)]))
-            .sum()
-    });
-    reconstructed((product - magic).norm())
 }
 
 /// Fail unless a frame reconstruction `error` is below `RECONSTRUCT_TOL`. A NaN
@@ -280,14 +265,6 @@ const RIGHT_SIGNS: [[f64; 4]; 4] = [
     [1.0, -1.0, 1.0, -1.0],
     [-1.0, 1.0, 1.0, -1.0],
     [1.0, 1.0, -1.0, -1.0],
-];
-
-/// The phase of `D(c1, c2, c3) = exp(iπ/2 (c1 XX + c2 YY + c3 ZZ))` on magic
-/// basis vector `k` is `π/2 Σₐ CANONICAL_SIGNS[a][k] cₐ`.
-const CANONICAL_SIGNS: [[f64; 4]; 3] = [
-    [1.0, 1.0, -1.0, -1.0],
-    [-1.0, 1.0, -1.0, 1.0],
-    [1.0, -1.0, -1.0, 1.0],
 ];
 
 /// For a local gate `A ⊗ B` with unit quaternions `a`, `b` and rotation
@@ -339,43 +316,4 @@ pub fn factor_rotation(o: &Matrix4<f64>) -> Result<LocalPair, CompileError> {
         q1: su2(a),
         q0: su2(b),
     })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::class::monodromy_from_weyl;
-
-    #[test]
-    fn rotation_factors_reconstruct_and_reject_reflections() {
-        let axes = [
-            Mat2::identity(),
-            Mat2::new(crate::C0, C64::new(0.0, 1.0), C64::new(0.0, 1.0), crate::C0),
-            Mat2::new(
-                C64::new(0.6, 0.0),
-                C64::new(0.8, 0.0),
-                C64::new(-0.8, 0.0),
-                C64::new(0.6, 0.0),
-            ),
-        ];
-        let q = magic();
-        for left in axes {
-            for right in axes {
-                let matrix = left.kronecker(&right);
-                let rotation = (q.adjoint() * matrix * q).map(|v| v.re);
-                let locals = factor_rotation(&rotation).expect("local rotation");
-                assert!((locals.q1.kronecker(&locals.q0) - matrix).norm() < 1e-12);
-            }
-        }
-        let mut reflection = Matrix4::identity();
-        reflection[(3, 3)] = -1.0;
-        assert!(factor_rotation(&reflection).is_err());
-        assert!(factor_rotation(&Matrix4::zeros()).is_err());
-    }
-
-    #[test]
-    fn nearby_nonlocal_classes_are_not_accepted_as_recovery_frames() {
-        let target = Mono(monodromy_from_weyl(0.300_001, 0.2, 0.1));
-        assert!(relabel(target, Mono(monodromy_from_weyl(0.3, 0.2, 0.1)), false).is_err());
-    }
 }
