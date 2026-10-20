@@ -17,7 +17,6 @@
 from __future__ import annotations
 
 import math
-import sys
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
@@ -30,6 +29,7 @@ from mpl_toolkits.mplot3d.axes3d import Axes3D
 from qiskit import QuantumCircuit
 from qiskit.quantum_info import Operator
 
+from gulps._accelerate import dominated_candidates
 from gulps.analysis.region import ReachableRegion
 from gulps.analysis.viz.weyl_chamber import draw_chamber
 
@@ -137,53 +137,6 @@ def plot_coverage_set(
     return fig
 
 
-def _pruned_children(
-    report: CoverageReport, sentences: list[tuple[int, ...]]
-) -> list[tuple[float, tuple[int, ...]]]:
-    """The candidates the search discarded before its last row in ``report``.
-
-    This is the only rule shared with the Rust search: its candidate order. A
-    row shorter than ``max_depth`` queues one child per gate at or after its
-    own last gate in gate order (cost, then slot), and the search takes candidates in order of
-    cost plus a tie per gate, number of gates, parent row, and gate rank. The tie,
-    ``max_depth**2 * EPSILON * (largest cost + local_layer_cost)``, matches ``Walk::tie``. Each gate multiset becomes a row at
-    most once. A child that is not a row and orders before the last row was
-    taken and pruned; one that orders after it was still queued.
-
-    Args:
-        report: A coverage report.
-        sentences: The gate slots of each row in ``report.rows``.
-
-    Returns:
-        The cost and gate slots of each pruned child.
-    """
-    decomposer = report.decomposer
-    costs, local = decomposer.costs, decomposer.local_layer_cost
-    tie = decomposer.max_depth**2 * sys.float_info.epsilon * (max(costs) + local)
-    order = sorted(range(len(costs)), key=lambda s: (costs[s], s))
-    rank = {s: r for r, s in enumerate(order)}
-    index = {sentence: i for i, sentence in enumerate(sentences)}
-
-    def key(cost: float, sentence: tuple[int, ...], parent: int | None) -> tuple:
-        return (
-            cost + len(sentence) * tie,
-            len(sentence),
-            -1 if parent is None else parent,
-            rank[sentence[-1]],
-        )
-
-    last = key(report.rows[-1].cost, sentences[-1], index.get(sentences[-1][:-1]))
-    pruned = []
-    for i, (row, sentence) in enumerate(zip(report.rows, sentences, strict=True)):
-        if len(sentence) >= decomposer.max_depth:
-            continue
-        for s in order[rank[sentence[-1]] :]:
-            child, cost = (*sentence, s), row.cost + (costs[s] + local)
-            if child not in index and key(cost, child, i) < last:
-                pruned.append((cost, child))
-    return pruned
-
-
 def plot_search_tree(
     report: CoverageReport, names: Sequence[str] | None = None
 ) -> matplotlib.figure.Figure:
@@ -202,14 +155,11 @@ def plot_search_tree(
     Returns:
         The figure.
     """
-    from gulps.invariants import LocalEquivalenceClass
-
     gates = report.decomposer.gates
     if names is None:
         names = [_short(g.name) for g in gates]
     slot = {id(g): i for i, g in enumerate(gates)}
     sentences = [tuple(slot[id(g)] for g in row.gates) for row in report.rows]
-    classes = LocalEquivalenceClass.from_unitaries(list(gates))
     nodes = [
         (
             row.cost,
@@ -220,8 +170,15 @@ def plot_search_tree(
         for row, sentence in zip(report.rows, sentences, strict=True)
     ]
     nodes += [
-        (cost, child, ReachableRegion.of([classes[s] for s in child]), _PRUNED)
-        for cost, child in _pruned_children(report, sentences)
+        (
+            cost,
+            tuple(slot[id(g)] for g in pruned),
+            ReachableRegion(tuple(bounds)),
+            _PRUNED,
+        )
+        for cost, pruned, bounds in dominated_candidates(
+            report.decomposer, len(report.rows) - 1
+        )
     ]
     columns: dict[int, list] = {}
     for node in sorted(nodes, key=lambda n: (n[0], n[1])):

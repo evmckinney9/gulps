@@ -127,6 +127,12 @@ impl Decomposer {
         (self.walk.coverage_candidate(row)).ok_or(CompileError::DepthLimit(self.max_depth()))
     }
 
+    /// The candidates the search discards as dominated before row `row`:
+    /// slots, cost, and reach region.
+    pub fn dominated(&self, row: usize) -> Result<Vec<(Vec<usize>, f64, Region)>, CompileError> {
+        (self.walk.dominated(row)).ok_or(CompileError::DepthLimit(self.max_depth()))
+    }
+
     /// Realize a class in canonical gates, whose frames are the identity.
     fn realize(&self, raw_endpoint: Mono) -> Result<Canonical, CompileError> {
         let Selection {
