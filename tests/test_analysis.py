@@ -54,11 +54,13 @@ def test_region_vertices_match_the_monodromy_oracle(oracle):
 
 
 @pytest.mark.parametrize("label", list(ORACLE_ISAS))
-def test_haar_expected_cost_matches_the_monodromy_oracle(oracle, label):
+def test_haar_cost_statistics_match_the_monodromy_oracle(oracle, label):
     isa = GulpsDecomposer(*ORACLE_ISAS[label])
     report = coverage_report(isa)
+    mean, std = oracle.cost_statistics(isa)
     assert report.total_coverage == pytest.approx(1.0, abs=1e-7)
-    assert report.expected_cost == pytest.approx(oracle.expected_cost(isa), abs=1e-7)
+    assert report.expected_cost == pytest.approx(mean, abs=1e-7)
+    assert report.cost_std == pytest.approx(std, abs=1e-6)
 
 
 def test_cx_cost_distribution_requires_three_gates_almost_surely():
