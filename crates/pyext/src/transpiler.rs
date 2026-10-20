@@ -11,7 +11,6 @@ use qiskit_numerics::IndexMap;
 use gulps_core::{Binding, Decomposer, Gate, compile_all};
 
 use crate::decomposer::{GulpsDecomposer, compile_error};
-use crate::invariants::LocalEquivalenceClass;
 use crate::qiskit::{self, NativeGate};
 
 /// The gates offered on one edge: their binding to a decomposer, and how each
@@ -232,11 +231,10 @@ impl BlockSynthesizer {
             |jobs| {
                 let batch: Vec<_> = jobs
                     .iter()
-                    .map(|job| (&job.edge.binding, &job.matrix))
+                    .map(|job| (&job.edge.binding, &job.unitary))
                     .collect();
-                py.detach(|| compile_all(&batch)).map_err(|(i, err)| {
-                    compile_error(py, err, LocalEquivalenceClass::of(&jobs[i].matrix))
-                })
+                py.detach(|| compile_all(&batch))
+                    .map_err(|(i, err)| compile_error(py, err, jobs[i].unitary.class().ok()))
             },
         )?;
         Ok(dag.clone().unbind())

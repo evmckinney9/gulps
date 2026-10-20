@@ -2,10 +2,10 @@
 //! decomposer's slots, and compile targets in the bound gates.
 
 use crate::class::{Mono, exact_bits};
-use crate::kak::{Frame, LocalPair, factor_rotation, kak, relabel};
+use crate::kak::{Frame, LocalPair, Unitary, factor_rotation, relabel};
 use crate::reachability::Region;
 use crate::search::{Selection, Walk};
-use crate::{LOCAL_IDENTITY_TOL, Mat2, Mat4};
+use crate::{INPUT_ATOL, LOCAL_IDENTITY_TOL, Mat2};
 use qiskit_numerics::IndexMap;
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -18,6 +18,9 @@ pub enum CompileError {
     /// diagonalize or reconstruct, no trajectory was found, the solver
     /// declined a segment, or a rotation did not split into local gates.
     Synthesis(String),
+    /// An input matrix is not finite, or `U†U − I` has an entry above
+    /// `INPUT_ATOL`: the largest entry, or NaN.
+    NotUnitary(f64),
 }
 
 impl std::fmt::Display for CompileError {
@@ -28,6 +31,10 @@ impl std::fmt::Display for CompileError {
                 "no sentence found within max_depth={depth}; increase max_depth on the decomposer to search deeper"
             ),
             Self::Synthesis(message) => f.write_str(message),
+            Self::NotUnitary(deviation) => write!(
+                f,
+                "matrix is not unitary within atol={INPUT_ATOL:e}: the largest entry of U†U − I is {deviation:.1e}"
+            ),
         }
     }
 }
@@ -193,8 +200,8 @@ pub struct Gate {
 
 impl Gate {
     /// A gate's class, phase, and rotations; fails if the KAK or a factoring does.
-    pub fn new(matrix: &Mat4) -> Result<Self, CompileError> {
-        let (class, frame) = kak(matrix)?;
+    pub fn new(unitary: &Unitary) -> Result<Self, CompileError> {
+        let (class, frame) = unitary.kak()?;
         Ok(Self {
             class,
             phase: frame.phase,
@@ -383,10 +390,10 @@ fn locals(mut pair: LocalPair) -> impl Iterator<Item = Op> {
 /// Compile `(binding, target)` jobs; results keep job order,
 /// and an error carries the index of a failing job.
 pub fn compile_all(
-    jobs: &[(&Binding, &Mat4)],
+    jobs: &[(&Binding, &Unitary)],
 ) -> Result<Vec<CompiledTarget>, (usize, CompileError)> {
     crate::map_batch(jobs, |&(binding, target)| {
-        let (class, frame) = kak(target)?;
+        let (class, frame) = target.kak()?;
         binding
             .decomposer
             .compile_target(class, &binding.gates, frame)

@@ -8,10 +8,10 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
 use crate::decomposer::compile_error;
-use crate::{checked_mat4, mat4_to_numpy};
+use crate::{mat4_to_numpy, unitary};
 
 use gulps_core::class::{self, Mono};
-use gulps_core::{Mat4, canonical_matrix, monodromies};
+use gulps_core::{Mat4, Unitary, canonical_matrix, map_batch};
 
 /// The local-equivalence class of a two-qubit gate.
 ///
@@ -56,12 +56,6 @@ impl LocalEquivalenceClass {
         self.mono
             .0
             .map(|c| (c / gulps_core::CLASS_TOL).round_ties_even() as i64)
-    }
-
-    /// The class of a checked matrix, or `None` if its KAK fails.
-    pub fn of(matrix: &Mat4) -> Option<Self> {
-        let mono = monodromies(&[*matrix]).ok()?[0];
-        Some(Self { mono })
     }
 
     /// The canonical gate of this class.
@@ -124,25 +118,11 @@ impl LocalEquivalenceClass {
     ///     ``DecompositionError``: If the KAK of a matrix fails.
     #[staticmethod]
     pub fn from_unitaries(py: Python<'_>, matrices: Vec<Bound<'_, PyAny>>) -> PyResult<Vec<Self>> {
-        let coerced = (matrices.iter())
-            .filter(|ob| !ob.is_instance_of::<Self>())
-            .map(checked_mat4)
-            .collect::<PyResult<Vec<_>>>()?;
-        let mut monos = py
-            .detach(|| monodromies(&coerced))
-            .map_err(|(_, err)| compile_error(py, err, None))?
-            .into_iter();
-        Ok(matrices
-            .into_iter()
-            .map(|ob| {
-                if let Ok(existing) = ob.cast::<Self>() {
-                    return *existing.get();
-                }
-                Self {
-                    mono: monos.next().expect("one class per matrix"),
-                }
-            })
-            .collect())
+        let unitaries = matrices.iter().map(unitary).collect::<PyResult<Vec<_>>>()?;
+        let monos = py
+            .detach(|| map_batch(&unitaries, Unitary::class))
+            .map_err(|(_, err)| compile_error(py, err, None))?;
+        Ok(monos.into_iter().map(|mono| Self { mono }).collect())
     }
 
     /// np.ndarray: Weyl coordinates ``(c1, c2, c3)`` in units of pi.
@@ -167,5 +147,18 @@ impl LocalEquivalenceClass {
     fn __repr__(&self) -> String {
         let [a, b, c] = class::weyl_from_monodromy(&self.mono.0);
         format!("LocalEquivalenceClass(({a}, {b}, {c}))")
+    }
+
+    /// Pickle the exact monodromy coordinates: Weyl coordinates round.
+    fn __reduce__<'py>(slf: &Bound<'py, Self>) -> PyResult<(Bound<'py, PyAny>, ([f64; 3],))> {
+        Ok((
+            slf.get_type().getattr("_from_monodromy")?,
+            (slf.get().mono.0,),
+        ))
+    }
+
+    #[staticmethod]
+    fn _from_monodromy(m: [f64; 3]) -> Self {
+        Self { mono: Mono(m) }
     }
 }

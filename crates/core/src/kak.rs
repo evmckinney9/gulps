@@ -3,7 +3,7 @@
 
 use crate::class::{Mono, monodromy, weyl_from_monodromy};
 use crate::compile::CompileError;
-use crate::{C64, Mat2, Mat4, RECONSTRUCT_TOL};
+use crate::{C64, INPUT_ATOL, Mat2, Mat4, RECONSTRUCT_TOL};
 use nalgebra::{Matrix4, SymmetricEigen, Vector4};
 use ndarray::{ArrayView2, ShapeBuilder};
 use qiskit_numerics::linalg::{closest_unitary_faer, ndarray_to_faer};
@@ -73,72 +73,115 @@ const MIXES: [(f64, f64); 4] = [
     (0.96, -0.28),
 ];
 
-/// The KAK of a two-qubit unitary, `Q† U Q = after · D(m) · before ·
-/// exp(i phase)` with `after` and `before` in SO(4), `D(m)` diagonal, and `m`
-/// folded, and the Frobenius error of `after` before the fold. The error is
-/// measured against the input, or against its closest unitary when `U†U − I`
-/// has an entry of at least `RECONSTRUCT_TOL`. Every class GULPS computes from
-/// a matrix comes from here, so projection and synthesis agree.
-fn kak_unchecked(matrix: &Mat4) -> Result<(Mono, Frame, f64), CompileError> {
-    // `max_error` folds with `f64::max`, which skips NaN, and the eigensolve
-    // below iterates until convergence, so a non-finite entry must stop here.
-    if !matrix.iter().all(|z| z.re.is_finite() && z.im.is_finite()) {
-        return Err(CompileError::Synthesis(
-            "matrix has a non-finite entry".into(),
-        ));
-    }
-    let mut source = *matrix;
-    if max_error(&(source.adjoint() * source - Mat4::identity())) >= RECONSTRUCT_TOL {
-        let repaired = closest_unitary_faer(ndarray_to_faer(matrix_view(&source)))
-            .map_err(|error| CompileError::Synthesis(error.to_string()))?;
-        source = Mat4::from_fn(|r, c| repaired[(r, c)]);
-    }
-    let q = magic();
-    let u = q.adjoint() * source * q;
-    let phase = u.determinant().arg() / 4.0;
-    let v = u * C64::from_polar(1.0, -phase);
-    // With V = A Λ Pᵀ, Vᵀ V = P Λ² Pᵀ: P diagonalizes Vᵀ V, and the
-    // eigenphases of Λ² are the monodromy coordinates, in turns.
-    let (p, eigenvalues) = diagonalize(&(v.transpose() * v)).ok_or_else(|| {
-        CompileError::Synthesis("could not diagonalize the magic-basis square".into())
-    })?;
-    let (m, order) = monodromy(&eigenvalues.map(|z| z.arg() / TAU));
-    // The magic basis orders the canonical gate's phases (m1, m0, w, m2).
-    let mut p = Matrix4::from_fn(|r, c| p[(r, order[c])]);
-    if p.determinant() < 0.0 {
-        p.column_mut(0).neg_mut();
-    }
-    let w = -m[0] - m[1] - m[2];
-    let lambda = [m[1], m[0], w, m[2]].map(|turns| C64::from_polar(1.0, -PI * turns));
-    // V = (V P Λ̄) Λ Pᵀ, and Λ Pᵀ is unitary, so with `after` the real part of
-    // V P Λ̄ the reconstruction misses V by the norm of the imaginary part. The
-    // fold below is the exact identity D(m) = i (S P) D(rho(m)) P and changes
-    // this only by rounding.
-    let vp = v * p.cast::<C64>();
-    let full = Matrix4::from_fn(|r, c| vp[(r, c)] * lambda[c]);
-    let error = full.map(|z| z.im).norm();
-    let frame = Frame {
-        after: full.map(|z| z.re),
-        before: p.transpose(),
-        phase,
-    };
-    let (class, reflected) = Mono::folded(&m);
-    let frame = if reflected { frame.reflected() } else { frame };
-    Ok((class, frame, error))
+/// A two-qubit unitary: a matrix, or the canonical gate `D(c)` of a class,
+/// whose frame is the identity.
+#[derive(Clone, Copy, Debug)]
+#[allow(clippy::large_enum_variant)] // Inputs are mostly matrices; boxing would allocate each one.
+pub enum Unitary {
+    /// A matrix, checked unitary within `INPUT_ATOL` when decomposed.
+    Matrix(Mat4),
+    /// The canonical gate of a folded class.
+    Canonical(Mono),
 }
 
-impl Mono {
-    /// The folded class of a unitary.
-    pub(crate) fn of(u: &Mat4) -> Result<Self, CompileError> {
-        let (class, ..) = kak_unchecked(u)?;
-        Ok(class)
+impl Unitary {
+    /// The folded class. Every class GULPS computes from a matrix comes from
+    /// [`Spectrum`], so projection and synthesis agree.
+    pub fn class(&self) -> Result<Mono, CompileError> {
+        match self {
+            Self::Matrix(matrix) => Ok(Mono::folded(&Spectrum::of(matrix)?.m).0),
+            Self::Canonical(class) => Ok(*class),
+        }
+    }
+
+    /// The folded class and the frame around its canonical gate, checked by
+    /// reconstruction.
+    pub fn kak(&self) -> Result<(Mono, Frame), CompileError> {
+        match self {
+            Self::Matrix(matrix) => Spectrum::of(matrix)?.kak(),
+            Self::Canonical(class) => Ok((*class, Frame::identity())),
+        }
     }
 }
 
-/// Project a matrix batch to monodromy, preserving input order; an error
-/// carries the index of its matrix.
-pub fn monodromies(unitaries: &[Mat4]) -> Result<Vec<Mono>, (usize, CompileError)> {
-    crate::map_batch(unitaries, Mono::of)
+/// The part of a KAK that the class needs: with `V` the magic-basis matrix
+/// with its global phase removed, `P` diagonalizes `Vᵀ V`, whose eigenphases
+/// are the monodromy coordinates `m`; `order` arranges `P`'s columns.
+struct Spectrum {
+    v: Mat4,
+    phase: f64,
+    p: Matrix4<f64>,
+    m: [f64; 3],
+    order: [usize; 4],
+}
+
+impl Spectrum {
+    /// Fails if `U†U − I` has an entry above `INPUT_ATOL` or `U` is not
+    /// finite, and decomposes the closest unitary when an entry is at least
+    /// `RECONSTRUCT_TOL`.
+    fn of(matrix: &Mat4) -> Result<Self, CompileError> {
+        // `max_error` folds with `f64::max`, which skips NaN, and the eigensolve
+        // iterates until convergence, so a non-finite entry must stop here.
+        let deviation = if matrix.iter().all(|z| z.re.is_finite() && z.im.is_finite()) {
+            max_error(&(matrix.adjoint() * matrix - Mat4::identity()))
+        } else {
+            f64::NAN
+        };
+        if deviation.is_nan() || deviation > INPUT_ATOL {
+            return Err(CompileError::NotUnitary(deviation));
+        }
+        let mut source = *matrix;
+        if deviation >= RECONSTRUCT_TOL {
+            let repaired = closest_unitary_faer(ndarray_to_faer(matrix_view(&source)))
+                .map_err(|error| CompileError::Synthesis(error.to_string()))?;
+            source = Mat4::from_fn(|r, c| repaired[(r, c)]);
+        }
+        let q = magic();
+        let u = q.adjoint() * source * q;
+        let phase = u.determinant().arg() / 4.0;
+        let v = u * C64::from_polar(1.0, -phase);
+        // With V = A Λ Pᵀ, Vᵀ V = P Λ² Pᵀ: P diagonalizes Vᵀ V, and the
+        // eigenphases of Λ² are the monodromy coordinates, in turns.
+        let (p, eigenvalues) = diagonalize(&(v.transpose() * v)).ok_or_else(|| {
+            CompileError::Synthesis("could not diagonalize the magic-basis square".into())
+        })?;
+        let (m, order) = monodromy(&eigenvalues.map(|z| z.arg() / TAU));
+        Ok(Self {
+            v,
+            phase,
+            p,
+            m,
+            order,
+        })
+    }
+
+    /// `Q† U Q = after · D(m) · before · exp(i phase)` with `after` and
+    /// `before` in SO(4) and `m` folded, checked by the Frobenius error of
+    /// `after` before the fold, against the input or its closest unitary.
+    fn kak(&self) -> Result<(Mono, Frame), CompileError> {
+        let m = self.m;
+        // The magic basis orders the canonical gate's phases (m1, m0, w, m2).
+        let mut p = Matrix4::from_fn(|r, c| self.p[(r, self.order[c])]);
+        if p.determinant() < 0.0 {
+            p.column_mut(0).neg_mut();
+        }
+        let w = -m[0] - m[1] - m[2];
+        let lambda = [m[1], m[0], w, m[2]].map(|turns| C64::from_polar(1.0, -PI * turns));
+        // V = (V P Λ̄) Λ Pᵀ, and Λ Pᵀ is unitary, so with `after` the real part of
+        // V P Λ̄ the reconstruction misses V by the norm of the imaginary part. The
+        // fold below is the exact identity D(m) = i (S P) D(rho(m)) P and changes
+        // this only by rounding.
+        let vp = self.v * p.cast::<C64>();
+        let full = Matrix4::from_fn(|r, c| vp[(r, c)] * lambda[c]);
+        reconstructed(full.map(|z| z.im).norm())?;
+        let frame = Frame {
+            after: full.map(|z| z.re),
+            before: p.transpose(),
+            phase: self.phase,
+        };
+        let (class, reflected) = Mono::folded(&m);
+        Ok((class, if reflected { frame.reflected() } else { frame }))
+    }
 }
 
 /// A real orthogonal `P` and the eigenvalues `d` with `Pᵀ M P = diag(d)`, off
@@ -177,13 +220,6 @@ impl Frame {
             phase: self.phase + FRAC_PI_2,
         }
     }
-}
-
-/// The folded class of a unitary and its frame, checked by reconstruction.
-pub fn kak(matrix: &Mat4) -> Result<(Mono, Frame), CompileError> {
-    let (class, frame, error) = kak_unchecked(matrix)?;
-    reconstructed(error)?;
-    Ok((class, frame))
 }
 
 /// The frame of `D(from)` around `D(to)`, for `to` the class of `from`, or

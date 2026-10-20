@@ -6,8 +6,7 @@
 //!
 //! # Tolerances
 //!
-//! The constants below are the crate's tolerances. `INPUT_ATOL`, the
-//! unitarity tolerance at the Python input boundary, is in gulps-pyext.
+//! The constants below are the crate's tolerances.
 //!
 //! Computational reuse keys a class by its exact coordinates, with signed zero
 //! normalized (`Mono::key`). The Python class's equality uses `CLASS_TOL`
@@ -35,7 +34,7 @@ mod reachability;
 mod search;
 
 pub use compile::{Binding, CompileError, CompiledTarget, Decomposer, Gate, Op, compile_all};
-pub use kak::{canonical_matrix, monodromies};
+pub use kak::{Unitary, canonical_matrix};
 pub use reachability::{FORMS, Region, covers, project, sentence_region};
 
 /// Complex scalar.
@@ -56,6 +55,9 @@ pub const CLASS_TOL: f64 = 1e-12;
 /// Subset sums and repeated products accumulate errors, so this scale is a
 /// numerical policy, not a proof of infeasibility beyond every facet's slack.
 pub const MEMBERSHIP_TOL: f64 = can_sandwich::SPECTRAL_TOLERANCE / std::f64::consts::TAU;
+/// Entrywise error accepted in `U†U − I` for an input matrix. Decomposition
+/// uses the closest unitary when an entry is at least `RECONSTRUCT_TOL`.
+pub const INPUT_ATOL: f64 = 1e-8;
 /// Working-precision error accepted when a factorization is recomposed: a KAK
 /// frame and a local rotation split into single-qubit gates (both Frobenius),
 /// and the entrywise input nonunitarity below which no closest-unitary repair

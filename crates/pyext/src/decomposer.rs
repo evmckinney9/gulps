@@ -7,12 +7,13 @@ use pyo3::exceptions::{PyUserWarning, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyList, PyTuple};
 
-use gulps_core::{CompileError, Gate, compile_all};
+use gulps_core::class::Mono;
+use gulps_core::{CompileError, Gate, Unitary, compile_all};
 
 use crate::invariants::LocalEquivalenceClass;
+use crate::mat4_to_numpy;
 use crate::qiskit::{self, NativeGate};
 use crate::transpiler::Edge;
-use crate::{checked_mat4, mat4_to_numpy};
 
 pyo3::create_exception!(
     gulps.decomposition,
@@ -29,18 +30,17 @@ pyo3::create_exception!(
 
 /// The Python exception for a compile error, with the failing target's class,
 /// when known, as its `target` attribute.
-pub fn compile_error(
-    py: Python<'_>,
-    err: CompileError,
-    target: Option<LocalEquivalenceClass>,
-) -> PyErr {
+pub fn compile_error(py: Python<'_>, err: CompileError, target: Option<Mono>) -> PyErr {
     let exception = match err {
         CompileError::DepthLimit(_) => SearchDepthError::new_err(err.to_string()),
         CompileError::Synthesis(_) => DecompositionError::new_err(err.to_string()),
+        CompileError::NotUnitary(_) => return PyValueError::new_err(err.to_string()),
     };
-    if let Some(target) = target {
+    if let Some(mono) = target {
         // Setting an attribute on a fresh exception instance cannot fail.
-        let _ = exception.value(py).setattr("target", target);
+        let _ = exception
+            .value(py)
+            .setattr("target", LocalEquivalenceClass { mono });
     }
     exception
 }
@@ -75,6 +75,8 @@ pub struct GulpsDecomposer {
     pub edge: Arc<Edge>,
     /// The kept Qiskit gate objects, one per slot.
     pub gates: Py<PyTuple>,
+    /// The constructor's inputs for the kept gates, which pickling passes back.
+    inputs: Py<PyTuple>,
 }
 
 #[pymethods]
@@ -102,7 +104,8 @@ impl GulpsDecomposer {
             if let Ok(class) = gate.cast::<LocalEquivalenceClass>() {
                 let matrix = class.get().mat4();
                 objects.push(unitary_gate.call1((mat4_to_numpy(py, &matrix),))?);
-                let core = Gate::new(&matrix).map_err(|err| compile_error(py, err, None))?;
+                let core = Gate::new(&Unitary::Canonical(class.get().mono))
+                    .map_err(|err| compile_error(py, err, None))?;
                 natives.push((core, NativeGate::unitary(&matrix)));
             } else {
                 natives.push(NativeGate::from_python(gate)?);
@@ -123,6 +126,7 @@ impl GulpsDecomposer {
         Ok(Self {
             edge: Arc::new(edge),
             gates: PyTuple::new(py, order.iter().map(|&i| &objects[i]))?.unbind(),
+            inputs: PyTuple::new(py, order.iter().map(|&i| &gates[i]))?.unbind(),
         })
     }
 
@@ -182,7 +186,7 @@ impl GulpsDecomposer {
         let monos: Vec<_> = classes.iter().map(|c| c.mono).collect();
         let hits = py
             .detach(|| self.edge.binding.decomposer().select(&monos))
-            .map_err(|err| compile_error(py, err, (!batch).then(|| classes[0])))?;
+            .map_err(|err| compile_error(py, err, (!batch).then(|| classes[0].mono)))?;
         let gates = self.gates.bind(py);
         let mut selected = hits
             .into_iter()
@@ -211,10 +215,10 @@ impl GulpsDecomposer {
         unitary: &Bound<'_, PyAny>,
         use_dag: bool,
     ) -> PyResult<Py<PyAny>> {
-        let matrix = checked_mat4(unitary)?;
+        let target = crate::unitary(unitary)?;
         let compiled = py
-            .detach(|| compile_all(&[(&self.edge.binding, &matrix)]))
-            .map_err(|(_, err)| compile_error(py, err, LocalEquivalenceClass::of(&matrix)))?;
+            .detach(|| compile_all(&[(&self.edge.binding, &target)]))
+            .map_err(|(_, err)| compile_error(py, err, target.class().ok()))?;
         qiskit::circuit(py, &self.edge.natives, &compiled[0], use_dag)
     }
 
@@ -223,7 +227,7 @@ impl GulpsDecomposer {
         let py = slf.py();
         let this = slf.get();
         let args = (
-            this.gates.bind(py),
+            this.inputs.bind(py),
             this.costs(py)?,
             this.local_layer_cost(),
             this.max_depth(),
