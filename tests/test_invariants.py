@@ -46,10 +46,10 @@ def test_weyl_chart_matches_independent_pauli_rotations(coords, folded):
 
 
 def test_batch_projection_matches_single_projection():
-    # 96 targets fill several parallel tasks, so order must survive the split.
+    # 210 targets reach the parallel threshold, so order must survive the split.
     targets = [
         make(seed)
-        for seed in range(32)
+        for seed in range(70)
         for make in (haar_unitary, boundary_unitary, local_pair)
     ]
     assert LocalEquivalenceClass.from_unitaries(targets) == [
