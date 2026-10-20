@@ -37,8 +37,8 @@ def region_vertices(gates):
     )
 
 
-def expected_cost(isa):
-    """Expected Haar cost through monodromy's own coverage pipeline."""
+def cost_statistics(isa):
+    """Haar mean and standard deviation of cost through monodromy's own coverage pipeline."""
     from fractions import Fraction
 
     from monodromy.coordinates import unitary_to_monodromy_coordinate
@@ -47,7 +47,7 @@ def expected_cost(isa):
         build_coverage_set,
         deduce_qlr_consequences,
     )
-    from monodromy.haar import expected_cost
+    from monodromy.haar import cost_statistics
     from monodromy.static.examples import (
         everything_polytope,
         exactly,
@@ -83,4 +83,6 @@ def expected_cost(isa):
             if gates
             else 0.0
         )
-    return expected_cost(coverage)
+    # The offset and scale only affect monodromy's "overshot" statistics.
+    stats = cost_statistics(coverage, offset=0.0, scale_factor=0.0)
+    return stats["average_cost"], stats["sigma_cost"]

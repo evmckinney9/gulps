@@ -105,6 +105,12 @@ class CoverageReport:
         return sum(e.cost * e.fresh_mass for e in self.entries)
 
     @property
+    def cost_std(self) -> float:
+        """The Haar-weighted standard deviation of cost over the reported regions."""
+        mean = self.expected_cost
+        return math.sqrt(sum(e.fresh_mass * (e.cost - mean) ** 2 for e in self.entries))
+
+    @property
     def total_coverage(self) -> float:
         """The covered Haar fraction, within numerical tolerance of 1."""
         return sum(e.fresh_mass for e in self.entries)
