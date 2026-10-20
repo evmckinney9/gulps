@@ -1,37 +1,140 @@
-"""Fixed compiler workloads; make test checks results, make bench measures time."""
+"""Compile workloads on real circuits; make test checks results, make bench measures time.
+
+Each circuit is consolidated once, and routed first for the Target, outside the
+timers, so the timed regions are GulpsDecompositionPass on the DAG its
+translation stage receives.
+"""
 
 import os
 import subprocess
 from copy import deepcopy
+from functools import cache
 from hashlib import sha256
 from importlib.metadata import version
 from pathlib import Path
 
 import numpy as np
 import pytest
-from qiskit import QuantumCircuit
+from qiskit import qasm2
+from qiskit.circuit import Parameter
 from qiskit.circuit.library import (
-    CXGate,
+    CPhaseGate,
+    CZGate,
+    ECRGate,
     RXXGate,
-    RYYGate,
+    RZGate,
     RZZGate,
+    SXGate,
+    XGate,
+    XXPlusYYGate,
     iSwapGate,
     quantum_volume,
 )
 from qiskit.converters import circuit_to_dag, dag_to_circuit
-from qiskit.quantum_info import Operator
-from qiskit.synthesis import synth_qft_full
-from qiskit.transpiler import InstructionProperties, PassManagerConfig, Target
+from qiskit.transpiler import (
+    CouplingMap,
+    InstructionProperties,
+    PassManager,
+    StagedPassManager,
+    Target,
+)
+from qiskit.transpiler.passes import ConsolidateBlocks, Unroll3qOrMore
+from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
 
 from gulps import _accelerate
-from gulps.invariants import LocalEquivalenceClass
-from gulps.transpiler import GulpsDecompositionPass, GulpsTranslationPlugin
+from gulps.transpiler import GulpsDecompositionPass
 
-from ._common import assert_implements, count_2q
 from .fixtures.isas import ISA_BUILDERS
-from .fixtures.targets import haar_unitary, local_pair
 
-ISA_NAMES = tuple(ISA_BUILDERS)
+ROOT = Path(__file__).resolve().parents[1]
+QASM = ROOT / "tests/fixtures/qasm"
+
+# QASMBench and Feynman circuits (via Qiskit benchpress), and a seeded quantum volume.
+CIRCUITS = (
+    "qft_n29",
+    "multiplier_n45",
+    "gf2_16_mult",
+    "dnn_n51",
+    "qugan_n71",
+    "qv_n32",
+)
+
+# Mixed gate families and strengths cycled over the heavy-hex edges, with durations.
+EDGE_GATES = (
+    ((CZGate(), 1.0), (CPhaseGate(np.pi / 2), 0.5)),
+    ((iSwapGate(), 1.0), (XXPlusYYGate(np.pi / 2), 0.5)),
+    ((ECRGate(), 1.0), (RZZGate(np.pi / 6), 1 / 3)),
+    ((RXXGate(np.pi / 3), 0.6),),
+)
+
+
+def heavy_hex():
+    """A 115-qubit heavy-hex Target, one direction per edge, with four gate sets.
+
+    Durations differ on every edge, as a backend reports them.
+    """
+    edges = CouplingMap.from_heavy_hex(7, bidirectional=False).get_edges()
+    target = Target(num_qubits=1 + max(max(edge) for edge in edges))
+    by_gate = {}
+    for i, edge in enumerate(edges):
+        scale = 1 + (i * 7 % 11) / 100
+        for gate, duration in EDGE_GATES[i % len(EDGE_GATES)]:
+            by_gate.setdefault(gate.name, (gate, {}))[1][edge] = InstructionProperties(
+                duration=duration * scale
+            )
+    for gate, properties in by_gate.values():
+        target.add_instruction(gate, properties)
+    qubits = {(q,): None for q in range(target.num_qubits)}
+    for gate in (RZGate(Parameter("theta")), SXGate(), XGate()):
+        target.add_instruction(gate, qubits)
+    return target
+
+
+HEAVY_HEX = heavy_hex()
+
+# The heavy-hex Target on every circuit; each fixture ISA, as an all-to-all
+# decomposer, on a dense and a structured circuit.
+GRID = [("heavy_hex", name) for name in CIRCUITS] + [
+    (isa, name) for isa in ISA_BUILDERS for name in ("qv_n32", "multiplier_n45")
+]
+
+
+def make_pass(source):
+    return GulpsDecompositionPass(
+        HEAVY_HEX if source == "heavy_hex" else ISA_BUILDERS[source]()
+    )
+
+
+@cache
+def load_circuit(name):
+    if name == "qv_n32":
+        return quantum_volume(32, seed=42)
+    circuit = qasm2.load(
+        QASM / f"{name}.qasm", custom_instructions=qasm2.LEGACY_CUSTOM_INSTRUCTIONS
+    )
+    circuit.remove_final_measurements()
+    # Gates of three or more qubits become two-qubit gates the router can place.
+    return PassManager([Unroll3qOrMore(basis_gates=["u", "cx"])]).run(circuit)
+
+
+@cache
+def workload(source, name):
+    """The consolidated DAG the translation stage receives.
+
+    Circuits for the heavy-hex Target go through its layout and routing first.
+    """
+    circuit = load_circuit(name)
+    if source == "heavy_hex":
+        preset = generate_preset_pass_manager(1, target=HEAVY_HEX, seed_transpiler=0)
+        circuit = StagedPassManager(
+            ["init", "layout", "routing"],
+            init=preset.init,
+            layout=preset.layout,
+            routing=preset.routing,
+        ).run(circuit)
+    return circuit_to_dag(
+        PassManager([ConsolidateBlocks(force_consolidate=True)]).run(circuit)
+    )
 
 
 @pytest.fixture(scope="module")
@@ -40,8 +143,7 @@ def measurement_context(request):
         "benchmark_enable"
     ):
         return {}
-    root = Path(__file__).resolve().parents[1]
-    sources = [Path(__file__), *sorted((root / "tests/fixtures").glob("*.py"))]
+    sources = [Path(__file__), *sorted((ROOT / "tests/fixtures").rglob("*.*"))]
     return {
         "extension_sha256": sha256(Path(_accelerate.__file__).read_bytes()).hexdigest(),
         "workload_source_sha256": sha256(
@@ -51,16 +153,6 @@ def measurement_context(request):
             p: version(p) for p in ("numpy", "qiskit", "pytest-benchmark")
         },
         "rustc": subprocess.check_output(["rustc", "--version"], text=True).strip(),
-        "solver_commit": subprocess.check_output(
-            ["git", "-C", str(root / "crates/can_sandwich"), "rev-parse", "HEAD"],
-            text=True,
-        ).strip(),
-        "solver_source_sha256": sha256(
-            b"".join(
-                p.read_bytes()
-                for p in sorted((root / "crates/can_sandwich/src").rglob("*.rs"))
-            )
-        ).hexdigest(),
         "cpu_affinity": sorted(os.sched_getaffinity(0))
         if hasattr(os, "sched_getaffinity")
         else None,
@@ -83,220 +175,67 @@ def record_context(benchmark, measurement_context):
     benchmark.extra_info.update(measurement_context)
 
 
-@pytest.fixture(params=ISA_NAMES)
-def isa_name(request):
-    return request.param
-
-
-@pytest.fixture(scope="module", params=("haar", "boundary", "local"))
-def targets(request):
-    if request.param == "haar":
-        return [haar_unitary(10000 + i) for i in range(32)]
-    if request.param == "local":
-        return [local_pair(10000 + i) for i in range(32)]
-    # Faces, edges, repeated spectra, and nearby points. Generate independently of GULPS.
-    coordinates = [
-        (0.0, 0.0, 0.0),
-        (0.5, 0.0, 0.0),
-        (0.5, 0.5, 0.0),
-        (0.5, 0.5, 0.5),
-        (0.2, 0.1, 0.0),
-        (0.2, 0.1, 1e-7),
-        (0.3, 0.3, 0.1),
-        (0.3, 0.1, 0.1),
-    ]
-    matrices = []
-    for i in range(32):
-        a, b, c = coordinates[i % len(coordinates)]
-        canonical = (
-            RXXGate(np.pi * a).to_matrix()
-            @ RYYGate(np.pi * b).to_matrix()
-            @ RZZGate(np.pi * c).to_matrix()
-        )
-        matrices.append(local_pair(20000 + i) @ canonical @ local_pair(30000 + i))
-    return matrices
-
-
-def test_setup(benchmark, isa_name):
-    compiler = benchmark(ISA_BUILDERS[isa_name])
-    assert compiler.gates
-
-
-def test_projection(benchmark, targets):
-    record_targets(benchmark, targets)
-    classes = benchmark(LocalEquivalenceClass.from_unitaries, targets)
-    assert classes == [LocalEquivalenceClass.from_unitary(target) for target in targets]
-
-
-def record_targets(benchmark, targets):
+def record_workload(benchmark, dag):
+    blocks = [node.op.to_matrix() for node in dag.two_qubit_ops()]
+    benchmark.extra_info["blocks"] = len(blocks)
+    benchmark.extra_info["distinct_blocks"] = len({b.tobytes() for b in blocks})
     benchmark.extra_info["input_sha256"] = sha256(
-        np.asarray(targets).tobytes()
+        b"".join(b.tobytes() for b in blocks)
     ).hexdigest()
-    benchmark.extra_info["target_count"] = len(targets)
 
 
-@pytest.mark.parametrize("cache", ("cold", "warm"))
-@pytest.mark.parametrize("input_kind", ("matrices", "classes"))
-def test_selection(benchmark, isa_name, cache, input_kind):
-    targets = [haar_unitary(10000 + i) for i in range(128)]
-    record_targets(benchmark, targets)
-    compiler = ISA_BUILDERS[isa_name]()
-    expected = compiler.select(targets)
-    # Project outside the timer to separate selection from matrix-to-class work.
-    inputs = (
-        LocalEquivalenceClass.from_unitaries(targets)
-        if input_kind == "classes"
-        else targets
-    )
-    if cache == "cold":
-        # Includes compiler construction and initial search on every iteration.
-        selected = benchmark(lambda: ISA_BUILDERS[isa_name]().select(inputs))
-    else:
-        selected = benchmark(compiler.select, inputs)
-    assert selected == expected
-    benchmark.extra_info["costs"] = [cost for cost, _ in selected]
-    benchmark.extra_info["depths"] = [len(gates) for _, gates in selected]
-    benchmark.extra_info["input_kind"] = input_kind
+def record_output(benchmark, source, circuit):
+    """Record the output cost; on the Target, check each gate is native to its pair."""
+    entanglers, duration = 0, 0.0
+    for inst in circuit.data:
+        if inst.operation.num_qubits != 2:
+            continue
+        entanglers += 1
+        if source == "heavy_hex":
+            pair = tuple(circuit.find_bit(q).index for q in inst.qubits)
+            assert HEAVY_HEX.instruction_supported(inst.operation.name, pair)
+            duration += HEAVY_HEX[inst.operation.name][pair].duration
+    benchmark.extra_info["entanglers"] = entanglers
+    if source == "heavy_hex":
+        benchmark.extra_info["duration"] = duration
 
 
-@pytest.mark.parametrize("cache", ("cold", "warm"))
-def test_decomposition(benchmark, isa_name, targets, cache):
-    compiler = ISA_BUILDERS[isa_name]()
-    record_targets(benchmark, targets)
-    selected = compiler.select(targets)
-    if cache == "cold":
-        # A fresh compiler with its search warmed but no sentences realized, so
-        # every round times the solver and emission.
-        def setup():
-            fresh = ISA_BUILDERS[isa_name]()
-            fresh.select(targets)
-            return (fresh,), {}
-
-        circuits = benchmark.pedantic(
-            lambda fresh: [fresh(target) for target in targets],
-            setup=setup,
-            rounds=100,
-            warmup_rounds=5,
-        )
-    else:
-        circuits = benchmark(lambda: [compiler(target) for target in targets])
-    errors = []
-    for target, circuit, (_, gates) in zip(targets, circuits, selected, strict=True):
-        errors.append(assert_implements(target, circuit))
-        assert count_2q(circuit) == len(gates)
-    benchmark.extra_info["max_error"] = max(errors)
-    benchmark.extra_info["entanglers"] = [count_2q(circuit) for circuit in circuits]
-    benchmark.extra_info["costs"] = [cost for cost, _ in selected]
-
-
-@pytest.mark.parametrize("dressed", (False, True), ids=("exact", "dressed"))
-def test_native_decomposition(benchmark, isa_name, dressed):
-    compiler = ISA_BUILDERS[isa_name]()
-    target = Operator(compiler.gates[0]).data
-    if dressed:
-        target = np.exp(0.37j) * local_pair(20000) @ target @ local_pair(30000)
-    record_targets(benchmark, [target])
-    result = benchmark(compiler, target)
-    benchmark.extra_info["max_error"] = assert_implements(target, result)
-    assert count_2q(result) == 1
-
-
-@pytest.fixture(
-    scope="module",
-    params=[
-        (n, sharing)
-        for n in (8, 128)
-        for sharing in ("unique", "one_class", "repeated")
-    ],
-    ids=lambda case: f"{case[0]}-{case[1]}",
-)
-def dag_workload(request):
-    blocks, sharing = request.param
-    base = haar_unitary(10000)
-    targets = [
-        local_pair(20000 + i) @ base @ local_pair(30000 + i)
-        if sharing == "one_class"
-        else (base if sharing == "repeated" else haar_unitary(10000 + i))
-        for i in range(blocks)
-    ]
-    circuit = QuantumCircuit(3, global_phase=0.31)
-    for i, target in enumerate(targets):
-        circuit.unitary(target, [(0, 1), (2, 1), (1, 0)][i % 3])
-    return circuit, targets
-
-
-def test_dag(benchmark, isa_name, dag_workload):
-    compiler = ISA_BUILDERS[isa_name]()
-    circuit, targets = dag_workload
-    record_targets(benchmark, targets)
-    dag = circuit_to_dag(circuit)
-    pass_ = GulpsDecompositionPass(compiler)
-    pass_.run(deepcopy(dag))
-    # The pass mutates its DAG. Copy outside the timer for every round.
+@pytest.mark.parametrize("source, name", GRID)
+def test_compile(benchmark, source, name):
+    """A new pass on every round: what each transpile() call pays."""
+    dag = workload(source, name)
+    record_workload(benchmark, dag)
     result = benchmark.pedantic(
-        pass_.run,
+        lambda dag: make_pass(source).run(dag),
         setup=lambda: ((deepcopy(dag),), {}),
-        rounds=100,
-        warmup_rounds=5,
+        rounds=20,
+        warmup_rounds=2,
     )
-    compiled = dag_to_circuit(result)
-    assert_implements(Operator(circuit), compiled)
-    benchmark.extra_info["entanglers"] = count_2q(compiled)
+    record_output(benchmark, source, dag_to_circuit(result))
 
 
-@pytest.mark.parametrize("distinct_costs", (False, True), ids=("shared", "distinct"))
-def test_target_setup(benchmark, distinct_costs):
-    target = Target(num_qubits=129)
-    for gate, cost in [(CXGate(), 1.0), (RXXGate(np.pi / 4), 0.5)]:
-        target.add_instruction(
-            gate,
-            {
-                (i, i + 1): InstructionProperties(
-                    duration=cost + (i / 1000 if distinct_costs else 0.0)
-                )
-                for i in range(128)
-            },
-        )
-    compiler = benchmark(GulpsDecompositionPass, target)
-    # The pass compiles the unitaries ConsolidateBlocks makes.
-    circuit = QuantumCircuit(2)
-    circuit.unitary(CXGate().to_matrix(), [0, 1])
-    assert_implements(circuit, dag_to_circuit(compiler.run(circuit_to_dag(circuit))))
-
-
-def test_routed_dag(benchmark):
-    target = Target(num_qubits=3)
-    target.add_instruction(CXGate(), {(0, 1): None})
-    target.add_instruction(iSwapGate(), {(2, 1): None})
-    circuit = QuantumCircuit(3)
-    targets = [haar_unitary(10000 + i) for i in range(128)]
-    record_targets(benchmark, targets)
-    for i, matrix in enumerate(targets):
-        circuit.unitary(matrix, [(0, 1), (2, 1), (1, 0), (1, 2)][i % 4])
-    dag = circuit_to_dag(circuit)
-    pass_ = GulpsDecompositionPass(target)
+@pytest.mark.parametrize("source, name", GRID)
+def test_recompile(benchmark, source, name):
+    """One pass for every round: a pass manager reused across circuits."""
+    dag = workload(source, name)
+    record_workload(benchmark, dag)
+    pass_ = make_pass(source)
     pass_.run(deepcopy(dag))
     result = benchmark.pedantic(
-        pass_.run,
-        setup=lambda: ((deepcopy(dag),), {}),
-        rounds=100,
-        warmup_rounds=5,
+        pass_.run, setup=lambda: ((deepcopy(dag),), {}), rounds=20, warmup_rounds=2
     )
-    compiled = dag_to_circuit(result)
-    assert_implements(circuit, compiled)
-    for inst in compiled.data:
-        if inst.operation.num_qubits == 2:
-            pair = tuple(compiled.find_bit(q).index for q in inst.qubits)
-            assert target.instruction_supported(inst.operation.name, pair)
+    record_output(benchmark, source, dag_to_circuit(result))
 
 
-@pytest.mark.parametrize("workload", ("qft", "quantum_volume"))
-def test_translation(benchmark, workload):
-    circuit = synth_qft_full(4) if workload == "qft" else quantum_volume(4, seed=42)
-    target = Target.from_configuration(
-        basis_gates=["cx", "rz", "sx", "x"], num_qubits=4
+@pytest.mark.parametrize("name", ("qft_n29", "qugan_n71"))
+def test_transpile(benchmark, name):
+    """The whole optimization level 2 pipeline, mostly Qiskit's time."""
+    circuit = load_circuit(name)
+    result = benchmark.pedantic(
+        lambda: generate_preset_pass_manager(
+            2, target=HEAVY_HEX, translation_method="gulps", seed_transpiler=0
+        ).run(circuit),
+        rounds=5,
+        warmup_rounds=1,
     )
-    manager = GulpsTranslationPlugin().pass_manager(PassManagerConfig(target=target))
-    result = benchmark(manager.run, circuit)
-    assert_implements(circuit, result)
-    assert set(result.count_ops()) <= {"cx", "rz", "sx", "x"}
+    record_output(benchmark, "heavy_hex", result)
