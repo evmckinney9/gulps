@@ -135,7 +135,7 @@ pub fn replace<'a>(
     // revision those calls attach to Python only for control-flow and `store`
     // instructions, which are never written, so they can run detached.
     let Ok(replacements) = dag.py().detach(|| {
-        gulps_core::map_batch(&pairs, |&(job, target)| {
+        gulps_core::map_batch(&pairs, 1_000, |&(job, target)| {
             Ok::<_, Infallible>(Replacement::build(&job.edge.natives, target, job.flip))
         })
     });

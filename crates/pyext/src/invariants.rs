@@ -119,7 +119,7 @@ impl LocalEquivalenceClass {
     pub fn from_unitaries(py: Python<'_>, matrices: Vec<Bound<'_, PyAny>>) -> PyResult<Vec<Self>> {
         let unitaries = matrices.iter().map(unitary).collect::<PyResult<Vec<_>>>()?;
         let monos = py
-            .detach(|| map_batch(&unitaries, Unitary::class))
+            .detach(|| map_batch(&unitaries, 1_500, Unitary::class))
             .map_err(|(_, err)| compile_error(py, err, None))?;
         Ok(monos.into_iter().map(|mono| Self { mono }).collect())
     }

@@ -62,24 +62,22 @@ pub(crate) const RECONSTRUCT_TOL: f64 = 1e-13;
 /// a single-qubit gate. An emitted local gate is the product of at most three
 /// recovered factors, each accurate to about 1e-15.
 pub(crate) const LOCAL_IDENTITY_TOL: f64 = 1e-14;
-/// Fewest items in one parallel task. Waking a worker costs about as much as
-/// a few dozen KAKs; measured on 6 cores / 12 threads under WSL, splitting 128
-/// KAKs into tasks this size halves the overhead of Rayon's default split.
-const PAR_TASK: usize = 32;
+/// Serial work below which waking Rayon's workers costs more than it saves;
+/// measured on 6 cores / 12 threads under WSL.
+const PAR_WORK_NS: usize = 300_000;
 
 /// Map a batch in input order, returning the first error in input order with
-/// the index of its item. Runs in parallel unless the batch is small or Qiskit
-/// has disabled threads.
+/// the index of its item. Runs in parallel once the batch holds `PAR_WORK_NS`
+/// of work at `item_ns` per item, unless Qiskit has disabled threads.
 pub fn map_batch<T: Sync, U: Send, E: Send>(
     items: &[T],
+    item_ns: usize,
     f: impl Fn(&T) -> Result<U, E> + Send + Sync,
 ) -> Result<Vec<U>, (usize, E)> {
     let indexed = |(i, item)| f(item).map_err(|err| (i, err));
-    if items.len() >= 2 * PAR_TASK && qiskit_numerics::getenv_use_multiple_threads() {
+    if items.len() * item_ns >= PAR_WORK_NS && qiskit_numerics::getenv_use_multiple_threads() {
         use rayon::prelude::*;
-        let results: Vec<_> = (items.par_iter().enumerate().with_min_len(PAR_TASK))
-            .map(indexed)
-            .collect();
+        let results: Vec<_> = items.par_iter().enumerate().map(indexed).collect();
         results.into_iter().collect()
     } else {
         items.iter().enumerate().map(indexed).collect()
