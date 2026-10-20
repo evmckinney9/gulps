@@ -296,6 +296,12 @@ impl Binding {
     pub fn decomposer(&self) -> &Arc<Decomposer> {
         &self.decomposer
     }
+
+    /// The circuit for `target` in the bound gates.
+    pub fn compile(&self, target: &Unitary) -> Result<CompiledTarget, CompileError> {
+        let (class, frame) = target.kak()?;
+        self.decomposer.compile_target(class, &self.gates, frame)
+    }
 }
 
 /// A sentence of canonical gates: its slots, the local layers between them,
@@ -390,18 +396,4 @@ fn locals(mut pair: LocalPair) -> impl Iterator<Item = Op> {
         .into_iter()
         .filter(|(_, matrix)| (matrix - Mat2::identity()).norm() > LOCAL_IDENTITY_TOL)
         .map(|(qubit, matrix)| Op::Local { qubit, matrix })
-}
-
-/// Compile `(binding, target)` jobs; results keep job order,
-/// and an error carries the index of a failing job.
-pub fn compile_all(
-    jobs: &[(&Binding, &Unitary)],
-) -> Result<Vec<CompiledTarget>, (usize, CompileError)> {
-    // About 3 µs per job when its class is cached, 12 µs when not.
-    crate::map_batch(jobs, 5_000, |&(binding, target)| {
-        let (class, frame) = target.kak()?;
-        binding
-            .decomposer
-            .compile_target(class, &binding.gates, frame)
-    })
 }

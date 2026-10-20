@@ -8,7 +8,7 @@ use pyo3::prelude::*;
 use pyo3::types::{PyList, PyTuple};
 
 use gulps_core::class::Mono;
-use gulps_core::{CompileError, Gate, Unitary, compile_all};
+use gulps_core::{CompileError, Gate, Unitary};
 
 use crate::invariants::LocalEquivalenceClass;
 use crate::mat4_to_numpy;
@@ -217,9 +217,9 @@ impl GulpsDecomposer {
     ) -> PyResult<Py<PyAny>> {
         let target = crate::unitary(unitary)?;
         let compiled = py
-            .detach(|| compile_all(&[(&self.edge.binding, &target)]))
-            .map_err(|(_, err)| compile_error(py, err, target.class().ok()))?;
-        qiskit::circuit(py, &self.edge.natives, &compiled[0], use_dag)
+            .detach(|| self.edge.binding.compile(&target))
+            .map_err(|err| compile_error(py, err, target.class().ok()))?;
+        qiskit::circuit(py, &self.edge.natives, &compiled, use_dag)
     }
 
     /// Pickle as the constructor arguments; the search restarts after unpickling.

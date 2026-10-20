@@ -8,9 +8,9 @@ use pyo3::exceptions::{PyNotImplementedError, PyValueError};
 use pyo3::prelude::*;
 use qiskit_numerics::IndexMap;
 
-use gulps_core::{Binding, Decomposer, Gate, compile_all};
+use gulps_core::{Binding, Decomposer, Gate};
 
-use crate::decomposer::{GulpsDecomposer, compile_error};
+use crate::decomposer::GulpsDecomposer;
 use crate::qiskit::{self, NativeGate};
 
 /// The gates offered on one edge: their binding to a decomposer, and how each
@@ -224,19 +224,9 @@ impl BlockSynthesizer {
 
     /// Replace every two-qubit unitary of `dag` in place, and return it. No
     /// other thread may use `dag` until this returns.
-    fn run(&self, py: Python<'_>, dag: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-        qiskit::replace(
-            dag,
-            |pair| self.get(pair),
-            |jobs| {
-                let batch: Vec<_> = jobs
-                    .iter()
-                    .map(|job| (&job.edge.binding, &job.unitary))
-                    .collect();
-                py.detach(|| compile_all(&batch))
-                    .map_err(|(i, err)| compile_error(py, err, jobs[i].unitary.class().ok()))
-            },
-        )?;
+    fn run(&self, dag: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+        // SAFETY: this method's contract: no other thread uses `dag` until it returns.
+        unsafe { qiskit::replace(dag, |pair| self.get(pair)) }?;
         Ok(dag.clone().unbind())
     }
 }
