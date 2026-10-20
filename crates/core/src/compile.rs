@@ -39,8 +39,8 @@ impl std::fmt::Display for CompileError {
 impl std::error::Error for CompileError {}
 
 /// Decomposes targets into sentences of canonical gates, one class and cost
-/// per slot. Physical gates enter [`compile_all`] only through a [`Binding`],
-/// as their rotations around their class's canonical gate.
+/// per slot. Physical gates enter only through a [`Binding`], as their
+/// rotations around their class's canonical gate.
 pub struct Decomposer {
     walk: Walk,
     /// Canonical sentences by exact class, kept across calls.
