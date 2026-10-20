@@ -1,7 +1,7 @@
 PYTHON_VERSION = python3.12
 VENV           = .venv
 RUST_BIN      ?= $(HOME)/.cargo/bin
-BENCH_THREADS ?= 1
+BENCH_THREADS ?= 4
 BENCH_ARGS    ?= --benchmark-autosave
 export PATH   := $(RUST_BIN):$(PATH)
 

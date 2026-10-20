@@ -50,7 +50,7 @@ make bench BENCH_ARGS='--benchmark-save=after --benchmark-compare=0001'
 
 Replace `0001` with the saved baseline number. Compare the same workloads
 and thread count on an idle machine; repeat each version in three processes.
-Use `BENCH_THREADS=4` to change the thread count.
+Use `BENCH_THREADS=1` to change the thread count.
 
 ## Documentation
 
