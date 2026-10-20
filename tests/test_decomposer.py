@@ -16,7 +16,8 @@ from ._common import (
     assert_implements,
     count_2q,
 )
-from .fixtures.targets import haar_unitary
+from .fixtures.isas import ISA_BUILDERS
+from .fixtures.targets import boundary_unitary, haar_unitary, local_pair
 
 
 @pytest.mark.parametrize("scale", [1.0 + 4.9e-9], ids=["roundoff"])
@@ -178,3 +179,33 @@ def test_cx_count_matches_qiskit_optimal_decomposer(target):
     circuit = GulpsDecomposer([CXGate()], [1.0])(target)
     assert_implements(target, circuit)
     assert count_2q(circuit) == QISKIT_CX.num_basis_gates(target)
+
+
+@pytest.mark.parametrize("isa_name", ISA_BUILDERS)
+@pytest.mark.parametrize(
+    "kind", ("haar", "boundary", "local", "native", "dressed_native")
+)
+def test_every_isa_compiles_what_select_predicts(isa_name, kind):
+    compiler = ISA_BUILDERS[isa_name]()
+    native = Operator(compiler.gates[0]).data
+    make = {
+        "haar": lambda i: haar_unitary(10000 + i),
+        "boundary": boundary_unitary,
+        "local": lambda i: local_pair(10000 + i),
+        "native": lambda i: native,
+        "dressed_native": lambda i: (
+            np.exp(0.37j) * local_pair(20000 + i) @ native @ local_pair(30000 + i)
+        ),
+    }[kind]
+    targets = [make(i) for i in range(8)]
+    selected = compiler.select(targets)
+    fresh = ISA_BUILDERS[isa_name]()
+    assert fresh.select(LocalEquivalenceClass.from_unitaries(targets)) == selected
+    for target, (_, gates) in zip(targets, selected, strict=True):
+        circuit = compiler(target)
+        assert_implements(target, circuit)
+        assert count_2q(circuit) == len(gates)
+        if kind.endswith("native"):
+            assert len(gates) == 1
+        # The second call reuses the realized sentence.
+        assert_implements(target, compiler(target))

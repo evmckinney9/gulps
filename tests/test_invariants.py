@@ -7,6 +7,8 @@ from qiskit.circuit.library import RXXGate, RYYGate, RZZGate
 
 from gulps.invariants import LocalEquivalenceClass
 
+from .fixtures.targets import boundary_unitary, haar_unitary, local_pair
+
 
 @pytest.mark.parametrize(
     "coords, folded",
@@ -41,3 +43,15 @@ def test_weyl_chart_matches_independent_pauli_rotations(coords, folded):
         two_qubit_local_invariants(np.exp(0.37j) * expected),
         atol=1e-12,
     )
+
+
+def test_batch_projection_matches_single_projection():
+    # 96 targets fill several parallel tasks, so order must survive the split.
+    targets = [
+        make(seed)
+        for seed in range(32)
+        for make in (haar_unitary, boundary_unitary, local_pair)
+    ]
+    assert LocalEquivalenceClass.from_unitaries(targets) == [
+        LocalEquivalenceClass.from_unitary(target) for target in targets
+    ]

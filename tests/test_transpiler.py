@@ -10,6 +10,7 @@ from qiskit.circuit.library import (
     RXXGate,
     UnitaryGate,
     iSwapGate,
+    quantum_volume,
 )
 from qiskit.converters import circuit_to_dag, dag_to_circuit
 from qiskit.quantum_info import Operator, SuperOp, random_unitary
@@ -26,6 +27,8 @@ from gulps.decomposition import GulpsDecomposer
 from gulps.transpiler import GulpsDecompositionPass, GulpsTranslationPlugin
 
 from ._common import assert_implements, count_2q, two_qubit_names
+from .fixtures.isas import ISA_BUILDERS
+from .fixtures.targets import haar_unitary, local_pair
 
 
 @pytest.fixture(scope="module")
@@ -63,8 +66,8 @@ def test_compilation_uses_each_pairs_gate_costs(num_processes):
 
 @pytest.mark.parametrize(
     "noise, circuit",
-    [(True, synth_qft_full(4))],
-    ids=["qft"],
+    [(True, synth_qft_full(4)), (True, quantum_volume(4, seed=42))],
+    ids=["qft", "qv"],
 )
 def test_plugin_compiles_onto_a_generic_backend(noise, circuit):
     """A fake backend with per-pair durations, or with none, transpiles exactly."""
@@ -317,20 +320,40 @@ def test_translation_plugin_handles_single_qubit_wires(basis, with_entangler):
         assert target.instruction_supported(instruction.operation.name, qubits)
 
 
-def test_locally_equivalent_gates_on_different_pairs_each_emit_their_own_gate():
-    # CX and CZ have the same class, so both pairs share one canonical decomposer.
+@pytest.mark.parametrize("second", [CZGate(), iSwapGate()], ids=["cz", "iswap"])
+def test_each_pair_emits_its_own_gate_in_both_directions(second):
+    # With CZ, both pairs share one canonical decomposer, since CX and CZ share a class.
     target = Target(num_qubits=3)
     target.add_instruction(CXGate(), {(0, 1): InstructionProperties(duration=1.0)})
-    target.add_instruction(CZGate(), {(1, 2): InstructionProperties(duration=1.0)})
+    target.add_instruction(second, {(2, 1): InstructionProperties(duration=1.0)})
     circuit = QuantumCircuit(3)
-    for i in range(4):
-        circuit.unitary(random_unitary(4, seed=i).data, [0, 1] if i % 2 else [1, 2])
+    for i in range(8):
+        circuit.unitary(
+            haar_unitary(10000 + i), [(0, 1), (2, 1), (1, 0), (1, 2)][i % 4]
+        )
     out = PassManager([GulpsDecompositionPass(target)]).run(circuit)
     assert_implements(circuit, out)
     for inst in out.data:
         if inst.operation.num_qubits == 2:
             pair = tuple(out.find_bit(q).index for q in inst.qubits)
             assert target.instruction_supported(inst.operation.name, pair)
+
+
+@pytest.mark.parametrize("isa_name", ISA_BUILDERS)
+@pytest.mark.parametrize("sharing", ("unique", "one_class", "repeated"))
+def test_one_pass_compiles_shared_blocks_on_every_run(isa_name, sharing):
+    base = haar_unitary(10000)
+    circuit = QuantumCircuit(3, global_phase=0.31)
+    for i in range(8):
+        block = {
+            "unique": haar_unitary(10000 + i),
+            "one_class": local_pair(20000 + i) @ base @ local_pair(30000 + i),
+            "repeated": base,
+        }[sharing]
+        circuit.unitary(block, [(0, 1), (2, 1), (1, 0)][i % 3])
+    pass_ = GulpsDecompositionPass(ISA_BUILDERS[isa_name]())
+    for _ in range(2):
+        assert_implements(circuit, dag_to_circuit(pass_.run(circuit_to_dag(circuit))))
 
 
 def test_symbolic_phase_and_parameters_survive_substitution():
