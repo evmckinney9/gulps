@@ -88,9 +88,9 @@ impl LocalEquivalenceClass {
                  need c2 <= c1, c1 + c2 <= 1, and |c3| <= c2"
             )));
         }
-        let ([c1, c2, c3], _) = class::fold_weyl(weyl);
-        let mono = Mono(class::monodromy_from_weyl(c1, c2, c3));
-        Ok(Self { mono })
+        Ok(Self {
+            mono: Mono::from_weyl(weyl),
+        })
     }
 
     /// The class of a two-qubit gate or matrix.
