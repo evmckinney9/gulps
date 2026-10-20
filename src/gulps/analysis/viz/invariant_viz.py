@@ -35,7 +35,7 @@ _DROP_ALPHA = 0.4
 def scatter_plot(
     invariant_list: list[LocalEquivalenceClass],
     ax: Axes3D | None = None,
-    **kwargs: Any,  # matplotlib scatter args
+    **kwargs: Any,
 ) -> Axes3D:
     """Scatter plot of a list of LocalEquivalenceClass in the Weyl chamber.
 

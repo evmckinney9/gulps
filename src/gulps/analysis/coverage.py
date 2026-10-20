@@ -16,10 +16,8 @@
 
 ``coverage_report`` visits the instruction set's gate sentences in cost order
 until their computed Haar mass is within tolerance of one, weighting each
-sentence by the mass it reaches for the first time. Closed-form integrals
-are evaluated in floating point; stopping does not certify every target's
-reachability. To evaluate a finite sample instead, ``empirical_cost`` selects
-a sentence for each supplied target.
+sentence by the mass it reaches for the first time. To evaluate a finite
+sample instead, ``empirical_cost`` selects a sentence for each supplied target.
 """
 
 from __future__ import annotations
@@ -51,7 +49,7 @@ if TYPE_CHECKING:
     import matplotlib.axes
     import matplotlib.figure
 
-# Stop when the computed union mass is this close to 1, not a set-coverage proof.
+# Stop when the computed union mass is this close to 1.
 _FULL_COVERAGE_TOL = 1e-9
 
 # Targets accepted by ``GulpsDecomposer.select``.
@@ -150,11 +148,10 @@ class CoverageReport:
     def percentile(self, q: float) -> float:
         """The cost at which the cumulative Haar fraction first reaches ``q``.
 
-        ``percentile(0.5)`` estimates the median cost. ``percentile(1.0)``
-        returns the endpoint of the reported distribution, not a guaranteed
-        worst-case cost: small uncovered regions can remain when integration
-        stops. Returns infinity if ``q`` exceeds the reported coverage by
-        more than its numerical tolerance.
+        ``percentile(1.0)`` returns the endpoint of the reported distribution,
+        not a guaranteed worst-case cost: small uncovered regions can remain
+        when integration stops. Returns infinity if ``q`` exceeds the reported
+        coverage by more than its numerical tolerance.
 
         Args:
             q: A cumulative probability from 0 through 1.

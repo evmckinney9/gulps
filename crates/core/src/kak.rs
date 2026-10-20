@@ -12,16 +12,13 @@ use std::f64::consts::{FRAC_PI_2, PI, TAU};
 /// Single-qubit gates in Qiskit order: matrix = q1 ⊗ q0.
 #[derive(Clone, Copy, Debug)]
 pub struct LocalPair {
-    /// Qubit 0 factor.
     pub q0: Mat2,
-    /// Qubit 1 factor.
     pub q1: Mat2,
 }
 
 /// The product of two local gates, qubit by qubit, as the product of their
-/// rotations in the magic basis. The factors keep the sign of their inputs,
-/// not the convention of [`factor_rotation`]: a product equal to the identity
-/// rotation can be `(-I, -I)`.
+/// rotations in the magic basis. A product equal to the identity rotation can
+/// be `(-I, -I)`.
 impl std::ops::Mul for LocalPair {
     type Output = Self;
     fn mul(self, rhs: Self) -> Self {
@@ -85,8 +82,7 @@ pub enum Unitary {
 }
 
 impl Unitary {
-    /// The folded class. Every class GULPS computes from a matrix comes from
-    /// [`Spectrum`], so projection and synthesis agree.
+    /// The folded class.
     pub fn class(&self) -> Result<Mono, CompileError> {
         match self {
             Self::Matrix(matrix) => Ok(Mono::folded(&Spectrum::of(matrix)?.m).0),
@@ -116,9 +112,6 @@ struct Spectrum {
 }
 
 impl Spectrum {
-    /// Fails if `U†U − I` has an entry above `INPUT_ATOL` or `U` is not
-    /// finite, and decomposes the closest unitary when an entry is at least
-    /// `RECONSTRUCT_TOL`.
     fn of(matrix: &Mat4) -> Result<Self, CompileError> {
         // `max_error` folds with `f64::max`, which skips NaN, and the eigensolve
         // iterates until convergence, so a non-finite entry must stop here.
@@ -160,7 +153,6 @@ impl Spectrum {
     /// `after` before the fold, against the input or its closest unitary.
     fn kak(&self) -> Result<(Mono, Frame), CompileError> {
         let m = self.m;
-        // The magic basis orders the canonical gate's phases (m1, m0, w, m2).
         let mut p = Matrix4::from_fn(|r, c| self.p[(r, self.order[c])]);
         if p.determinant() < 0.0 {
             p.column_mut(0).neg_mut();
@@ -169,8 +161,7 @@ impl Spectrum {
         let lambda = [m[1], m[0], w, m[2]].map(|turns| C64::from_polar(1.0, -PI * turns));
         // V = (V P Λ̄) Λ Pᵀ, and Λ Pᵀ is unitary, so with `after` the real part of
         // V P Λ̄ the reconstruction misses V by the norm of the imaginary part. The
-        // fold below is the exact identity D(m) = i (S P) D(rho(m)) P and changes
-        // this only by rounding.
+        // fold below is exact and changes this only by rounding.
         let vp = self.v * p.cast::<C64>();
         let full = Matrix4::from_fn(|r, c| vp[(r, c)] * lambda[c]);
         reconstructed(full.map(|z| z.im).norm())?;

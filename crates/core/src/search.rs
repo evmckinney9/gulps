@@ -27,8 +27,7 @@ pub struct Selection {
 }
 
 /// One pending Horn-DP node in objective order: `key`, depth, then
-/// deterministic parent/gate order. The complete sentence already exists as
-/// the parent chain, so the frontier never copies it.
+/// deterministic parent/gate order.
 struct Candidate {
     /// `cost + depth * tie`, computed from the plain sum; see `Walk::tie`.
     key: f64,
@@ -60,7 +59,7 @@ impl Ord for Candidate {
 }
 
 /// One emitted node of the Horn DP graph. A sentence is the parent chain ending
-/// at this gate; storing that chain once avoids retaining a full sentence per row.
+/// at this gate.
 struct WalkRow {
     parent: Option<usize>,
     gate_rank: usize,
@@ -86,13 +85,12 @@ struct WalkState {
 /// time. Rows are emitted in the same order regardless of which queries cause
 /// growth, so results do not depend on thread timing.
 pub struct Walk {
-    /// Canonical gates: class and cost.
     slots: Vec<(Mono, f64)>,
     local_layer_cost: f64,
     max_depth: usize,
     /// Cost added per gate to the frontier order only. A cost such as 1/3 is
     /// not an f64, so sentences meant to cost the same can differ by rounding:
-    /// six of fl(1/3) sum to 2 - 2^-53, below 1 + 1/2 + 1/2, and exact
+    /// six of fl(1/3) sum to 2 - 2^-52, below 1 + 1/2 + 1/2, and exact
     /// arithmetic on the inputs agrees. Costs within `tie` per gate therefore
     /// count as equal, and the sentence with fewer gates comes first. Summing
     /// `d` steps of at most `step` each rounds by at most about
@@ -107,7 +105,7 @@ pub struct Walk {
 
 impl Walk {
     /// Seed the frontier with the depth-one sentences. Costs must be finite
-    /// and nonnegative and `max_depth` positive; `Binding::new` checks both.
+    /// and nonnegative and `max_depth` positive.
     pub fn new(slots: Vec<(Mono, f64)>, local_layer_cost: f64, max_depth: usize) -> Self {
         // Adding zero turns a cost of -0.0 into 0.0, so candidate order is
         // the order of cost values, which dominance relies on.
@@ -161,8 +159,6 @@ impl Walk {
         self.max_depth
     }
 
-    /// The walk's state. A panic while it is held poisons the lock, and
-    /// every later query on this walk then panics too.
     fn lock(&self) -> MutexGuard<'_, WalkState> {
         self.state.lock().expect("a walk query panicked")
     }
@@ -190,13 +186,12 @@ impl Walk {
             // Rows are emitted in candidate order, so an earlier row never has
             // a larger key and, at equal key, is never deeper. One that
             // contains this region, with a gate order that admits every
-            // extension of it, covers each continuation at no larger key, the
-            // cost with `tie` added per gate: max-plus maps
-            // preserve the componentwise order. So the whole pending subtree
-            // is redundant; `max_depth` only bounds the search. Any
-            // dominating row has a coefficient maximum no larger than this
-            // region's, so a new minimum rules out every prior row, avoiding
-            // a quadratic scan on long expanding sequences.
+            // extension of it, covers each continuation at no larger key:
+            // max-plus maps preserve the componentwise order. So the whole
+            // pending subtree is redundant; `max_depth` only bounds the search.
+            // Any dominating row has a coefficient maximum no larger than this
+            // region's, so a new minimum rules out every prior row, avoiding a
+            // quadratic scan on long expanding sequences.
             let max_bound = region.max_bound();
             let dominated = max_bound >= state.min_max_bound
                 && state.rows.iter().any(|row| {

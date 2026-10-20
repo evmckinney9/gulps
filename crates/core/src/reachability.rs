@@ -162,13 +162,10 @@ impl Region {
 
     /// Certify containment by componentwise comparison of lower bounds:
     /// sufficient for any states, and exact up to rounding for tightened ones;
-    /// see [`Region::tighten`]. `product` preserves this order, which makes it
-    /// safe for subtree pruning. Unlike [`covers`], it applies no tolerance.
-    /// The two states come from different sequences of floating-point
-    /// products and certificate sums, so a bound can round either way in its
-    /// last bit, and the test can report or miss a containment at that scale,
-    /// far below `MEMBERSHIP_TOL`, the precision at which selection decides
-    /// membership.
+    /// see [`Region::tighten`]. `product` preserves this order. Unlike
+    /// [`covers`], it applies no tolerance: a bound can round either way in
+    /// its last bit, so the test can report or miss a containment at that
+    /// scale, far below `MEMBERSHIP_TOL`.
     pub fn contains_by_bounds(&self, other: &Self) -> bool {
         self.0.iter().zip(&other.0).all(|(a, b)| a <= b)
     }
@@ -374,9 +371,9 @@ fn lower_bound(&[(i, a), (j, b), (l, c)]: &Certificate, rhs: &[f64]) -> f64 {
 }
 
 /// The strongest lower bound that `certificates` give from the right-hand
-/// sides `rhs`, for the lists of [`feasible_point`]. Several running maxima,
-/// rather than one, let the evaluations overlap. Inlined, a list of known
-/// length unrolls, with its indices and weights folded in.
+/// sides `rhs`. Several running maxima, rather than one, let the evaluations
+/// overlap. Inlined, a list of known length unrolls, with its indices and
+/// weights folded in.
 #[inline(always)]
 fn strongest(certificates: &[Certificate], rhs: &[f64]) -> f64 {
     let mut lanes = [f64::NEG_INFINITY; 4];
@@ -518,8 +515,7 @@ pub fn covers(region: &Region, point: &Region) -> bool {
 /// The classes reached after the second through the next-to-last gate of a
 /// sentence that the search found to reach `endpoint`, recovered backward:
 /// each is the [`feasible_point`] of its prefix region intersected with the
-/// next gate's preimage of the class after it. Empty for two gates. `realize`
-/// calls it only for sentences of two or more gates.
+/// next gate's preimage of the class after it. Empty for two gates.
 pub fn trajectory(gates: &[Mono], endpoint: Mono) -> Option<Vec<Mono>> {
     debug_assert!(gates.len() >= 2, "a trajectory needs at least two gates");
     let n = gates.len();

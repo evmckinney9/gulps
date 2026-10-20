@@ -1,5 +1,4 @@
-//! `LocalEquivalenceClass`: the Python-facing local-equivalence class, a frozen view
-//! over one core `Mono`; every numeric map delegates to gulps-core.
+//! `LocalEquivalenceClass`, a view over one core `Mono`.
 
 use std::hash::{Hash, Hasher};
 
@@ -50,7 +49,7 @@ impl Hash for LocalEquivalenceClass {
 }
 
 impl LocalEquivalenceClass {
-    /// The `CLASS_TOL` cell of each coordinate, for equality and hashing only.
+    /// The `CLASS_TOL` cell of each coordinate.
     #[allow(clippy::cast_possible_truncation)] // |c| <= 2, so the scaled cell is far inside i64
     fn cell(&self) -> [i64; 3] {
         self.mono

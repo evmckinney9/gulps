@@ -180,7 +180,7 @@ def _dd_exp(nodes: np.ndarray) -> np.ndarray:
 
 
 def _tetra_haar(verts: np.ndarray) -> float:
-    """Haar integral over one or more tetrahedra, evaluated as one array."""
+    """Haar integral over one or more tetrahedra."""
     tetra = np.asarray(verts, float).reshape(-1, 4, 3)
     det = np.abs(np.linalg.det(tetra[:, 1:] - tetra[:, :1]))
     keep = det >= _DEGENERATE_VOLUME

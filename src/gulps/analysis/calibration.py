@@ -18,8 +18,7 @@ A candidate is a pulse given as ``(cost, gate)``: a fractional power of a gate
 (see :func:`power_candidates`), or a point of a measured trajectory. Each set
 of candidates configures a :class:`~gulps.decomposition.GulpsDecomposer`,
 which we score by its Haar-average cost or its total cost for a supplied
-workload. If a set cannot reach the required targets within the depth bound,
-it scores infinity.
+workload.
 """
 
 from __future__ import annotations
@@ -68,8 +67,7 @@ class Calibration:
     """The candidates chosen by :func:`~gulps.analysis.calibration.calibrate`.
 
     Args:
-        budget_scores: The score at each budget from one through the requested
-            maximum.
+        budget_scores: The score at each budget, starting at one.
         budget_choices: The indices of the candidates chosen at each budget.
     """
 
@@ -117,7 +115,6 @@ class StrengthSweep:
 
 
 def _depth_error(max_depth: int, workload: object) -> SearchDepthError:
-    """No candidate covers the Haar measure or the workload within ``max_depth``."""
     covered = "the Haar measure" if workload is None else "the workload"
     return SearchDepthError(
         f"no candidate set covers {covered} within max_depth={max_depth}; increase max_depth"
