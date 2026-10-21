@@ -132,7 +132,7 @@ class CoverageReport:
 
         Args:
             names: A display name for each gate of the decomposer, in order.
-                Defaults to the gates' names.
+                Defaults to each gate's label, or its name.
         """
         from gulps.analysis.viz.polytope_viz import plot_search_tree
 

@@ -151,14 +151,14 @@ def plot_search_tree(
     Args:
         report: A coverage report.
         names: A display name for each gate of ``report.decomposer``, in order.
-            Defaults to the gates' names.
+            Defaults to each gate's label, or its name.
 
     Returns:
         The figure.
     """
     gates = report.decomposer.gates
     if names is None:
-        names = [_short(g.name) for g in gates]
+        names = [_short(g.label or g.name) for g in gates]
     slot = {id(g): i for i, g in enumerate(gates)}
     sentences = [tuple(slot[id(g)] for g in row.gates) for row in report.rows]
     nodes = [
