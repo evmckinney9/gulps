@@ -110,8 +110,7 @@ impl Decomposer {
         (self.walk.select(target)).ok_or(CompileError::DepthLimit(self.max_depth()))
     }
 
-    /// Select slot sequences without realizing them. Selection costs about
-    /// 0.1 us per target, too little to repay threads, so this is serial.
+    /// Select slot sequences without realizing them.
     pub fn select(&self, targets: &[Mono]) -> Result<Vec<Selection>, CompileError> {
         targets
             .iter()

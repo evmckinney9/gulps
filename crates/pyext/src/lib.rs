@@ -1,5 +1,5 @@
 //! Python bindings for gate classes, decomposers, and the transpiler pass,
-//! over the Qiskit C API. The synthesis algorithm lives in gulps-core.
+//! over the Qiskit C API.
 
 use gulps_core::{Mat4, Unitary};
 use numpy::{AllowTypeChange, IntoPyArray, PyArrayLike2, PyUntypedArrayMethods};

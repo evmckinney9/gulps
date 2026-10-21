@@ -119,7 +119,7 @@ fn convolve2(a: &[f64], b: &[f64]) -> [f64; 2] {
 
 impl Region {
     /// Compose QLR coefficient states. For fixed-gate sentences this computes
-    /// the exact reach bounds; arbitrary polytope composition is not implied.
+    /// the exact reach bounds.
     ///
     /// The rank-two basis is (1,p,p²,p³,s,ps), with
     /// p⁴=1, p²s=s, and s²=p+p³ after the codimension shift.
@@ -531,11 +531,9 @@ pub fn trajectory(gates: &[Mono], endpoint: Mono) -> Option<Vec<Mono>> {
 /// end of its range with x and y pinned. The certificates give each range end
 /// exactly, up to rounding. Pinning x low and y high tends to make bounds of
 /// the gate preimage tight. When they are, the next depth-two problem has its
-/// target on a boundary of the region its two inputs reach. The ends were
-/// chosen from the eight combinations by median solver time on quantum-volume
-/// and Haar workloads. `None` when the point fails the region's
-/// bounds or the alcove in floating point, as it does when the region is
-/// empty.
+/// target on a boundary of the region its two inputs reach. `None` when the
+/// point fails the region's bounds or the alcove in floating point, as it does
+/// when the region is empty.
 fn feasible_point(region: &Region) -> Option<[f64; 3]> {
     let mut rhs = [0.0; PINNED + 3];
     rhs[..PINNED].copy_from_slice(&region.constraint_rhs());
@@ -632,9 +630,7 @@ mod tests {
     fn every_subset_direction_can_exclude_an_alcove_point() {
         // Two fixed input pairs suffice to show that no output direction can
         // be dropped universally. Each target satisfies the alcove and the
-        // other 13 bounds, but fails the designated one. These rational
-        // witnesses were checked independently against the unshifted QLR rules.
-        // This is not a lower bound on the number of independent state parameters.
+        // other 13 bounds, but fails the designated one.
         let scaled = |v: [i32; 3], denominator: f64| v.map(|x| f64::from(x) / denominator);
         let regions = [
             sentence_region(&[scaled([51, 3, -13], 120.0), scaled([41, 37, -11], 172.0)]),

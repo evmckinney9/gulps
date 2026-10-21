@@ -1,4 +1,4 @@
-"""Batch projection preserves ordering across parallel execution and validates inputs."""
+"""The Weyl chart and batch projection of local-equivalence classes."""
 
 import numpy as np
 import pytest
