@@ -102,7 +102,6 @@ def pass_managers(target: Target) -> dict[str, PassManager]:
         Optimize1qGatesDecomposition(target=target),
     )
     consolidate = ConsolidateBlocks(force_consolidate=True)
-    # The decomposer is built from the same gates and durations as the Target.
     gulps = GulpsDecomposer(
         [RZZGate(angle) for _, angle, _ in GATES], [scale for *_, scale in GATES]
     )

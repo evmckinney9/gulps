@@ -1,6 +1,6 @@
-//! Everything that crosses Qiskit's C API: loading it, how a native gate is
-//! written, reading two-qubit unitaries from a DAG, and writing and
-//! substituting their replacements. DAG node ids never leave this module.
+//! Qiskit C API calls: writing native gates, reading two-qubit unitaries from
+//! a DAG, and substituting their replacements. DAG node ids never leave this
+//! module.
 
 use indexmap::map::Entry;
 use pyo3::exceptions::{PyNotImplementedError, PyRuntimeError, PyTypeError};

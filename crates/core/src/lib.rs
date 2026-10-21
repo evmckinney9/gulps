@@ -1,26 +1,17 @@
 //! Two-qubit synthesis over canonical gates. `class` holds the coordinates of
 //! gate classes; `kak` computes a unitary's class and frames; `reachability`
 //! and `search` select sentences; `compile` binds physical gates, realizes
-//! sentences, and lists the resulting circuits. Python and Qiskit interop live
-//! in gulps-pyext.
+//! sentences, and lists the resulting circuits.
 //!
 //! # Tolerances
 //!
 //! Computational reuse keys a class by its exact coordinates, with signed zero
 //! normalized (`Mono::key`). The Python class's equality uses `CLASS_TOL`
 //! cells instead, and two classes in one cell can lie on opposite sides of a
-//! reachability boundary and require different gate sequences. Do not key
-//! cost aggregation, synthesis reuse, or native-gate pruning by those cells.
+//! reachability boundary and require different gate sequences.
 //!
-//! Do not add a tolerance elsewhere. Derive it from one of these constants.
-//! Never round a coordinate to a grid. Rounding each coordinate separately
-//! breaks the linear relations between gates, and their products then miss
-//! the strata the solver needs within `can_sandwich::SPECTRAL_TOLERANCE`.
-//!
-//! `make bench` records each decomposition workload's worst entrywise error
-//! as `max_error` in the saved report's `extra_info`, and `make test` asserts
-//! it below `RECONSTRUCT_ATOL` in `tests/_common.py`. Re-measure there before
-//! changing any constant. The solver's precision floor is documented in the
+//! `tests/_common.py` checks reconstruction error against `RECONSTRUCT_ATOL`.
+//! The solver's precision floor is documented in the
 //! [can_sandwich](https://github.com/evmckinney9/can_sandwich) repository.
 
 use nalgebra::{Complex, Matrix2, Matrix4};
@@ -48,8 +39,6 @@ pub const CLASS_TOL: f64 = 1e-12;
 /// Reachability slack in phase turns: the solver's root-error ceiling
 /// `can_sandwich::SPECTRAL_TOLERANCE` divided by 2π.
 /// A small single-phase error `d` moves `exp(2πi m)` by approximately `2πd`.
-/// Subset sums and repeated products accumulate errors, so this scale is a
-/// numerical policy.
 pub const MEMBERSHIP_TOL: f64 = can_sandwich::SPECTRAL_TOLERANCE / std::f64::consts::TAU;
 /// Entrywise error accepted in `U†U − I` for an input matrix.
 pub const INPUT_ATOL: f64 = 1e-8;

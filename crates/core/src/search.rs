@@ -209,8 +209,7 @@ impl Walk {
             // max-plus maps preserve the componentwise order. So the whole
             // pending subtree is redundant; `max_depth` only bounds the search.
             // Any dominating row has a coefficient maximum no larger than this
-            // region's, so a new minimum rules out every prior row, avoiding a
-            // quadratic scan on long expanding sequences.
+            // region's, so a new minimum rules out every prior row.
             let max_bound = region.max_bound();
             let dominated = max_bound >= state.min_max_bound
                 && state.rows.iter().any(|row| {
