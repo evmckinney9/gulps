@@ -55,9 +55,10 @@ format:  ## Format Rust and Python in place
 	cargo fmt --manifest-path crates/Cargo.toml -p gulps-core -p gulps-pyext
 	$(VENV)/bin/pre-commit run --all-files
 
-lint:  ## Check formatting, clippy, and ruff without changing anything
+lint:  ## Check formatting, clippy, rustdoc, and ruff without changing anything
 	cargo fmt --manifest-path crates/Cargo.toml -p gulps-core -p gulps-pyext --check
 	cargo clippy --manifest-path crates/Cargo.toml --workspace --all-targets --all-features -- -D warnings
+	RUSTDOCFLAGS="-D warnings" cargo doc --manifest-path crates/Cargo.toml --no-deps --workspace --exclude qiskit-numerics
 	$(VENV)/bin/ruff check src tests docs
 	$(VENV)/bin/ruff format --check src tests docs
 
