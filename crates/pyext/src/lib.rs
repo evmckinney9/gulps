@@ -2,7 +2,7 @@
 //! over the Qiskit C API.
 
 use gulps_core::{Mat4, Unitary};
-use numpy::{AllowTypeChange, IntoPyArray, PyArrayLike2, PyUntypedArrayMethods};
+use numpy::{AllowTypeChange, IntoPyArray, PyArrayLikeDyn, PyUntypedArrayMethods};
 use pyo3::exceptions::{PyImportError, PyValueError};
 use pyo3::prelude::*;
 
@@ -43,7 +43,7 @@ const MAX_DEPTH: usize = 64;
 /// A 4x4 matrix from an array, or from anything `Operator` accepts.
 fn matrix(ob: &Bound<'_, PyAny>) -> PyResult<Mat4> {
     let array = ob
-        .extract::<PyArrayLike2<gulps_core::C64, AllowTypeChange>>()
+        .extract::<PyArrayLikeDyn<gulps_core::C64, AllowTypeChange>>()
         .or_else(|_| {
             ob.py()
                 .import("qiskit.quantum_info")?
@@ -59,7 +59,7 @@ fn matrix(ob: &Bound<'_, PyAny>) -> PyResult<Mat4> {
         )));
     }
     let array = array.as_array();
-    Ok(Mat4::from_fn(|r, c| array[(r, c)]))
+    Ok(Mat4::from_fn(|r, c| array[[r, c]]))
 }
 
 /// A two-qubit unitary: the canonical gate of a `LocalEquivalenceClass`, or
