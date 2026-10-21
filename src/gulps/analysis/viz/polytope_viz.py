@@ -32,6 +32,7 @@ from qiskit.quantum_info import Operator
 from gulps._accelerate import dominated_candidates
 from gulps.analysis.region import ReachableRegion
 from gulps.analysis.viz.weyl_chamber import draw_chamber
+from gulps.invariants import LocalEquivalenceClass
 
 if TYPE_CHECKING:
     import matplotlib.figure
@@ -262,8 +263,6 @@ def _trajectory(
     decomposer: GulpsDecomposer, target: Gate | Operator | np.ndarray
 ) -> tuple[list, list[np.ndarray]]:
     """The native gates of the compiled target and the Weyl class after each prefix."""
-    from gulps.invariants import LocalEquivalenceClass
-
     prefix, natives, classes = QuantumCircuit(2), [], [np.zeros(3)]
     for inst in decomposer(target).data:
         prefix.append(inst)
@@ -282,8 +281,6 @@ def _backward_step(
     ``q[i - 1]`` exactly when both regions do, and each orientation is chosen
     on its own.
     """
-    from gulps.invariants import LocalEquivalenceClass
-
     prefix = ReachableRegion.of(LocalEquivalenceClass.from_unitaries(natives[: i - 1]))
     inverse = LocalEquivalenceClass.from_unitary(natives[i - 1].inverse())
     backward = ReachableRegion.of([LocalEquivalenceClass(q[i]), inverse])
