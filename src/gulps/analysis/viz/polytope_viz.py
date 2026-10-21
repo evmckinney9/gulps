@@ -340,7 +340,6 @@ def plot_waypoints(
     for col, i in enumerate(range(n, 1, -1)):
         ax = fig.add_subplot(grid[0, col], projection="3d")
         draw_chamber(ax)
-        ax.set(xlabel="$c_1$", ylabel="$c_2$", zlabel="$c_3$")
         prefix, backward, meet = _backward_step(natives, q, i)
         _outline(ax, backward, _BACKWARD)
         _outline(ax, prefix, _PREFIX)
