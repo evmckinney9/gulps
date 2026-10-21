@@ -216,9 +216,7 @@ def plot_search_tree(
         x, y = position[sentence]
         fx, fy = to_fig.transform((x, y))
         ax = fig.add_axes((fx - w / 2, fy - h / 2 - 0.01, w, h), projection="3d")
-        draw_chamber(ax)
-        _draw_cell(ax, region, color)
-        _draw_cell(ax, region.rho, color)
+        plot_region(region, ax, color)
         ax.set_axis_off()
         label = _sentence([names[s] for s in sentence])
         symbol = {_ADDS: "●", _COVERED: "□", _PRUNED: "×"}[color]
