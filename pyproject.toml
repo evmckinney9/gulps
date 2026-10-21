@@ -60,7 +60,6 @@ docs = [
     "gulps[viz]",
     "sphinx",
     "jupyter-sphinx",
-    "myst-parser",
     "ipykernel",
     "sphinx-autobuild",
     "sphinx-copybutton>=0.5,<1",
