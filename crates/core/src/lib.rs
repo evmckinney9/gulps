@@ -40,8 +40,12 @@ pub const CLASS_TOL: f64 = 1e-12;
 /// `can_sandwich::SPECTRAL_TOLERANCE` divided by 2π.
 /// A small single-phase error `d` moves `exp(2πi m)` by approximately `2πd`.
 pub const MEMBERSHIP_TOL: f64 = can_sandwich::SPECTRAL_TOLERANCE / std::f64::consts::TAU;
-/// Entrywise error accepted in `U†U − I` for an input matrix.
+/// Tolerances of Qiskit's `is_unitary_matrix`, which `UnitaryGate` checks. An
+/// input matrix is accepted when every entry of `U†U − I` is within
+/// `INPUT_ATOL`, plus `INPUT_RTOL` on the diagonal.
 pub const INPUT_ATOL: f64 = 1e-8;
+/// See [`INPUT_ATOL`].
+pub const INPUT_RTOL: f64 = 1e-5;
 /// Entrywise `U†U − I` of a matrix unitary up to rounding: each entry sums
 /// eight real products of rounded entries. An input further from unitary is
 /// replaced by its closest unitary.
