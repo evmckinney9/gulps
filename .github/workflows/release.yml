@@ -33,8 +33,10 @@ jobs:
       matrix:
         os:
           - ubuntu-latest
+          - ubuntu-24.04-arm
           - windows-latest
           - macos-14
+          - macos-15-intel
     env:
       CIBW_BUILD: "cp310-*"
       CIBW_SKIP: "*-win32 *-musllinux* *_i686"
@@ -48,7 +50,9 @@ jobs:
       - uses: actions/checkout@v7
         with:
           submodules: recursive
-      - run: rustup toolchain install  # version from rust-toolchain.toml
+      # Linux wheels build in the manylinux container, which installs its own Rust.
+      - if: runner.os != 'Linux'
+        run: rustup toolchain install  # version from rust-toolchain.toml
       - name: Build wheels
         uses: pypa/cibuildwheel@v3.4.0
       - uses: actions/upload-artifact@v7
