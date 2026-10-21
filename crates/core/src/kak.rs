@@ -39,13 +39,12 @@ pub fn magic() -> Mat4 {
 /// a class.
 pub fn canonical_matrix(class: Mono) -> Mat4 {
     let q = magic();
-    let phases = canonical_phases(class.0).map(|t| C64::from_polar(1.0, PI * t));
-    q * Mat4::from_diagonal(&phases.into()) * q.adjoint()
+    q * Mat4::from_diagonal(&canonical_diagonal(class.0).into()) * q.adjoint()
 }
 
-/// The phases `θ` of `Q† D(m) Q = diag(exp(iπ θ))`, in half turns.
-fn canonical_phases([m0, m1, m2]: [f64; 3]) -> [f64; 4] {
-    [m1, m0, -m0 - m1 - m2, m2]
+/// The diagonal of `Q† D(m) Q`.
+fn canonical_diagonal([m0, m1, m2]: [f64; 3]) -> [C64; 4] {
+    [m1, m0, -m0 - m1 - m2, m2].map(|t| C64::from_polar(1.0, PI * t))
 }
 
 /// The rotations around a class's canonical gate:
@@ -159,7 +158,7 @@ impl Spectrum {
         if p.determinant() < 0.0 {
             p.column_mut(0).neg_mut();
         }
-        let lambda = canonical_phases(m).map(|turns| C64::from_polar(1.0, -PI * turns));
+        let lambda = canonical_diagonal(m).map(|z| z.conj());
         // V = (V P Λ̄) Λ Pᵀ, and Λ Pᵀ is unitary, so with `after` the real part of
         // V P Λ̄ the reconstruction misses V by the norm of the imaginary part. The
         // fold below is exact and changes this only by rounding.
@@ -224,8 +223,8 @@ pub fn relabel(from: Mono, to: Mono, reflected: bool) -> Result<Frame, CompileEr
     } else {
         (Frame::identity(), to)
     };
-    let unit = |class: Mono| canonical_phases(class.0).map(|t| C64::from_polar(1.0, PI * t));
-    let error = (unit(from).iter().zip(unit(to)))
+    let (from, to) = (canonical_diagonal(from.0), canonical_diagonal(to.0));
+    let error = (from.iter().zip(to))
         .map(|(a, b)| (a - b).norm_sqr())
         .sum::<f64>()
         .sqrt();
