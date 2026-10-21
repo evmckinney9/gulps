@@ -147,7 +147,7 @@ def _scorer(
             return (
                 coverage_report(decomposer).expected_cost
                 if workload is None
-                else sum(cost for cost, _ in decomposer.select(workload))
+                else sum((cost for cost, _ in decomposer.select(workload)), 0.0)
             )
         except SearchDepthError:
             return math.inf
