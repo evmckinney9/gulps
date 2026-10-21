@@ -42,10 +42,12 @@ pub const CLASS_TOL: f64 = 1e-12;
 pub const MEMBERSHIP_TOL: f64 = can_sandwich::SPECTRAL_TOLERANCE / std::f64::consts::TAU;
 /// Entrywise error accepted in `U†U − I` for an input matrix.
 pub const INPUT_ATOL: f64 = 1e-8;
+/// Entrywise `U†U − I` of a matrix unitary up to rounding: each entry sums
+/// eight real products of rounded entries. An input further from unitary is
+/// replaced by its closest unitary.
+pub(crate) const UNITARY_ROUNDING: f64 = 16.0 * f64::EPSILON;
 /// Working-precision error accepted when a factorization is recomposed: a KAK
-/// frame and a local rotation split into single-qubit gates (both Frobenius),
-/// and the entrywise input nonunitarity below which no closest-unitary repair
-/// is needed.
+/// frame and a local rotation split into single-qubit gates (both Frobenius).
 pub(crate) const RECONSTRUCT_TOL: f64 = 1e-13;
 /// Frobenius distance from the identity below which a compiled circuit omits
 /// a single-qubit gate. An emitted local gate is the product of at most three
