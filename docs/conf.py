@@ -30,7 +30,6 @@ extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.autosummary",
     "jupyter_sphinx",
-    "myst_parser",
     "sphinx.ext.napoleon",
     "sphinx.ext.githubpages",
     "sphinx_sitemap",
