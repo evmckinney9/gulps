@@ -12,10 +12,7 @@ from qiskit.synthesis import TwoQubitBasisDecomposer
 from gulps.decomposition import DecompositionError, GulpsDecomposer, SearchDepthError
 from gulps.invariants import LocalEquivalenceClass
 
-from ._common import (
-    assert_implements,
-    count_2q,
-)
+from ._common import assert_implements
 from .fixtures.isas import ISA_BUILDERS
 from .fixtures.targets import boundary_unitary, haar_unitary, local_pair
 
@@ -26,7 +23,7 @@ def test_local_target_emits_no_entangler():
         random_unitary(2, seed=42).data, random_unitary(2, seed=43).data
     )
     circuit = GulpsDecomposer([CXGate()], [1.0])(target)
-    assert count_2q(circuit) == 0
+    assert circuit.num_nonlocal_gates() == 0
     assert_implements(target, circuit)
 
 
@@ -105,7 +102,7 @@ def test_repeated_native_gate_at_reachability_boundary(power):
     target = CXGate().to_matrix()
     compiler = GulpsDecomposer([CXGate().power(power)], [0.125])
     circuit = compiler(target)
-    assert count_2q(circuit) == 8
+    assert circuit.num_nonlocal_gates() == 8
     assert_implements(target, circuit)
 
 
@@ -178,7 +175,7 @@ QISKIT_CX = TwoQubitBasisDecomposer(CXGate())
 def test_cx_count_matches_qiskit_optimal_decomposer(target):
     circuit = GulpsDecomposer([CXGate()], [1.0])(target)
     assert_implements(target, circuit)
-    assert count_2q(circuit) == QISKIT_CX.num_basis_gates(target)
+    assert circuit.num_nonlocal_gates() == QISKIT_CX.num_basis_gates(target)
 
 
 @pytest.mark.parametrize("isa_name", ISA_BUILDERS)
@@ -204,7 +201,7 @@ def test_every_isa_compiles_what_select_predicts(isa_name, kind):
     for target, (_, gates) in zip(targets, selected, strict=True):
         circuit = compiler(target)
         assert_implements(target, circuit)
-        assert count_2q(circuit) == len(gates)
+        assert circuit.num_nonlocal_gates() == len(gates)
         if kind.endswith("native"):
             assert len(gates) == 1
         # The second call reuses the realized sentence.
