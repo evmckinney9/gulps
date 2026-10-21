@@ -5,7 +5,7 @@ use crate::class::{Mono, exact_bits};
 use crate::kak::{Frame, LocalPair, Unitary, factor_rotation, relabel};
 use crate::reachability::Region;
 use crate::search::{Selection, Walk};
-use crate::{INPUT_ATOL, LOCAL_IDENTITY_TOL, Mat2};
+use crate::{INPUT_ATOL, INPUT_RTOL, LOCAL_IDENTITY_TOL, Mat2};
 use qiskit_numerics::IndexMap;
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -16,8 +16,8 @@ pub enum CompileError {
     DepthLimit(usize),
     /// A numerical step failed; the message names it.
     Synthesis(String),
-    /// An input matrix is not finite, or `U†U − I` has an entry above
-    /// `INPUT_ATOL`: the largest entry, or NaN.
+    /// An input matrix is not finite (NaN), or fails Qiskit's unitarity check
+    /// (see `INPUT_ATOL`): the largest entry of `U†U − I` beyond its tolerance.
     NotUnitary(f64),
 }
 
@@ -31,7 +31,7 @@ impl std::fmt::Display for CompileError {
             Self::Synthesis(message) => f.write_str(message),
             Self::NotUnitary(deviation) => write!(
                 f,
-                "matrix is not unitary within atol={INPUT_ATOL:e}: the largest entry of U†U − I is {deviation:.1e}"
+                "matrix is not unitary within atol={INPUT_ATOL:e}, rtol={INPUT_RTOL:e}: U†U − I has an entry of {deviation:.1e}"
             ),
         }
     }

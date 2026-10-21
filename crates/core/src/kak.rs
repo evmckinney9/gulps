@@ -3,7 +3,7 @@
 
 use crate::class::{Mono, monodromy};
 use crate::compile::CompileError;
-use crate::{C64, INPUT_ATOL, Mat2, Mat4, RECONSTRUCT_TOL, UNITARY_ROUNDING};
+use crate::{C64, INPUT_ATOL, INPUT_RTOL, Mat2, Mat4, RECONSTRUCT_TOL, UNITARY_ROUNDING};
 use nalgebra::{Matrix4, SymmetricEigen, Vector4};
 use ndarray::{ArrayView2, ShapeBuilder};
 use qiskit_numerics::linalg::{closest_unitary_faer, ndarray_to_faer};
@@ -76,7 +76,7 @@ const MIXES: [(f64, f64); 4] = [
 #[derive(Clone, Copy, Debug)]
 #[allow(clippy::large_enum_variant)] // Inputs are mostly matrices; boxing would allocate each one.
 pub enum Unitary {
-    /// A matrix, checked unitary within `INPUT_ATOL` when decomposed.
+    /// A matrix, checked unitary as Qiskit checks a `UnitaryGate` when decomposed.
     Matrix(Mat4),
     /// The canonical gate of a folded class.
     Canonical(Mono),
@@ -114,15 +114,23 @@ struct Spectrum {
 
 impl Spectrum {
     fn of(matrix: &Mat4) -> Result<Self, CompileError> {
-        // `max_error` folds with `f64::max`, which skips NaN, and the eigensolve
-        // iterates until convergence, so a non-finite entry must stop here.
-        let deviation = if matrix.iter().all(|z| z.re.is_finite() && z.im.is_finite()) {
-            max_error(&(matrix.adjoint() * matrix - Mat4::identity()))
-        } else {
-            f64::NAN
-        };
-        if deviation.is_nan() || deviation > INPUT_ATOL {
-            return Err(CompileError::NotUnitary(deviation));
+        // The eigensolve iterates until convergence, so a non-finite entry must stop here.
+        if !matrix.iter().all(|z| z.re.is_finite() && z.im.is_finite()) {
+            return Err(CompileError::NotUnitary(f64::NAN));
+        }
+        let identity = Mat4::identity();
+        let error = matrix.adjoint() * matrix - identity;
+        let deviation = max_error(&error);
+        if deviation > INPUT_ATOL {
+            // Qiskit's `allclose(U†U, I)`: each entry within `INPUT_ATOL + INPUT_RTOL |I|`.
+            let rejected = (error.iter().zip(identity.iter()))
+                .map(|(e, i)| (e.norm(), INPUT_ATOL + INPUT_RTOL * i.re))
+                .filter(|(entry, tol)| entry > tol)
+                .map(|(entry, _)| entry)
+                .reduce(f64::max);
+            if let Some(entry) = rejected {
+                return Err(CompileError::NotUnitary(entry));
+            }
         }
         let mut source = *matrix;
         if deviation > UNITARY_ROUNDING {
