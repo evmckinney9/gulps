@@ -3,7 +3,7 @@
 
 use crate::class::{Mono, monodromy};
 use crate::compile::CompileError;
-use crate::{C64, INPUT_ATOL, Mat2, Mat4, RECONSTRUCT_TOL};
+use crate::{C64, INPUT_ATOL, Mat2, Mat4, RECONSTRUCT_TOL, UNITARY_ROUNDING};
 use nalgebra::{Matrix4, SymmetricEigen, Vector4};
 use ndarray::{ArrayView2, ShapeBuilder};
 use qiskit_numerics::linalg::{closest_unitary_faer, ndarray_to_faer};
@@ -125,7 +125,7 @@ impl Spectrum {
             return Err(CompileError::NotUnitary(deviation));
         }
         let mut source = *matrix;
-        if deviation >= RECONSTRUCT_TOL {
+        if deviation > UNITARY_ROUNDING {
             let repaired = closest_unitary_faer(ndarray_to_faer(matrix_view(&source)))
                 .map_err(|error| CompileError::Synthesis(error.to_string()))?;
             source = Mat4::from_fn(|r, c| repaired[(r, c)]);
