@@ -27,7 +27,7 @@ from qiskit.utils import should_run_in_parallel
 from gulps.decomposition import GulpsDecomposer
 from gulps.transpiler import GulpsDecompositionPass, GulpsTranslationPlugin
 
-from ._common import assert_implements, count_2q, two_qubit_names
+from ._common import assert_implements, two_qubit_names
 from .fixtures.isas import ISA_BUILDERS
 from .fixtures.targets import haar_unitary, local_pair
 
@@ -164,7 +164,7 @@ def test_target_preserves_each_pairs_native_gate():
         circuit.unitary(gate.to_matrix(), pair)
     out = PassManager([GulpsDecompositionPass(target)]).run(circuit)
     assert_implements(circuit, out)
-    assert count_2q(out) == 2
+    assert out.num_nonlocal_gates() == 2
     for instruction in out.data:
         if instruction.operation.num_qubits == 2:
             pair = tuple(out.find_bit(q).index for q in instruction.qubits)
@@ -292,7 +292,7 @@ def test_translation_plugin_handles_single_qubit_wires():
     manager = GulpsTranslationPlugin().pass_manager(PassManagerConfig(target=target))
     output = manager.run(circuit)
     assert_implements(circuit, output)
-    assert count_2q(output) == 0
+    assert output.num_nonlocal_gates() == 0
     for instruction in output.data:
         qubits = tuple(output.find_bit(q).index for q in instruction.qubits)
         assert target.instruction_supported(instruction.operation.name, qubits)

@@ -13,11 +13,6 @@ def two_qubit_ops(circuit):
     return [op for op in circuit.data if op.operation.num_qubits == 2]
 
 
-def count_2q(circuit):
-    """Number of two-qubit instructions in a circuit."""
-    return len(two_qubit_ops(circuit))
-
-
 def two_qubit_names(circuit):
     """Names of the two-qubit instructions, the observable gate sequence."""
     return tuple(op.operation.name for op in two_qubit_ops(circuit))
