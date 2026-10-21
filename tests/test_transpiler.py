@@ -22,6 +22,7 @@ from qiskit.transpiler import (
     Target,
     TranspilerError,
 )
+from qiskit.utils import should_run_in_parallel
 
 from gulps.decomposition import GulpsDecomposer
 from gulps.transpiler import GulpsDecompositionPass, GulpsTranslationPlugin
@@ -36,8 +37,7 @@ def decomposer():
     return GulpsDecomposer([iSwapGate().power(1 / 2), CXGate()], [0.5, 1.0])
 
 
-@pytest.mark.parametrize("num_processes", [2])
-def test_compilation_uses_each_pairs_gate_costs(num_processes):
+def test_compilation_uses_each_pairs_gate_costs():
     target = Target(num_qubits=3)
     target.add_instruction(
         CXGate(),
@@ -56,9 +56,11 @@ def test_compilation_uses_each_pairs_gate_costs(num_processes):
     circuit = QuantumCircuit(3)
     circuit.cx(0, 1)
     circuit.cx(1, 2)
-    outputs = PassManager([GulpsDecompositionPass(target)]).run(
-        [circuit, circuit], num_processes=num_processes
-    )
+    # Worker processes receive the pass pickled.
+    with should_run_in_parallel.override(True):
+        outputs = PassManager([GulpsDecompositionPass(target)]).run(
+            [circuit, circuit], num_processes=2
+        )
     for out in outputs:
         assert_implements(circuit, out)
         assert two_qubit_names(out) == ("cx", "iswap", "iswap")
