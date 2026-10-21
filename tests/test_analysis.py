@@ -8,7 +8,7 @@ import pytest
 from qiskit import QuantumCircuit
 from qiskit.circuit.library import CXGate, SwapGate, UnitaryGate, iSwapGate
 
-from gulps.analysis.calibration import power_candidates, strength_sweep
+from gulps.analysis.calibration import calibrate, power_candidates, strength_sweep
 from gulps.analysis.coverage import coverage_report, empirical_cost
 from gulps.analysis.region import ReachableRegion
 from gulps.decomposition import GulpsDecomposer
@@ -107,7 +107,7 @@ def test_workload_counts_each_nested_branch_and_loop_body_once(width):
 BASE = iSwapGate()
 
 
-@pytest.mark.parametrize("search", [strength_sweep])
+@pytest.mark.parametrize("search", [strength_sweep, calibrate])
 def test_pulse_overhead_and_local_layers_have_different_counts(search):
     # Identity needs no pulse; CX needs one; SWAP needs three CX pulses.
     workload = [np.eye(4), CXGate(), SwapGate()]
