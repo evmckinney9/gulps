@@ -15,7 +15,7 @@
 use std::ops::Range;
 
 use crate::MEMBERSHIP_TOL;
-use crate::class::Mono;
+use crate::class::{Mono, monodromy_from_weyl, weyl_from_monodromy};
 
 /// A class's ordered phases x >= y >= z >= w, as bits of a phase subset.
 const X: u8 = 8;
@@ -192,6 +192,20 @@ const NORMALS: [[f64; 3]; 18] = {
             ALCOVE[j - FORMS.len()].0
         };
         j += 1;
+    }
+    normals
+};
+
+/// The normals of [`FORMS`] in Weyl coordinates: `n . m =
+/// monodromy_from_weyl(n) . c` for the monodromy `m` of Weyl `c`, because the
+/// change of basis is symmetric. They are the 3 axes (pairs) and the 4 even
+/// body diagonals (singles and triples), up to sign.
+const WEYL_FORMS: [[f64; 3]; 14] = {
+    let mut normals = [[0.0; 3]; 14];
+    let mut k = 0;
+    while k < normals.len() {
+        normals[k] = monodromy_from_weyl(&FORMS[k].0);
+        k += 1;
     }
     normals
 };
@@ -457,6 +471,123 @@ impl Region {
             }
         })
     }
+}
+
+impl Region {
+    /// The point of this region nearest to `target` in Weyl coordinates, or
+    /// `None` if the region is empty. The region must be tightened (see
+    /// [`Region::tighten`]) and `target` in the alcove.
+    ///
+    /// Weyl distance is the distance between phase vectors, so this is the
+    /// Euclidean projection onto the half-spaces of the forms. The alcove adds
+    /// none: if the projection broke `a >= b` for adjacent phases, swapping
+    /// them would give a point nearer the sorted target that still meets every
+    /// tight bound, since sorting makes a bound on a subset with `a` and
+    /// without `b` at least the bound with `b` for `a`; reflecting in
+    /// `x - w = 1` likewise. It uses the dual active-set method of Goldfarb
+    /// and Idnani (1983): start at `target`, add the most violated form, and
+    /// move along its normal less its component on the active normals,
+    /// dropping an active form whose multiplier would turn negative. In three
+    /// dimensions at most three are active. A form counts as violated beyond
+    /// half of `MEMBERSHIP_TOL`, so the point passes [`covers`], which
+    /// selection needs to find a row for it again.
+    #[expect(
+        dead_code,
+        reason = "approximate selection, its caller, is not built yet"
+    )]
+    pub(crate) fn nearest(&self, target: Mono) -> Option<Mono> {
+        let rhs: [f64; 14] = std::array::from_fn(|k| self.0[k] + FORMS[k].1);
+        let most_violated = |c: &[f64; 3]| {
+            (0..FORMS.len())
+                .map(|k| (dot(&WEYL_FORMS[k], c) - rhs[k], k))
+                .filter(|&(slack, _)| slack < -MEMBERSHIP_TOL / 2.0)
+                .min_by(|x, y| x.0.total_cmp(&y.0))
+                .map(|(_, j)| j)
+        };
+        let mut c = weyl_from_monodromy(&target.0);
+        let (mut active, mut multipliers, mut len) = ([0; 3], [0.0; 3], 0);
+        while let Some(added) = most_violated(&c) {
+            let a = WEYL_FORMS[added];
+            let mut multiplier = 0.0;
+            loop {
+                let (r, z) = split(&active[..len], &a);
+                let full = (len < 3 && dot(&z, &z) > f64::EPSILON)
+                    .then(|| (rhs[added] - dot(&a, &c)) / dot(&z, &a));
+                let partial = (0..len)
+                    .filter(|&k| r[k] > 0.0)
+                    .map(|k| (multipliers[k] / r[k], k))
+                    .min_by(|x, y| x.0.total_cmp(&y.0));
+                let (step, dropped) = match partial {
+                    Some((t, k)) if full.is_none_or(|f| t < f) => (t, Some(k)),
+                    // No step reaches the constraint: the region is empty.
+                    _ => (full?, None),
+                };
+                c = std::array::from_fn(|i| c[i] + step * z[i]);
+                for k in 0..len {
+                    multipliers[k] -= step * r[k];
+                }
+                multiplier += step;
+                if let Some(k) = dropped {
+                    len -= 1;
+                    active[k] = active[len];
+                    multipliers[k] = multipliers[len];
+                } else {
+                    active[len] = added;
+                    multipliers[len] = multiplier;
+                    len += 1;
+                    break;
+                }
+            }
+        }
+        let point = Mono(monodromy_from_weyl(&c));
+        debug_assert!(covers(self, &project(&point.0)));
+        Some(point)
+    }
+}
+
+/// The coefficients `r` of `a` on the [`WEYL_FORMS`] at `active`, which are
+/// independent, and the residual `z = a - sum_k r[k] n_k`, orthogonal to
+/// them. In three dimensions `z` is `a` itself, its rejection from one normal,
+/// its projection onto the cross product of two, or zero for three, and the
+/// coefficients of `a - z` follow by Cramer's rule.
+fn split(active: &[usize], a: &[f64; 3]) -> ([f64; 3], [f64; 3]) {
+    let n = |k: usize| &WEYL_FORMS[active[k]];
+    match *active {
+        [] => ([0.0; 3], *a),
+        [_] => {
+            let r = dot(n(0), a) / dot(n(0), n(0));
+            ([r, 0.0, 0.0], std::array::from_fn(|i| a[i] - r * n(0)[i]))
+        }
+        [_, _] => {
+            let u = cross(n(0), n(1));
+            let uu = dot(&u, &u);
+            let z = u.map(|v| v * dot(&u, a) / uu);
+            let fit = std::array::from_fn(|i| a[i] - z[i]);
+            let r = [
+                dot(&cross(&fit, n(1)), &u) / uu,
+                dot(&cross(n(0), &fit), &u) / uu,
+                0.0,
+            ];
+            (r, z)
+        }
+        _ => {
+            let volume = dot(n(0), &cross(n(1), n(2)));
+            let r = [
+                dot(a, &cross(n(1), n(2))),
+                dot(n(0), &cross(a, n(2))),
+                dot(n(0), &cross(n(1), a)),
+            ];
+            (r.map(|v| v / volume), [0.0; 3])
+        }
+    }
+}
+
+fn cross(a: &[f64; 3], b: &[f64; 3]) -> [f64; 3] {
+    [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ]
 }
 
 impl Mono {

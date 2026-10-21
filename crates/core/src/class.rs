@@ -11,7 +11,7 @@ pub fn weyl_from_monodromy(m: &[f64; 3]) -> [f64; 3] {
 }
 
 /// Weyl to monodromy coordinates.
-pub fn monodromy_from_weyl(&[c1, c2, c3]: &[f64; 3]) -> [f64; 3] {
+pub const fn monodromy_from_weyl(&[c1, c2, c3]: &[f64; 3]) -> [f64; 3] {
     [
         0.5 * (c1 + c2 - c3),
         0.5 * (c1 - c2 + c3),
