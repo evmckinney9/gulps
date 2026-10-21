@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools", "wheel", "setuptools_rust"]
+requires = ["setuptools>=77", "setuptools_rust"]
 build-backend = "setuptools.build_meta"
 
 [project.entry-points."qiskit.transpiler.translation"]
