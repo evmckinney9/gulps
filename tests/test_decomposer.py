@@ -20,9 +20,9 @@ from .fixtures.isas import ISA_BUILDERS
 from .fixtures.targets import boundary_unitary, haar_unitary, local_pair
 
 
-@pytest.mark.parametrize("scale", [1.0 + 4.9e-9], ids=["roundoff"])
-def test_local_target_emits_no_entangler(scale):
-    target = scale * np.kron(
+def test_local_target_emits_no_entangler():
+    # U†U − I is about 1e-8, just inside the input tolerance.
+    target = (1.0 + 4.9e-9) * np.kron(
         random_unitary(2, seed=42).data, random_unitary(2, seed=43).data
     )
     circuit = GulpsDecomposer([CXGate()], [1.0])(target)

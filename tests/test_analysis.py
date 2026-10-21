@@ -86,17 +86,15 @@ def test_calibration_preserves_distinct_targets_with_equal_class_keys():
     ).scores == (expected,)
 
 
-@pytest.mark.parametrize("width", [3])
-def test_workload_counts_each_nested_branch_and_loop_body_once(width):
-    circuit = QuantumCircuit(width, 1)
+def test_workload_counts_each_nested_branch_and_loop_body_once():
+    circuit = QuantumCircuit(3, 1)
     with circuit.for_loop(range(4)):
         with circuit.if_test((circuit.clbits[0], True)) as otherwise:
             circuit.cx(0, 1)
-            if width == 3:
-                circuit.cx(1, 2)
+            circuit.cx(1, 2)
         with otherwise:
             circuit.iswap(0, 1)
-    targets = [CXGate()] * (width - 1) + [iSwapGate()]
+    targets = [CXGate(), CXGate(), iSwapGate()]
     assert empirical_cost(REPORT_ISA, circuit) == empirical_cost(REPORT_ISA, targets)
     assert (
         strength_sweep(power_candidates(BASE, [0.5, 1.0]), workload=circuit).scores

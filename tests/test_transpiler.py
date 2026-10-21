@@ -32,11 +32,6 @@ from .fixtures.isas import ISA_BUILDERS
 from .fixtures.targets import haar_unitary, local_pair
 
 
-@pytest.fixture(scope="module")
-def decomposer():
-    return GulpsDecomposer([iSwapGate().power(1 / 2), CXGate()], [0.5, 1.0])
-
-
 def test_compilation_uses_each_pairs_gate_costs():
     target = Target(num_qubits=3)
     target.add_instruction(
@@ -67,17 +62,15 @@ def test_compilation_uses_each_pairs_gate_costs():
 
 
 @pytest.mark.parametrize(
-    "noise, circuit",
-    [(True, synth_qft_full(4)), (True, quantum_volume(4, seed=42))],
-    ids=["qft", "qv"],
+    "circuit", [synth_qft_full(4), quantum_volume(4, seed=42)], ids=["qft", "qv"]
 )
-def test_plugin_compiles_onto_a_generic_backend(noise, circuit):
-    """A fake backend with per-pair durations, or with none, transpiles exactly."""
+def test_plugin_compiles_onto_a_generic_backend(circuit):
+    """A fake backend with per-pair durations transpiles exactly."""
     from qiskit import transpile
     from qiskit.providers.fake_provider import GenericBackendV2
 
     backend = GenericBackendV2(
-        num_qubits=4, basis_gates=["cz", "rz", "sx", "x"], noise_info=noise, seed=1
+        num_qubits=4, basis_gates=["cz", "rz", "sx", "x"], noise_info=True, seed=1
     )
     out = transpile(
         circuit, backend=backend, translation_method="gulps", seed_transpiler=1
@@ -133,10 +126,9 @@ def test_invalid_target_cost_field_is_rejected():
         GulpsDecompositionPass(Target(num_qubits=2), cost="fidelity")
 
 
-@pytest.mark.parametrize("value", [np.nan])
-def test_invalid_target_costs_are_rejected(value):
+def test_invalid_target_costs_are_rejected():
     target = Target(num_qubits=2)
-    target.add_instruction(CXGate(), {(0, 1): InstructionProperties(duration=value)})
+    target.add_instruction(CXGate(), {(0, 1): InstructionProperties(duration=np.nan)})
     with pytest.raises(ValueError):
         GulpsDecompositionPass(target)
 
@@ -198,12 +190,9 @@ def test_control_flow_is_rejected_before_substitution():
     assert dag_to_circuit(dag) == circuit
 
 
-@pytest.mark.parametrize("multiple_groups", [False])
-def test_target_pass_rejects_an_unsupported_physical_pair(multiple_groups):
+def test_target_pass_rejects_an_unsupported_physical_pair():
     target = Target(num_qubits=3)
     target.add_instruction(CXGate(), {(0, 1): None})
-    if multiple_groups:
-        target.add_instruction(iSwapGate(), {(0, 2): None})
     circuit = QuantumCircuit(3)
     circuit.unitary(CXGate().to_matrix(), [1, 2])
     with pytest.raises(TranspilerError):
@@ -257,29 +246,21 @@ def test_global_instructions_join_the_native_gates_on_every_pair(pair_gate):
             )
 
 
-@pytest.mark.parametrize(
-    "boundary, reverse, basis",
-    [
-        ("barrier", True, ["rz", "sx", "x"]),
-        ("reset", False, ["rz", "sx", "x"]),
-    ],
-)
-def test_translation_plugin_preserves_boundaries(boundary, reverse, basis):
-    from qiskit.quantum_info import SuperOp
-
+@pytest.mark.parametrize("boundary, reverse", [("barrier", True), ("reset", False)])
+def test_translation_plugin_preserves_boundaries(boundary, reverse):
     pairs = [(0, 1), (1, 2)]
     if reverse:
         pairs = [tuple(reversed(pair)) for pair in pairs]
-    target = Target.from_configuration(basis_gates=[*basis, "reset"], num_qubits=3)
+    target = Target.from_configuration(
+        basis_gates=["rz", "sx", "x", "reset"], num_qubits=3
+    )
     target.add_instruction(CXGate(), dict.fromkeys(pairs))
     matrix = random_unitary(4, seed=192).data
     circuit = QuantumCircuit(3, global_phase=0.37)
     circuit.unitary(matrix, [0, 1])
     if boundary == "barrier":
         circuit.barrier(1)
-    elif boundary == "h":
-        circuit.h(1)
-    elif boundary == "reset":
+    else:
         circuit.reset(1)
     circuit.unitary(matrix, [1, 2])
     manager = GulpsTranslationPlugin().pass_manager(PassManagerConfig(target=target))
@@ -300,23 +281,18 @@ def test_translation_plugin_preserves_boundaries(boundary, reverse, basis):
             assert target.instruction_supported(instruction.operation.name, pair)
 
 
-@pytest.mark.parametrize("basis, with_entangler", [(["u"], False)])
-def test_translation_plugin_handles_single_qubit_wires(basis, with_entangler):
-    target = Target.from_configuration(
-        basis_gates=[*basis, *(["cx"] if with_entangler else [])], num_qubits=3
-    )
+def test_translation_plugin_handles_single_qubit_wires():
+    target = Target.from_configuration(basis_gates=["u"], num_qubits=3)
     circuit = QuantumCircuit(3, global_phase=0.31)
     circuit.h(0)
     circuit.rx(0.27, 0)
-    if with_entangler:
-        circuit.cx(0, 1)
     circuit.h(2)
     circuit.rx(-0.48, 2)
     circuit.rz(0.19, 2)
     manager = GulpsTranslationPlugin().pass_manager(PassManagerConfig(target=target))
     output = manager.run(circuit)
     assert_implements(circuit, output)
-    assert count_2q(output) == int(with_entangler)
+    assert count_2q(output) == 0
     for instruction in output.data:
         qubits = tuple(output.find_bit(q).index for q in instruction.qubits)
         assert target.instruction_supported(instruction.operation.name, qubits)
