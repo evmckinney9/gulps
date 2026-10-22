@@ -91,10 +91,10 @@ fn two_qubit_gate(kind: i32, num_params: usize) -> Option<QkGate> {
         .filter(|&k| k <= QkGate::RC3X as u8)?;
     // SAFETY: `QkGate` is `#[repr(u8)]` with contiguous discriminants `0..=RC3X`.
     let gate: QkGate = unsafe { std::mem::transmute(kind) };
-    // SAFETY: pure predicates on a valid gate value.
-    let fits = unsafe {
-        qk::qk_gate_num_qubits(gate) == 2 && qk::qk_gate_num_params(gate) as usize == num_params
-    };
+    // SAFETY: a pure query on a valid gate value.
+    let fits = unsafe { qk::qk_gate_num_qubits(gate) } == 2
+        // SAFETY: as above.
+        && unsafe { qk::qk_gate_num_params(gate) } as usize == num_params;
     fits.then_some(gate)
 }
 
@@ -175,14 +175,15 @@ fn borrow(dag: &Bound<'_, PyAny>) -> PyResult<*mut QkDag> {
 ///
 /// `dag` must be a live DAG holding `node`.
 unsafe fn operand_pair(dag: *const QkDag, node: u32) -> Option<(u32, u32)> {
-    // SAFETY: per the contract; two qubits are read only from a two-qubit node.
-    unsafe {
-        if qk::qk_dag_op_node_num_qubits(dag, node) != 2 {
-            return None;
-        }
-        let qubits = qk::qk_dag_op_node_qubits(dag, node);
-        Some((*qubits, *qubits.add(1)))
+    // SAFETY: per the contract.
+    if unsafe { qk::qk_dag_op_node_num_qubits(dag, node) } != 2 {
+        return None;
     }
+    // SAFETY: per the contract.
+    let qubits = unsafe { qk::qk_dag_op_node_qubits(dag, node) };
+    // SAFETY: a two-qubit node's qubits are two `u32`s, which `[u32; 2]` lays out.
+    let [q0, q1] = unsafe { *qubits.cast::<[u32; 2]>() };
+    Some((q0, q1))
 }
 
 /// The jobs of a DAG, in one topological traversal.
@@ -281,11 +282,10 @@ impl Replacement {
         // SAFETY: the name is a NUL-terminated literal.
         let qreg = unsafe { qk::qk_quantum_register_new(2, c"q".as_ptr()) };
         assert!(!qreg.is_null(), "qk_quantum_register_new returned null");
-        // SAFETY: the DAG copies the live register before it is freed.
-        unsafe {
-            qk::qk_dag_add_quantum_register(dag.0, qreg);
-            qk::qk_quantum_register_free(qreg);
-        }
+        // SAFETY: the DAG and the register are live; the DAG copies the register.
+        unsafe { qk::qk_dag_add_quantum_register(dag.0, qreg) };
+        // SAFETY: allocated above and not used after this.
+        unsafe { qk::qk_quantum_register_free(qreg) };
         let qubits = if flip { [1, 0] } else { [0, 1] };
         for op in target.ops() {
             match *op {
@@ -349,15 +349,18 @@ impl Replacement {
             // `qk_dag_to_python` takes ownership, so the guard must not free the DAG.
             let raw = std::mem::ManuallyDrop::new(self).0;
             // SAFETY: `py` proves attachment; `raw` is an owned, live DAG that nothing else frees.
-            let dag = unsafe { Bound::from_owned_ptr_or_err(py, qk::qk_dag_to_python(raw)) }?;
+            let ob = unsafe { qk::qk_dag_to_python(raw) };
+            // SAFETY: an owned reference, or null with the Python error set.
+            let dag = unsafe { Bound::from_owned_ptr_or_err(py, ob) }?;
             return Ok(dag.unbind());
         }
         // SAFETY: the guard owns a live DAG; conversion returns an owned circuit.
         let raw = unsafe { qk::qk_dag_to_circuit(self.0) };
         assert!(!raw.is_null(), "qk_dag_to_circuit returned null");
-        // SAFETY: transfer consumes the owned circuit and returns a new Python reference.
-        let circuit =
-            unsafe { Bound::from_owned_ptr_or_err(py, qk::qk_circuit_to_python_full(raw)) }?;
+        // SAFETY: `py` proves attachment; transfer consumes the owned circuit.
+        let ob = unsafe { qk::qk_circuit_to_python_full(raw) };
+        // SAFETY: an owned Python reference.
+        let circuit = unsafe { Bound::from_owned_ptr_or_err(py, ob) }?;
         Ok(circuit.unbind())
     }
 }
