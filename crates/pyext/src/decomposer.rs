@@ -37,10 +37,10 @@ pub fn compile_error(py: Python<'_>, err: CompileError, target: Option<Mono>) ->
         CompileError::NotUnitary(_) => return PyValueError::new_err(err.to_string()),
     };
     if let Some(mono) = target {
-        // Setting an attribute on a fresh exception instance cannot fail.
-        let _ = exception
+        exception
             .value(py)
-            .setattr("target", LocalEquivalenceClass { mono });
+            .setattr("target", LocalEquivalenceClass { mono })
+            .expect("a fresh exception instance accepts attributes");
     }
     exception
 }
