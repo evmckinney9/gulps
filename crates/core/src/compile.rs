@@ -45,12 +45,12 @@ impl Error for CompileError {}
 /// rotations around their class's canonical gate.
 pub struct Decomposer {
     walk: Walk,
-    /// Canonical sentences by exact class, kept across calls.
+    /// Realized sentences by exact class, kept across calls.
     realized: Mutex<IndexMap<[u64; 3], Arc<Realized>>>,
 }
 
 /// One class's canonical sentence, computed once by the first job that needs it.
-type Realized = OnceLock<Result<Canonical, CompileError>>;
+type Realized = OnceLock<Result<RealizedSentence, CompileError>>;
 
 /// Distinct classes a decomposer keeps before it clears them all. At most a few
 /// kilobytes each, so this bounds it to a few megabytes.
@@ -135,7 +135,7 @@ impl Decomposer {
     }
 
     /// Realize a class in canonical gates, whose frames are the identity.
-    fn realize(&self, raw_endpoint: Mono) -> Result<Canonical, CompileError> {
+    fn realize(&self, raw_endpoint: Mono) -> Result<RealizedSentence, CompileError> {
         let Selection {
             gates: slots,
             reflected,
@@ -181,7 +181,7 @@ impl Decomposer {
                 frame
             }
         };
-        Ok(Canonical {
+        Ok(RealizedSentence {
             slots,
             layers,
             frame,
@@ -310,13 +310,13 @@ impl Binding {
 
 /// A sentence of canonical gates: its slots, the local layers between them,
 /// and its endpoint frame.
-struct Canonical {
+struct RealizedSentence {
     slots: Vec<usize>,
     layers: Vec<LocalPair>,
     frame: Frame,
 }
 
-impl Canonical {
+impl RealizedSentence {
     /// The circuit for a target of this sentence's class with frame `target`,
     /// with the bound physical gates `G_k = A_k D(c_k) B_k` in place of the
     /// canonical ones: the layer between gates k and k+1 becomes
