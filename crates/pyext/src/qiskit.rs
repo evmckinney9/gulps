@@ -15,9 +15,12 @@ use crate::decomposer::compile_error;
 use crate::matrix;
 use crate::transpiler::Edge;
 
-/// How the C API writes one native gate.
+/// A native gate: its class and rotations, and how the C API writes it.
 #[derive(Clone)]
-pub struct NativeGate(Writer);
+pub struct NativeGate {
+    pub gate: Gate,
+    writer: Writer,
+}
 
 #[derive(Clone)]
 enum Writer {
@@ -30,17 +33,19 @@ enum Writer {
 
 impl NativeGate {
     /// A gate written as its matrix.
-    pub fn unitary(matrix: &Mat4) -> Self {
-        Self(Writer::Unitary(Box::new(std::array::from_fn(|i| {
-            matrix[(i / 4, i % 4)]
-        }))))
+    pub fn unitary(gate: Gate, matrix: &Mat4) -> Self {
+        let entries = std::array::from_fn(|i| matrix[(i / 4, i % 4)]);
+        Self {
+            gate,
+            writer: Writer::Unitary(Box::new(entries)),
+        }
     }
 
     /// Qiskit's synthesis convention (as `TwoQubitBasisDecomposer(gate: Gate)`):
     /// a standard gate under its own name is written by enum and a
     /// `UnitaryGate` by matrix. Any other gate is rejected: the C API writes
-    /// only those two. Returns the gate's class and frame with it.
-    pub fn from_python(gate: &Bound<'_, PyAny>) -> PyResult<(Gate, Self)> {
+    /// only those two.
+    pub fn from_python(gate: &Bound<'_, PyAny>) -> PyResult<Self> {
         let py = gate.py();
         if !gate.is_instance(&py.import("qiskit.circuit")?.getattr("Gate")?)? {
             return Err(PyTypeError::new_err(
@@ -61,7 +66,7 @@ impl NativeGate {
         {
             let params: Vec<f64> = gate.getattr("params")?.extract()?;
             two_qubit_gate(standard.call_method0("__int__")?.extract()?, params.len())
-                .map(|kind| Self(Writer::Standard(kind, params)))
+                .map(|kind| Writer::Standard(kind, params))
         } else {
             None
         };
@@ -76,10 +81,12 @@ impl NativeGate {
             )));
         }
         let matrix = matrix(gate)?;
-        let native = standard_gate.unwrap_or_else(|| Self::unitary(&matrix));
-        let gate =
+        let core =
             Gate::new(&Unitary::Matrix(matrix)).map_err(|err| compile_error(py, err, None))?;
-        Ok((gate, native))
+        Ok(match standard_gate {
+            Some(writer) => Self { gate: core, writer },
+            None => Self::unitary(core, &matrix),
+        })
     }
 }
 
@@ -315,7 +322,7 @@ impl Replacement {
     }
 
     fn native(&self, gate: &NativeGate, qubits: &[u32; 2]) {
-        match &gate.0 {
+        match &gate.writer {
             // SAFETY: the DAG is owned. `Writer::Standard` is built only in
             // `from_python`, after `two_qubit_gate` checked that `kind` acts on two
             // qubits and takes `params.len()` parameters, so the C API reads

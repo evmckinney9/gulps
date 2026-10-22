@@ -8,7 +8,7 @@ use pyo3::exceptions::{PyNotImplementedError, PyValueError};
 use pyo3::prelude::*;
 use qiskit_numerics::IndexMap;
 
-use gulps_core::{Binding, Decomposer, Gate};
+use gulps_core::{Binding, Decomposer};
 
 use crate::decomposer::GulpsDecomposer;
 use crate::qiskit::{self, NativeGate};
@@ -24,17 +24,17 @@ impl Edge {
     /// Bind gates, each with its cost, as [`Binding::new`]. Returns the edge
     /// and, for each slot, the input position of the gate filling it.
     pub fn new<'a>(
-        gates: &[(&(Gate, NativeGate), f64)],
+        gates: &[(&NativeGate, f64)],
         local_layer_cost: f64,
         max_depth: usize,
         existing: impl IntoIterator<Item = &'a Arc<Decomposer>>,
     ) -> Result<(Self, Vec<usize>), String> {
         let classes: Vec<_> = gates
             .iter()
-            .map(|&((gate, _), cost)| (gate, cost))
+            .map(|&(native, cost)| (&native.gate, cost))
             .collect();
         let (binding, order) = Binding::new(&classes, local_layer_cost, max_depth, existing)?;
-        let natives = order.iter().map(|&g| gates[g].0.1.clone()).collect();
+        let natives = order.iter().map(|&g| gates[g].0.clone()).collect();
         Ok((Self { binding, natives }, order))
     }
 }
@@ -63,7 +63,7 @@ impl BlockSynthesizer {
 /// A Target's two-qubit gates and their properties: those offered on every
 /// pair, and those listed per edge.
 struct TargetGates<'py> {
-    natives: BTreeMap<String, (Gate, NativeGate)>,
+    natives: BTreeMap<String, NativeGate>,
     global: BTreeMap<String, Bound<'py, PyAny>>,
     explicit: BTreeMap<(u32, u32), BTreeMap<String, Bound<'py, PyAny>>>,
 }
@@ -190,7 +190,7 @@ impl BlockSynthesizer {
         }
         // Each new edge may reuse the decomposer of one built before it.
         let mut built = Vec::<Arc<Edge>>::new();
-        let mut bind = |gates: &[(&(Gate, NativeGate), f64)], on| -> PyResult<Arc<Edge>> {
+        let mut bind = |gates: &[(&NativeGate, f64)], on| -> PyResult<Arc<Edge>> {
             let existing = built.iter().map(|e| e.binding.decomposer());
             let (edge, _) = Edge::new(gates, local_layer_cost, max_depth, existing)
                 .map_err(|message| edge_error(on, &message))?;

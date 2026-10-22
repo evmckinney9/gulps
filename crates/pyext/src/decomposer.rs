@@ -123,7 +123,7 @@ impl GulpsDecomposer {
                 objects.push(unitary_gate.call1((mat4_to_numpy(py, &matrix),))?);
                 let core = Gate::new(&Unitary::Canonical(class.get().mono))
                     .map_err(|err| compile_error(py, err, None))?;
-                natives.push((core, NativeGate::unitary(&matrix)));
+                natives.push(NativeGate::unitary(core, &matrix));
             } else {
                 natives.push(NativeGate::from_python(gate)?);
                 objects.push(gate.call_method0("copy")?);
