@@ -543,7 +543,10 @@ impl Region {
             }
         }
         let point = Mono(monodromy_from_weyl(&c));
-        debug_assert!(covers(self, &project(&point.0)));
+        debug_assert!(
+            covers(self, &project(&point.0)),
+            "the nearest point must pass the membership test"
+        );
         Some(point)
     }
 }
