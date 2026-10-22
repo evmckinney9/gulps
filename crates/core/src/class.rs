@@ -113,7 +113,8 @@ impl Mono {
     pub fn from_weyl(weyl: [f64; 3]) -> Self {
         let [a, b, c] = monodromy_from_weyl(&weyl);
         let (m, _) = monodromy(&[a, b, c, -a - b - c]);
-        Self::folded(&m).0
+        let (class, _reflected) = Self::folded(&m);
+        class
     }
 
     /// The other unfolded-chart representative of this local-equivalence orbit.

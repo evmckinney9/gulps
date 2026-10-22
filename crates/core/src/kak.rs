@@ -88,7 +88,10 @@ impl Unitary {
     /// The folded class.
     pub fn class(&self) -> Result<Mono, CompileError> {
         match self {
-            Self::Matrix(matrix) => Ok(Mono::folded(&Spectrum::of(matrix)?.m).0),
+            Self::Matrix(matrix) => {
+                let (class, _reflected) = Mono::folded(&Spectrum::of(matrix)?.m);
+                Ok(class)
+            }
             Self::Canonical(class) => Ok(*class),
         }
     }
