@@ -3,6 +3,8 @@
 
 use std::f64::consts::PI;
 
+use ndarray::ArrayView1;
+
 use crate::CLASS_TOL;
 
 /// Monodromy to Weyl coordinates.
@@ -72,7 +74,7 @@ impl Mono {
     /// Makhlin invariants `[Re(G1), Im(G1), Re(G2)]` of this class.
     pub fn makhlin(self) -> [f64; 3] {
         let weyl = weyl_from_monodromy(&self.0).map(|c| PI * c / 2.0);
-        qiskit_numerics::two_qubit_decompose::common::local_equivalence(weyl.as_slice().into())
+        qiskit_numerics::two_qubit_decompose::common::local_equivalence(ArrayView1::from(&weyl))
             .expect("local_equivalence has no error path")
     }
 

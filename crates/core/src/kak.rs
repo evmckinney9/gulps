@@ -40,7 +40,7 @@ pub fn magic() -> Mat4 {
 /// a class.
 pub fn canonical_matrix(class: Mono) -> Mat4 {
     let q = magic();
-    q * Mat4::from_diagonal(&canonical_diagonal(class.0).into()) * q.adjoint()
+    q * Mat4::from_diagonal(&Vector4::from(canonical_diagonal(class.0))) * q.adjoint()
 }
 
 /// The diagonal of `Q† D(m) Q`.
