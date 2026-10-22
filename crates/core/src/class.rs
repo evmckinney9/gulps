@@ -11,7 +11,7 @@ pub fn weyl_from_monodromy(m: &[f64; 3]) -> [f64; 3] {
 }
 
 /// Weyl to monodromy coordinates.
-pub fn monodromy_from_weyl(&[c1, c2, c3]: &[f64; 3]) -> [f64; 3] {
+pub const fn monodromy_from_weyl(&[c1, c2, c3]: &[f64; 3]) -> [f64; 3] {
     [
         0.5 * (c1 + c2 - c3),
         0.5 * (c1 - c2 + c3),
@@ -56,6 +56,19 @@ pub(crate) fn exact_bits(value: f64) -> u64 {
 pub struct Mono(pub [f64; 3]);
 
 impl Mono {
+    /// One minus the average gate fidelity of `D(self)` and `D(other)`:
+    /// `(3 - S) / 5` with `S = Σ_{i<j} cos(π Δ_i) cos(π Δ_j)` for the Weyl
+    /// difference `Δ`, since `|Tr(D(a)† D(b))|² = 4 + 4 S`.
+    #[expect(
+        dead_code,
+        reason = "approximate selection, its caller, is not built yet"
+    )]
+    pub(crate) fn infidelity(self, other: Self) -> f64 {
+        let (a, b) = (weyl_from_monodromy(&self.0), weyl_from_monodromy(&other.0));
+        let [x, y, z]: [f64; 3] = std::array::from_fn(|i| (PI * (b[i] - a[i])).cos());
+        (3.0 - (x * y + x * z + y * z)) / 5.0
+    }
+
     /// Makhlin invariants `[Re(G1), Im(G1), Re(G2)]` of this class.
     pub fn makhlin(self) -> [f64; 3] {
         let weyl = weyl_from_monodromy(&self.0).map(|c| PI * c / 2.0);

@@ -38,23 +38,23 @@ struct Candidate {
 }
 
 impl PartialEq for Candidate {
-    fn eq(&self, o: &Self) -> bool {
-        self.cmp(o) == Ordering::Equal
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other) == Ordering::Equal
     }
 }
 impl Eq for Candidate {}
 impl PartialOrd for Candidate {
-    fn partial_cmp(&self, o: &Self) -> Option<Ordering> {
-        Some(self.cmp(o))
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
     }
 }
 impl Ord for Candidate {
-    fn cmp(&self, o: &Self) -> Ordering {
+    fn cmp(&self, other: &Self) -> Ordering {
         self.key
-            .total_cmp(&o.key)
-            .then_with(|| self.depth.cmp(&o.depth))
-            .then_with(|| self.parent.cmp(&o.parent))
-            .then_with(|| self.gate_rank.cmp(&o.gate_rank))
+            .total_cmp(&other.key)
+            .then_with(|| self.depth.cmp(&other.depth))
+            .then_with(|| self.parent.cmp(&other.parent))
+            .then_with(|| self.gate_rank.cmp(&other.gate_rank))
     }
 }
 
