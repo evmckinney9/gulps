@@ -368,7 +368,10 @@ impl Certificates {
 
     /// The certificates as an array of length `N`, which must be `len`.
     const fn exact<const N: usize>(self) -> [Certificate; N] {
-        assert!(N == self.len);
+        assert!(
+            N == self.len,
+            "the array length must equal the certificate count"
+        );
         let mut exact = [[(PAD, 0.0); 3]; N];
         let mut c = 0;
         while c < N {
