@@ -154,7 +154,7 @@ pub fn circuit(
     compiled: &CompiledTarget,
     as_dag: bool,
 ) -> PyResult<Py<PyAny>> {
-    Replacement::build(natives, compiled, false).into_python(py, as_dag)
+    Replacement::build(natives, compiled, /* flip */ false).into_python(py, as_dag)
 }
 
 fn borrow(dag: &Bound<'_, PyAny>) -> PyResult<*mut QkDag> {
