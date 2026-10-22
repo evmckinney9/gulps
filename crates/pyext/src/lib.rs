@@ -1,7 +1,7 @@
 //! Python bindings for gate classes, decomposers, and the transpiler pass,
 //! over the Qiskit C API.
 
-use gulps_core::{Mat4, Unitary};
+use gulps_core::{C64, Mat4, Unitary};
 use numpy::{AllowTypeChange, IntoPyArray, PyArrayLikeDyn, PyUntypedArrayMethods};
 use pyo3::exceptions::{PyImportError, PyValueError};
 use pyo3::prelude::*;
@@ -43,7 +43,7 @@ const MAX_DEPTH: usize = 64;
 /// A 4x4 matrix from an array, or from anything `Operator` accepts.
 fn matrix(ob: &Bound<'_, PyAny>) -> PyResult<Mat4> {
     let array = ob
-        .extract::<PyArrayLikeDyn<gulps_core::C64, AllowTypeChange>>()
+        .extract::<PyArrayLikeDyn<C64, AllowTypeChange>>()
         .or_else(|_| {
             ob.py()
                 .import("qiskit.quantum_info")?

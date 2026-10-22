@@ -10,7 +10,7 @@ use crate::decomposer::compile_error;
 use crate::{mat4_to_numpy, unitary};
 
 use gulps_core::class::{self, Mono};
-use gulps_core::{Unitary, canonical_matrix, map_batch};
+use gulps_core::{CLASS_TOL, Unitary, canonical_matrix, map_batch};
 
 /// The local-equivalence class of a two-qubit gate.
 ///
@@ -54,7 +54,7 @@ impl LocalEquivalenceClass {
     fn cell(&self) -> [i64; 3] {
         self.mono
             .0
-            .map(|c| (c / gulps_core::CLASS_TOL).round_ties_even() as i64)
+            .map(|c| (c / CLASS_TOL).round_ties_even() as i64)
     }
 }
 
@@ -68,7 +68,7 @@ impl LocalEquivalenceClass {
         }
         // Either chart representative is accepted, up to the class tolerance.
         let [c1, c2, c3] = weyl;
-        let tol = gulps_core::CLASS_TOL;
+        let tol = CLASS_TOL;
         if !(c2 <= c1 + tol && c1 + c2 <= 1.0 + tol && c3.abs() <= c2 + tol) {
             return Err(PyValueError::new_err(format!(
                 "Weyl coordinates {weyl:?} are outside the canonical chamber: \

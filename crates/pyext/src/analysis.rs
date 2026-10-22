@@ -6,8 +6,7 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyTuple;
 
-use gulps_core::class;
-use gulps_core::{FORMS, Region, covers, project};
+use gulps_core::{FORMS, Region, class, covers, project, sentence_region};
 
 use crate::decomposer::{GulpsDecomposer, compile_error};
 use crate::invariants::LocalEquivalenceClass;
@@ -16,7 +15,7 @@ use crate::invariants::LocalEquivalenceClass;
 #[pyfunction]
 fn sentence_bounds(classes: Vec<LocalEquivalenceClass>) -> [f64; 14] {
     let monos: Vec<_> = classes.iter().map(|c| c.mono.0).collect();
-    gulps_core::sentence_region(&monos).0
+    sentence_region(&monos).0
 }
 
 /// The rows of an `(N, 3)` array.

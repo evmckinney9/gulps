@@ -3,10 +3,12 @@
 
 use crate::class::{Mono, exact_bits};
 use crate::kak::{Frame, LocalPair, Unitary, factor_rotation, relabel};
-use crate::reachability::Region;
+use crate::reachability::{Region, trajectory};
 use crate::search::{Selection, Walk};
 use crate::{INPUT_ATOL, LOCAL_IDENTITY_TOL, Mat2};
 use qiskit_numerics::IndexMap;
+use std::error::Error;
+use std::fmt;
 use std::sync::{Arc, Mutex, OnceLock};
 
 /// Selection and synthesis failures.
@@ -21,8 +23,8 @@ pub enum CompileError {
     NotUnitary(f64),
 }
 
-impl std::fmt::Display for CompileError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for CompileError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::DepthLimit(depth) => write!(
                 f,
@@ -36,7 +38,7 @@ impl std::fmt::Display for CompileError {
         }
     }
 }
-impl std::error::Error for CompileError {}
+impl Error for CompileError {}
 
 /// Decomposes targets into sentences of canonical gates, one class and cost
 /// per slot. Physical gates enter only through a [`Binding`], as their
@@ -150,12 +152,11 @@ impl Decomposer {
                 } else {
                     raw_endpoint
                 };
-                let waypoints =
-                    crate::reachability::trajectory(&classes, endpoint).ok_or_else(|| {
-                        CompileError::Synthesis(
-                            "could not reconstruct the selected sentence's trajectory".into(),
-                        )
-                    })?;
+                let waypoints = trajectory(&classes, endpoint).ok_or_else(|| {
+                    CompileError::Synthesis(
+                        "could not reconstruct the selected sentence's trajectory".into(),
+                    )
+                })?;
                 let mut prefix = *first;
                 let mut frame = Frame::identity();
                 // Maintain Q† P Q = frame.after · D(prefix) · frame.before · exp(i frame.phase).

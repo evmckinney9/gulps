@@ -9,7 +9,7 @@ use qiskit_numerics::IndexMap;
 use qiskit_pyo3_ffi as qk;
 use qk::{QkDag, QkExitCode, QkGate, QkOperationKind};
 
-use gulps_core::{C64, CompiledTarget, Gate, Mat4, Op, Unitary};
+use gulps_core::{C64, CompiledTarget, Gate, Mat4, Op, Unitary, map_batch};
 
 use crate::decomposer::compile_error;
 use crate::matrix;
@@ -134,7 +134,7 @@ pub unsafe fn replace<'a>(
     // About 4 to 13 µs per job: compiling, then building.
     let replacements = py
         .detach(|| {
-            gulps_core::map_batch(&jobs, 6_000, |job| {
+            map_batch(&jobs, 6_000, |job| {
                 let target = job.edge.binding.compile(&job.unitary)?;
                 Ok(Replacement::build(&job.edge.natives, &target, job.flip))
             })

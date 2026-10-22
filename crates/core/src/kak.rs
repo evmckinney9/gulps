@@ -8,6 +8,7 @@ use nalgebra::{Matrix4, SymmetricEigen, Vector4};
 use ndarray::{ArrayView2, ShapeBuilder};
 use qiskit_numerics::linalg::{closest_unitary_faer, ndarray_to_faer};
 use std::f64::consts::{FRAC_PI_2, PI, TAU};
+use std::ops::Mul;
 
 /// Single-qubit gates in Qiskit order: matrix = q1 ⊗ q0.
 #[derive(Clone, Copy, Debug)]
@@ -19,7 +20,7 @@ pub struct LocalPair {
 /// The product of two local gates, qubit by qubit, as the product of their
 /// rotations in the magic basis. A product equal to the identity rotation can
 /// be `(-I, -I)`.
-impl std::ops::Mul for LocalPair {
+impl Mul for LocalPair {
     type Output = Self;
     fn mul(self, rhs: Self) -> Self {
         Self {
