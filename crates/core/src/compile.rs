@@ -293,6 +293,7 @@ impl Binding {
     }
 
     /// The canonical decomposer the gates are bound to.
+    #[must_use]
     pub fn decomposer(&self) -> &Arc<Decomposer> {
         &self.decomposer
     }
@@ -370,11 +371,13 @@ pub struct CompiledTarget {
 
 impl CompiledTarget {
     /// The circuit in order: local gates and the slots of the native gates.
+    #[must_use]
     pub fn ops(&self) -> &[Op] {
         &self.ops
     }
 
     /// Global phase in radians.
+    #[must_use]
     pub fn phase(&self) -> f64 {
         self.phase
     }

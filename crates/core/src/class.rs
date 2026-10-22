@@ -8,11 +8,13 @@ use ndarray::ArrayView1;
 use crate::CLASS_TOL;
 
 /// Monodromy to Weyl coordinates.
+#[must_use]
 pub fn weyl_from_monodromy(m: &[f64; 3]) -> [f64; 3] {
     [m[0] + m[1], m[0] + m[2], m[1] + m[2]]
 }
 
 /// Weyl to monodromy coordinates.
+#[must_use]
 pub const fn monodromy_from_weyl(&[c1, c2, c3]: &[f64; 3]) -> [f64; 3] {
     [
         0.5 * (c1 + c2 - c3),
@@ -72,6 +74,7 @@ impl Mono {
     }
 
     /// Makhlin invariants `[Re(G1), Im(G1), Re(G2)]` of this class.
+    #[must_use]
     pub fn makhlin(self) -> [f64; 3] {
         let weyl = weyl_from_monodromy(&self.0).map(|c| PI * c / 2.0);
         qiskit_numerics::two_qubit_decompose::common::local_equivalence(ArrayView1::from(&weyl))
@@ -106,6 +109,7 @@ impl Mono {
 
     /// The class of Weyl coordinates of either chart representative, sorted
     /// and folded as the KAK sorts and folds a matrix's class.
+    #[must_use]
     pub fn from_weyl(weyl: [f64; 3]) -> Self {
         let [a, b, c] = monodromy_from_weyl(&weyl);
         let (m, _) = monodromy(&[a, b, c, -a - b - c]);

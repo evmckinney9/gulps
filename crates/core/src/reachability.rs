@@ -125,6 +125,7 @@ impl Region {
     /// p⁴=1, p²s=s, and s²=p+p³ after the codimension shift.
     /// These relations list QLR output support: two outputs contribute a
     /// candidate bound to each slot, and competing candidates combine by max.
+    #[must_use]
     pub fn product(&self, gate: &Self) -> Self {
         let (a, b) = (&self.0, &gate.0);
         // `fold` merges input slots that lead to the same output slot, keeping
@@ -156,6 +157,7 @@ impl Region {
     }
 
     /// The intersection: the stronger bound of each coefficient.
+    #[must_use]
     pub fn intersect(&self, other: &Self) -> Self {
         Self(std::array::from_fn(|k| self.0[k].max(other.0[k])))
     }
@@ -166,6 +168,7 @@ impl Region {
     /// [`covers`], it applies no tolerance: a bound can round either way in
     /// its last bit, so the test can report or miss a containment at that
     /// scale, far below `MEMBERSHIP_TOL`.
+    #[must_use]
     pub fn contains_by_bounds(&self, other: &Self) -> bool {
         self.0.iter().zip(&other.0).all(|(a, b)| a <= b)
     }
@@ -607,6 +610,7 @@ impl Mono {
 }
 
 /// Reachable bounds of a sentence.
+#[must_use]
 pub fn sentence_region(monos: &[[f64; 3]]) -> Region {
     monos
         .iter()
@@ -631,11 +635,13 @@ pub const BASE_STATE: Region = {
 };
 
 /// Shift the ordered eigenphase sums into the Horn coefficient basis.
+#[must_use]
 pub fn project(c: &[f64; 3]) -> Region {
     Region(FORMS.map(|(normal, shift)| dot(&normal, c) - shift))
 }
 
 /// Whether `point` satisfies every bound of `region` within `MEMBERSHIP_TOL`.
+#[must_use]
 pub fn covers(region: &Region, point: &Region) -> bool {
     (region.0.iter().zip(&point.0)).all(|(h, p)| *h <= p + MEMBERSHIP_TOL)
 }
