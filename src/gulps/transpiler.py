@@ -26,6 +26,7 @@ from qiskit.transpiler.exceptions import TranspilerError
 from qiskit.transpiler.passes import (
     BasisTranslator,
     ConsolidateBlocks,
+    HighLevelSynthesis,
     Optimize1qGatesDecomposition,
 )
 from qiskit.transpiler.preset_passmanagers.plugin import PassManagerStagePlugin
@@ -98,13 +99,15 @@ class GulpsDecompositionPass(TransformationPass):
         self._synthesizer = self._build()
 
     def run(self, dag: DAGCircuit) -> DAGCircuit:
-        """Compile every two-qubit block in place.
+        """Compile every two-qubit unitary in place.
+
+        Two-qubit gates without a matrix, such as gates with unbound
+        parameters, are left unchanged.
 
         Raises:
             TranspilerError: If a block is invalid for the configured gates or
                 cannot be compiled. Its ``__cause__`` is the original error.
-            NotImplementedError: If the DAG has control flow or two-qubit
-                gates without a matrix.
+            NotImplementedError: If the DAG has control flow.
         """
         try:
             return self._synthesizer.run(dag)
@@ -116,7 +119,11 @@ class GulpsTranslationPlugin(PassManagerStagePlugin):
     """Use GULPS for Qiskit's translation stage with ``translation_method="gulps"``.
 
     The plugin runs GULPS synthesis for the backend's Target, then Qiskit's
-    single-qubit optimization and basis translation.
+    single-qubit optimization, high-level synthesis and basis translation.
+
+    GULPS synthesizes only two-qubit gates with a matrix. Gates with unbound
+    parameters reach Qiskit's passes unchanged, which translate them without
+    minimizing the Target's cost.
     """
 
     def pass_manager(
@@ -133,6 +140,12 @@ class GulpsTranslationPlugin(PassManagerStagePlugin):
                 GulpsDecompositionPass(target),
                 Optimize1qGatesDecomposition(target=target),
                 # Symbolic gates have no matrix, so neither pass above rewrites them.
+                HighLevelSynthesis(
+                    target=target,
+                    use_qubit_indices=True,
+                    equivalence_library=SessionEquivalenceLibrary,
+                    qubits_initially_zero=pass_manager_config.qubits_initially_zero,
+                ),
                 BasisTranslator(SessionEquivalenceLibrary, None, target=target),
             ]
         )

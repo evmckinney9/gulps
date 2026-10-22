@@ -142,6 +142,14 @@ the Target.
    )
    print(dict(compiled.count_ops()))
 
+.. note::
+
+   GULPS does not synthesize gates with unbound parameters, such as
+   ``RZZGate(θ)`` or a ``PauliEvolutionGate`` with a symbolic time. The pass
+   leaves them unchanged, and the plugin's Qiskit passes translate them to the
+   Target without minimizing its cost. Bind the parameters before
+   transpiling to have GULPS synthesize those blocks.
+
 .. warning::
 
    Optimization levels 2 and 3 can undo the least-cost sentences. Their
@@ -191,6 +199,11 @@ of a preset pass manager with the plugin's passes:
    pm.translation = PassManager([
        GulpsDecompositionPass(target, cost="error", local_layer_cost=1e-4),
        Optimize1qGatesDecomposition(target=target),
+       HighLevelSynthesis(
+           target=target,
+           use_qubit_indices=True,
+           equivalence_library=SessionEquivalenceLibrary,
+       ),
        BasisTranslator(SessionEquivalenceLibrary, None, target=target),
    ])
    print(dict(pm.run(circuit).count_ops()))
