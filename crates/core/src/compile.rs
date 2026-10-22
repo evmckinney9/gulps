@@ -4,7 +4,7 @@
 use crate::class::{Mono, exact_bits};
 use crate::kak::{Frame, LocalPair, Unitary, factor_rotation, relabel};
 use crate::reachability::{Region, trajectory};
-use crate::search::{Selection, Walk};
+use crate::search::{Selection, Slot, Walk};
 use crate::{INPUT_ATOL, LOCAL_IDENTITY_TOL, Mat2};
 use qiskit_numerics::IndexMap;
 use std::error::Error;
@@ -58,7 +58,7 @@ const REALIZED_CAP: usize = 1024;
 
 impl Decomposer {
     /// Slots are `(class, cost)` with finite, nonnegative costs; `max_depth` is positive.
-    fn new(slots: Vec<(Mono, f64)>, local_layer_cost: f64, max_depth: usize) -> Self {
+    fn new(slots: Vec<Slot>, local_layer_cost: f64, max_depth: usize) -> Self {
         Self {
             walk: Walk::new(slots, local_layer_cost, max_depth),
             realized: Mutex::default(),
@@ -94,7 +94,7 @@ impl Decomposer {
     }
 
     /// The canonical gates: class and cost.
-    pub fn slots(&self) -> &[(Mono, f64)] {
+    pub fn slots(&self) -> &[Slot] {
         self.walk.slots()
     }
 
@@ -141,7 +141,7 @@ impl Decomposer {
             reflected,
             ..
         } = self.select_one(raw_endpoint)?;
-        let classes: Vec<Mono> = slots.iter().map(|&s| self.slots()[s].0).collect();
+        let classes: Vec<Mono> = slots.iter().map(|&s| self.slots()[s].class).collect();
         let mut layers = Vec::new();
         let frame = match classes.as_slice() {
             [] => relabel(Mono([0.0; 3]), raw_endpoint, reflected)?,
@@ -268,10 +268,10 @@ impl Binding {
             }
             let mut unused = kept.clone();
             (decomposer.slots().iter())
-                .map(|&(class, cost)| {
+                .map(|slot| {
                     let i = unused.iter().position(|&g| {
-                        exact_bits(gates[g].1) == exact_bits(cost)
-                            && gates[g].0.class.key() == class.key()
+                        exact_bits(gates[g].1) == exact_bits(slot.cost)
+                            && gates[g].0.class.key() == slot.class.key()
                     })?;
                     Some(unused.swap_remove(i))
                 })
@@ -282,7 +282,10 @@ impl Binding {
             None => {
                 let slots = kept
                     .iter()
-                    .map(|&g| (gates[g].0.class, gates[g].1))
+                    .map(|&g| Slot {
+                        class: gates[g].0.class,
+                        cost: gates[g].1,
+                    })
                     .collect();
                 let decomposer = Decomposer::new(slots, local_layer_cost, max_depth);
                 (Arc::new(decomposer), kept)

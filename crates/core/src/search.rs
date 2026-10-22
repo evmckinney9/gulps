@@ -14,6 +14,15 @@ use std::sync::{Mutex, MutexGuard};
 use crate::class::Mono;
 use crate::reachability::{BASE_STATE, Region, covers, project};
 
+/// A canonical gate of the ISA and its cost.
+#[derive(Clone, Copy, Debug)]
+pub struct Slot {
+    /// The gate's class.
+    pub class: Mono,
+    /// The gate's cost.
+    pub cost: f64,
+}
+
 /// A covering sequence; gate indices refer to the configured ISA.
 pub struct Selection {
     /// Slot indices.
@@ -98,7 +107,7 @@ impl WalkState {
 /// time. Rows are emitted in the same order regardless of which queries cause
 /// growth, so results do not depend on thread timing.
 pub struct Walk {
-    slots: Vec<(Mono, f64)>,
+    slots: Vec<Slot>,
     local_layer_cost: f64,
     max_depth: usize,
     /// Cost added per gate to the frontier order only. A cost such as 1/3 is
@@ -119,18 +128,26 @@ pub struct Walk {
 impl Walk {
     /// Seed the frontier with the depth-one sentences. Costs must be finite
     /// and nonnegative and `max_depth` positive.
-    pub fn new(slots: Vec<(Mono, f64)>, local_layer_cost: f64, max_depth: usize) -> Self {
+    pub fn new(slots: Vec<Slot>, local_layer_cost: f64, max_depth: usize) -> Self {
         // Adding zero turns a cost of -0.0 into 0.0, so candidate order is
         // the order of cost values, which dominance relies on.
         let slots: Vec<_> = (slots.into_iter())
-            .map(|(class, cost)| (class, cost + 0.0))
+            .map(|slot| Slot {
+                cost: slot.cost + 0.0,
+                ..slot
+            })
             .collect();
         let local_layer_cost = local_layer_cost + 0.0;
-        let step_max = slots.iter().map(|s| s.1).fold(0.0, f64::max) + local_layer_cost;
+        let step_max = slots.iter().map(|slot| slot.cost).fold(0.0, f64::max) + local_layer_cost;
         #[allow(clippy::cast_precision_loss)] // depths are far below 2^26, so squares are exact
         let tie = (max_depth * max_depth) as f64 * f64::EPSILON * step_max;
         let mut gates: Vec<usize> = (0..slots.len()).collect();
-        gates.sort_by(|&a, &b| slots[a].1.total_cmp(&slots[b].1).then_with(|| a.cmp(&b)));
+        gates.sort_by(|&a, &b| {
+            slots[a]
+                .cost
+                .total_cmp(&slots[b].cost)
+                .then_with(|| a.cmp(&b))
+        });
         let mut walk = Self {
             slots,
             local_layer_cost,
@@ -148,7 +165,7 @@ impl Walk {
     fn seeds(&self) -> BinaryHeap<Reverse<Candidate>> {
         (self.gates.iter().enumerate())
             .map(|(gate_rank, &slot)| {
-                let cost = self.slots[slot].1 + self.local_layer_cost + self.local_layer_cost;
+                let cost = self.slots[slot].cost + self.local_layer_cost + self.local_layer_cost;
                 Reverse(Candidate {
                     key: cost + self.tie,
                     cost,
@@ -161,7 +178,7 @@ impl Walk {
     }
 
     /// Canonical gates: class and cost.
-    pub fn slots(&self) -> &[(Mono, f64)] {
+    pub fn slots(&self) -> &[Slot] {
         &self.slots
     }
 
@@ -189,8 +206,7 @@ impl Walk {
             parent,
         })) = state.heap.pop()
         {
-            let (class, _) = self.slots[self.gates[gate_rank]];
-            let native = project(class);
+            let native = project(self.slots[self.gates[gate_rank]].class);
             // Rows store tightened states, so the dominance test below is
             // exact up to rounding; see `Region::tighten`. A one-gate region
             // is a single point whose subset sums are already tight.
@@ -231,7 +247,8 @@ impl Walk {
             if depth < self.max_depth {
                 // Reachability is order-invariant, so enumerate each gate multiset once.
                 for next_rank in gate_rank..self.gates.len() {
-                    let cost = cost + (self.slots[self.gates[next_rank]].1 + self.local_layer_cost);
+                    let cost =
+                        cost + (self.slots[self.gates[next_rank]].cost + self.local_layer_cost);
                     #[allow(clippy::cast_precision_loss)] // depth <= max_depth, far below 2^52
                     let key = cost + (depth + 1) as f64 * self.tie;
                     state.heap.push(Reverse(Candidate {
@@ -371,7 +388,9 @@ mod tests {
         let mut saw_pruning = false;
         for costs in [[1.0, 1.0, 3.0], [0.0, 2.0, 1.0], [3.0, 1.0, 0.0]] {
             for local_layer_cost in [0.0, 0.25] {
-                let slots = monos.iter().copied().zip(costs).collect();
+                let slots = (monos.iter().zip(costs))
+                    .map(|(&class, cost)| Slot { class, cost })
+                    .collect();
                 // No queue, canonical gate order, or dominance pruning:
                 // enumerate every word and retain every reachable region.
                 let mut exhaustive = vec![(BASE_STATE, local_layer_cost)];
@@ -412,7 +431,11 @@ mod tests {
     #[test]
     fn long_homogeneous_walk_preserves_cost_endpoint_and_coverage_rows() {
         let mono = Mono([1.0 / 1200.0, 1.0 / 1200.0, -1.0 / 1200.0]);
-        let walk = Walk::new(vec![(mono, 0.1)], 0.003, 1024);
+        let slot = Slot {
+            class: mono,
+            cost: 0.1,
+        };
+        let walk = Walk::new(vec![slot], 0.003, 1024);
         // A first call grows only to CX; the second reuses those rows en route to SWAP.
         for (depth, target) in [
             (300, Mono([0.25, 0.25, -0.25])),
@@ -433,7 +456,7 @@ mod tests {
             assert_eq!(sentence, selection.gates);
             assert_eq!(coverage_cost.to_bits(), selection.cost.to_bits());
         }
-        let shallow = Walk::new(vec![(mono, 0.1)], 0.003, 299);
+        let shallow = Walk::new(vec![slot], 0.003, 299);
         assert!(shallow.select(Mono([0.25, 0.25, -0.25])).is_none());
     }
 }

@@ -176,7 +176,7 @@ impl GulpsDecomposer {
                 .decomposer()
                 .slots()
                 .iter()
-                .map(|&(_, cost)| cost),
+                .map(|slot| slot.cost),
         )
     }
 
