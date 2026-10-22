@@ -58,8 +58,8 @@ impl Ord for Candidate {
     }
 }
 
-/// One emitted node of the Horn DP graph. A sentence is the parent chain ending
-/// at this gate.
+/// One node of the Horn DP graph, emitted or discarded. A sentence is the
+/// parent chain ending at this gate.
 struct WalkRow {
     parent: Option<usize>,
     gate_rank: usize,
@@ -76,11 +76,8 @@ struct WalkState {
     /// Smallest coefficient maximum among emitted rows.
     min_max_bound: f64,
     /// The candidates discarded as dominated, when recorded.
-    discarded: Option<Vec<Discarded>>,
+    discarded: Option<Vec<WalkRow>>,
 }
-
-/// A candidate discarded as dominated: its parent row, gate rank, cost, and region.
-type Discarded = (Option<usize>, usize, f64, Region);
 
 impl WalkState {
     fn new(heap: BinaryHeap<Reverse<Candidate>>) -> Self {
@@ -197,9 +194,15 @@ impl Walk {
             // Rows store tightened states, so the dominance test below is
             // exact up to rounding; see `Region::tighten`. A one-gate region
             // is a single point whose subset sums are already tight.
-            let region = match parent {
-                Some(p) => state.rows[p].region.product(&native).tighten(),
-                None => native,
+            let node = WalkRow {
+                parent,
+                gate_rank,
+                depth,
+                cost,
+                region: match parent {
+                    Some(p) => state.rows[p].region.product(&native).tighten(),
+                    None => native,
+                },
             };
 
             // Rows are emitted in candidate order, so an earlier row never has
@@ -210,27 +213,21 @@ impl Walk {
             // pending subtree is redundant; `max_depth` only bounds the search.
             // Any dominating row has a coefficient maximum no larger than this
             // region's, so a new minimum rules out every prior row.
-            let max_bound = region.max_bound();
+            let max_bound = node.region.max_bound();
             let dominated = max_bound >= state.min_max_bound
                 && state.rows.iter().any(|row| {
-                    row.gate_rank <= gate_rank && row.region.contains_by_bounds(&region)
+                    row.gate_rank <= gate_rank && row.region.contains_by_bounds(&node.region)
                 });
             if dominated {
                 if let Some(discarded) = &mut state.discarded {
-                    discarded.push((parent, gate_rank, cost, region));
+                    discarded.push(node);
                 }
                 continue;
             }
 
             state.min_max_bound = state.min_max_bound.min(max_bound);
             let row = state.rows.len();
-            state.rows.push(WalkRow {
-                parent,
-                gate_rank,
-                depth,
-                cost,
-                region,
-            });
+            state.rows.push(node);
             if depth < self.max_depth {
                 // Reachability is order-invariant, so enumerate each gate multiset once.
                 for next_rank in gate_rank..self.gates.len() {
@@ -274,13 +271,11 @@ impl Walk {
             return None;
         }
         let discarded = replay.discarded.take().unwrap_or_default();
-        let discarded = discarded
-            .into_iter()
-            .map(|(parent, gate_rank, cost, region)| {
-                let mut sentence = parent.map_or_else(Vec::new, |p| self.sentence(&replay, p));
-                sentence.push(self.gates[gate_rank]);
-                (sentence, cost, region)
-            });
+        let discarded = discarded.into_iter().map(|node| {
+            let mut sentence = (node.parent).map_or_else(Vec::new, |p| self.sentence(&replay, p));
+            sentence.push(self.gates[node.gate_rank]);
+            (sentence, node.cost, node.region)
+        });
         Some(discarded.collect())
     }
 
