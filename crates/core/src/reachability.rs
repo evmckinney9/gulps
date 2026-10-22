@@ -547,7 +547,7 @@ impl Region {
         }
         let point = Mono(monodromy_from_weyl(&c));
         debug_assert!(
-            covers(self, &project(&point.0)),
+            covers(self, &project(point)),
             "the nearest point must pass the membership test"
         );
         Some(point)
@@ -601,26 +601,26 @@ fn cross(a: &[f64; 3], b: &[f64; 3]) -> [f64; 3] {
 
 impl Mono {
     /// Spectra that can precede this gate and reach `next`, with fixed lifts.
-    pub(crate) fn preimage(self, next: &[f64; 3]) -> Region {
+    pub(crate) fn preimage(self, next: Mono) -> Region {
         let [x, y, z] = self.0;
         // Reverse a spectral product using the inverse's ordered phases
         // (-w, -z, -y, -x), where w = -x-y-z.
-        project(next).product(&project(&[x + y + z, -z, -y]))
+        project(next).product(&project(Mono([x + y + z, -z, -y])))
     }
 }
 
 /// Reachable bounds of a sentence.
 #[must_use]
-pub fn sentence_region(monos: &[[f64; 3]]) -> Region {
-    monos
+pub fn sentence_region(classes: &[Mono]) -> Region {
+    classes
         .iter()
-        .fold(BASE_STATE, |state, mono| state.product(&project(mono)))
+        .fold(BASE_STATE, |state, &class| state.product(&project(class)))
 }
 
 /// Multiplicative identity for the QLR recurrence (the empty sentence).
 /// Only the subsets of codimension zero, w, zw, and yzw, have finite lower
 /// bounds, all zero. Together with the alcove these force the identity
-/// spectrum. This coefficient state differs from `project([0, 0, 0])`, which
+/// spectrum. This coefficient state differs from `project(Mono([0.0; 3]))`, which
 /// supplies every subset bound.
 pub const BASE_STATE: Region = {
     let mut bounds = [f64::NEG_INFINITY; 14];
@@ -636,8 +636,8 @@ pub const BASE_STATE: Region = {
 
 /// Shift the ordered eigenphase sums into the Horn coefficient basis.
 #[must_use]
-pub fn project(c: &[f64; 3]) -> Region {
-    Region(FORMS.map(|(normal, shift)| dot(&normal, c) - shift))
+pub fn project(class: Mono) -> Region {
+    Region(FORMS.map(|(normal, shift)| dot(&normal, &class.0) - shift))
 }
 
 /// Whether `point` satisfies every bound of `region` within `MEMBERSHIP_TOL`.
@@ -656,14 +656,14 @@ pub fn trajectory(gates: &[Mono], endpoint: Mono) -> Option<Vec<Mono>> {
     let mut prefix = BASE_STATE;
     let mut prefixes = vec![prefix];
     for gate in &gates[..n - 1] {
-        prefix = prefix.product(&project(&gate.0));
+        prefix = prefix.product(&project(*gate));
         prefixes.push(prefix);
     }
     let mut interior = vec![Mono([0.0; 3]); n.saturating_sub(2)];
-    let mut next = endpoint.0;
+    let mut next = endpoint;
     for i in (2..n).rev() {
-        let point = feasible_point(&prefixes[i].intersect(&gates[i].preimage(&next)))?;
-        interior[i - 2] = Mono(point);
+        let point = feasible_point(&prefixes[i].intersect(&gates[i].preimage(next)))?;
+        interior[i - 2] = point;
         next = point;
     }
     Some(interior)
@@ -677,18 +677,18 @@ pub fn trajectory(gates: &[Mono], endpoint: Mono) -> Option<Vec<Mono>> {
 /// target on a boundary of the region its two inputs reach. `None` when the
 /// point fails the region's bounds or the alcove in floating point, as it does
 /// when the region is empty.
-fn feasible_point(region: &Region) -> Option<[f64; 3]> {
+fn feasible_point(region: &Region) -> Option<Mono> {
     let mut rhs = [0.0; PINNED + 3];
     rhs[..PINNED].copy_from_slice(&region.constraint_rhs());
     rhs[PINNED] = strongest(&X_MIN, &rhs);
     rhs[PINNED + 1] = -strongest(&Y_MAX, &rhs);
     rhs[PINNED + 2] = strongest(&Z_MIN, &rhs);
-    let point = [rhs[PINNED], rhs[PINNED + 1], rhs[PINNED + 2]];
-    (point.iter().all(|v| v.is_finite())
-        && covers(region, &project(&point))
+    let point = Mono([rhs[PINNED], rhs[PINNED + 1], rhs[PINNED + 2]]);
+    (point.0.iter().all(|v| v.is_finite())
+        && covers(region, &project(point))
         && ALCOVE
             .iter()
-            .all(|(n, r)| dot(n, &point) >= r - MEMBERSHIP_TOL))
+            .all(|(n, r)| dot(n, &point.0) >= r - MEMBERSHIP_TOL))
     .then_some(point)
 }
 
@@ -760,12 +760,12 @@ mod tests {
     fn two_swaps_reach_the_reflected_identity_lift() {
         // A(SWAP) = exp(i*pi/4) SWAP, so its square has Cartan double -I.
         // This needs positive-degree QLR rules, even though the physical circuit is local.
-        let swap = project(&[0.25, 0.25, 0.25]);
+        let swap = project(Mono([0.25, 0.25, 0.25]));
         let twice = swap.product(&swap);
         let identity = Mono([0.0; 3]);
-        let reflected = project(&identity.rho().0);
+        let reflected = project(identity.rho());
         assert!(twice.0.iter().eq(&reflected.0));
-        assert!(!covers(&twice, &project(&identity.0)));
+        assert!(!covers(&twice, &project(identity)));
         assert!(covers(&twice, &reflected));
     }
 
@@ -776,8 +776,14 @@ mod tests {
         // other 13 bounds, but fails the designated one.
         let scaled = |v: [i32; 3], denominator: f64| v.map(|x| f64::from(x) / denominator);
         let regions = [
-            sentence_region(&[scaled([51, 3, -13], 120.0), scaled([41, 37, -11], 172.0)]),
-            sentence_region(&[scaled([49, 13, -15], 132.0), scaled([15, 11, 7], 68.0)]),
+            sentence_region(&[
+                Mono(scaled([51, 3, -13], 120.0)),
+                Mono(scaled([41, 37, -11], 172.0)),
+            ]),
+            sentence_region(&[
+                Mono(scaled([49, 13, -15], 132.0)),
+                Mono(scaled([15, 11, 7], 68.0)),
+            ]),
         ];
         // Coefficient order: w,z,y,x; zw,yz,xy,xw,yw,xz; yzw,xzw,xyw,xyz.
         let witnesses = [
@@ -804,7 +810,7 @@ mod tests {
                     .iter()
                     .all(|v| *v >= -1e-12)
             );
-            let point = project(&[x, y, z]);
+            let point = project(Mono([x, y, z]));
             let failed: Vec<_> = (regions[pair].0.iter())
                 .zip(&point.0)
                 .enumerate()

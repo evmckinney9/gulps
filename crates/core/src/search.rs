@@ -193,7 +193,7 @@ impl Walk {
         })) = state.heap.pop()
         {
             let (class, _) = self.slots[self.gates[gate_rank]];
-            let native = project(&class.0);
+            let native = project(class);
             // Rows store tightened states, so the dominance test below is
             // exact up to rounding; see `Region::tighten`. A one-gate region
             // is a single point whose subset sums are already tight.
@@ -310,8 +310,8 @@ impl Walk {
     /// `None` marks an unreachable target; the identity orbit selects the empty
     /// sentence at the local-layer cost.
     pub fn select(&self, target: Mono) -> Option<Selection> {
-        let direct = project(&target.0);
-        let rho = project(&target.rho().0);
+        let direct = project(target);
+        let rho = project(target.rho());
         // Whether `region` covers the target, and if so, whether only its reflection.
         let reaches = |region: &Region| {
             if covers(region, &direct) {
@@ -358,7 +358,7 @@ mod tests {
             Mono([0.25, 0.0, 0.0]),       // sqrt(iSWAP)
             Mono([0.25, 0.25, 0.25]),     // SWAP
         ];
-        let regions: Vec<_> = monos.iter().map(|mono| project(&mono.0)).collect();
+        let regions: Vec<_> = monos.iter().map(|&mono| project(mono)).collect();
         // A barycentric grid in the full phase alcove, including its walls
         // and both global-phase representatives. All numbers are dyadic.
         let mut targets = Vec::new();
@@ -398,8 +398,8 @@ mod tests {
                     let expected = exhaustive
                         .iter()
                         .filter(|(region, _)| {
-                            covers(region, &project(&target.0))
-                                || covers(region, &project(&target.rho().0))
+                            covers(region, &project(target))
+                                || covers(region, &project(target.rho()))
                         })
                         .map(|(_, cost)| *cost)
                         .min_by(f64::total_cmp);

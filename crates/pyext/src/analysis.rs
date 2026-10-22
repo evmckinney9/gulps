@@ -6,7 +6,8 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyTuple;
 
-use gulps_core::{FORMS, Region, class, covers, project, sentence_region};
+use gulps_core::class::{self, Mono};
+use gulps_core::{FORMS, Region, covers, project, sentence_region};
 
 use crate::decomposer::{GulpsDecomposer, compile_error};
 use crate::invariants::LocalEquivalenceClass;
@@ -14,8 +15,8 @@ use crate::invariants::LocalEquivalenceClass;
 /// The bounds of the region a sentence reaches.
 #[pyfunction]
 fn sentence_bounds(classes: Vec<LocalEquivalenceClass>) -> [f64; 14] {
-    let monos: Vec<_> = classes.iter().map(|c| c.mono.0).collect();
-    sentence_region(&monos).0
+    let classes: Vec<Mono> = classes.iter().map(|c| c.mono).collect();
+    sentence_region(&classes).0
 }
 
 /// The rows of an `(N, 3)` array.
@@ -40,7 +41,7 @@ fn region_contains<'py>(
     let region = Region(bounds);
     let points = points.as_array();
     let inside = triples(&points)?
-        .map(|weyl| covers(&region, &project(&class::monodromy_from_weyl(&weyl))))
+        .map(|weyl| covers(&region, &project(Mono(class::monodromy_from_weyl(&weyl)))))
         .collect::<Vec<_>>();
     Ok(inside.into_pyarray(py))
 }
