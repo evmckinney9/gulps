@@ -46,24 +46,8 @@ jobs:
         with:
           workspaces: crates
 
-      # The monodromy oracle tests run monodromy, which calls the `lrs` program
-      # to enumerate polytope vertices. monodromy is archived and needs lrslib 7.1:
-      #   - From 7.2, lrs no longer starts its banner line with `*`, so
-      #     monodromy's output parser reads the banner as data and fails.
-      #   - In 7.3, the default `lrs` crashes when it restarts after an
-      #     overflow while reading from a pipe, which is how monodromy calls it.
-      # So build `lrsgmp` (exact arithmetic, never restarts) from the 7.1 source
-      # and point monodromy at it with LRS_PATH. Newer GCC defaults to C23,
-      # which 7.1's old C code doesn't compile under, so build it as C17.
-      - name: Build lrsgmp 7.1 for the monodromy oracle tests
-        run: |
-          sudo apt-get install -y libgmp-dev
-          cd "$RUNNER_TEMP"
-          curl -sfL https://cgm.cs.mcgill.ca/~avis/C/lrslib/archive/lrslib-071b.tar.gz -o lrslib.tar.gz
-          echo "df22682cd742315fe04f866cfe4804d5950f7dc7f514d5b5f36f5b7f5aff9188  lrslib.tar.gz" | sha256sum -c
-          tar xzf lrslib.tar.gz
-          make -C lrslib-071b lrsgmp CFLAGS="-O3 -std=gnu17"
-          echo "LRS_PATH=$RUNNER_TEMP/lrslib-071b/lrsgmp" >> "$GITHUB_ENV"
+      - name: Install lrslib for the monodromy oracle tests
+        run: sudo apt-get install -y lrslib
 
       - name: Install
         run: |
